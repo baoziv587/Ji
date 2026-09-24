@@ -1,4 +1,4 @@
-// @pi-rsi/llm：用 pi-ai 实例化内核（RFC-0004）
+// @ji/llm：用 pi-ai 实例化内核（RFC-0004）
 //
 //   使用者只接触四个对象：
 //     Agent    createAgent({ model, tools, plugins })   模型、工具、插件的组合，不含状态

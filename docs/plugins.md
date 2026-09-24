@@ -5,7 +5,7 @@
 A plugin is a named set of hooks. Each hook runs at a fixed point in a step (see [Concepts](concepts.md#what-happens-in-one-step)).
 
 ```ts
-import { after, before, definePlugin } from '@pi-rsi/llm'
+import { after, before, definePlugin } from '@ji/llm'
 
 export const myPlugin = definePlugin({
   name: 'my-plugin', // required, unique
@@ -87,8 +87,8 @@ The plugins under [`apps/examples/src/plugins`](../apps/examples/src/plugins) ar
 ## Tools
 
 ```ts
+import { tool } from '@ji/llm'
 import { Type } from '@mariozechner/pi-ai'
-import { tool } from '@pi-rsi/llm'
 
 const calc = tool({
   name: 'calc',

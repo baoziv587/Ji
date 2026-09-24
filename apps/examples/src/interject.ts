@@ -1,4 +1,4 @@
-// 运行中插话：pnpm --filter @pi-rsi/examples interject
+// 运行中插话：pnpm --filter @ji/examples interject
 //
 //   chat.send(text, { when: 'step' })   steer：下一个步边界插入（等当前工具执行完）
 //   chat.send(text)                     follow-up：等 agent 空闲时插入
@@ -7,8 +7,8 @@
 // agent 工作时，这些消息都并入当前的运行，返回的是同一个 Run。
 import type { Context } from '@mariozechner/pi-ai'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { createAgent, createSession, tool } from '@ji/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
-import { createAgent, createSession, tool } from '@pi-rsi/llm'
 import { pickModel, show } from './shared.ts'
 
 const runTests = tool({

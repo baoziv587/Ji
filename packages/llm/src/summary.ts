@@ -1,7 +1,7 @@
+import type { Reducer } from '@ji/kernel/reduce'
 import type { Usage } from '@mariozechner/pi-ai'
-import type { Reducer } from '@pi-rsi/kernel/reduce'
 import type { AgentState, RunSummary, Turn, TurnTiming, UsageTotals } from './types.ts'
-import { combine } from '@pi-rsi/kernel/reduce'
+import { combine } from '@ji/kernel/reduce'
 
 /** 在 summaryReducer 初始化时就要用到，所以放在最前面 */
 const NO_USAGE: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }

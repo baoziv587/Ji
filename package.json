@@ -1,5 +1,5 @@
 {
-  "name": "pi-rsi",
+  "name": "ji",
   "type": "module",
   "private": true,
   "packageManager": "pnpm@12.5.1",
@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "demo": "pnpm --filter @pi-rsi/demo start",
+    "demo": "pnpm --filter @ji/demo start",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",

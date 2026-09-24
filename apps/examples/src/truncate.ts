@@ -1,8 +1,8 @@
-// 剔除过大的工具结果：pnpm --filter @pi-rsi/examples truncate
+import { createAgent, createSession, tool } from '@ji/llm'
+// 剔除过大的工具结果：pnpm --filter @ji/examples truncate
 //
 // fetch_page 返回 50,000 个字符的页面；truncateToolResults 把它截到 2,000 个字符再交给模型。
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
-import { createAgent, createSession, tool } from '@pi-rsi/llm'
 import { truncateToolResults } from './plugins/truncate-tool-results.ts'
 import { pickModel, show } from './shared.ts'
 

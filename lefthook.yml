@@ -1,6 +1,5 @@
 # git hooks：pnpm install 时由 lefthook 的 postinstall 自动安装
 
-
 pre-push:
   parallel: true
   jobs:

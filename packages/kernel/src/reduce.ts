@@ -1,4 +1,4 @@
-// @pi-rsi/kernel/reduce：对序列的归约（RFC-0004 附录 B.2）
+// @ji/kernel/reduce：对序列的归约（RFC-0004 附录 B.2）
 //
 //   只供库的实现和写底层扩展时使用。LLM 层用它实现 Run.summary 和插件状态，
 //   使用者看到的是现成的字段，不直接接触这些函数。

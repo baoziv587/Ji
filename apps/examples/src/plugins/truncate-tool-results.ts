@@ -1,5 +1,5 @@
-import type { Plugin } from '@pi-rsi/llm'
-import { after, definePlugin } from '@pi-rsi/llm'
+import type { Plugin } from '@ji/llm'
+import { after, definePlugin } from '@ji/llm'
 
 export interface TruncateOptions {
   /** 每段文本最多保留多少字符 */

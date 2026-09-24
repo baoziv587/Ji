@@ -1,5 +1,5 @@
-import type { AgentState, Plugin } from '@pi-rsi/llm'
-import { definePlugin, user } from '@pi-rsi/llm'
+import type { AgentState, Plugin } from '@ji/llm'
+import { definePlugin, user } from '@ji/llm'
 
 export interface KeepGoingOptions {
   /** 任务是否完成。完成后不再自动继续 */

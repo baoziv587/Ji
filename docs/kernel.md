@@ -2,13 +2,13 @@
 
 **English** · [简体中文](zh-CN/kernel.md)
 
-`@pi-rsi/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@pi-rsi/llm`](sessions-and-runs.md) wraps it for you.
+`@ji/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@ji/llm`](sessions-and-runs.md) wraps it for you.
 
 | Entry | Contents |
 | --- | --- |
-| `@pi-rsi/kernel` | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `act`, `done` |
-| `@pi-rsi/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden` |
-| `@pi-rsi/kernel/reduce` | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan` |
+| `@ji/kernel` | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `act`, `done` |
+| `@ji/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden` |
+| `@ji/kernel/reduce` | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan` |
 
 ## Core
 
@@ -64,4 +64,4 @@ A `Lens<T, S>` must satisfy the three lens laws: get-set, set-get and set-set. `
 interface Reducer<In, Acc, Out = Acc> { init: Acc, reduce: (acc: Acc, x: In) => Acc, result?: (acc: Acc) => Out }
 ```
 
-`combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@pi-rsi/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.
+`combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@ji/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.

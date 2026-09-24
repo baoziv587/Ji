@@ -2,7 +2,7 @@
 
 [English](../concepts.md) · **简体中文**
 
-这一篇讲 pi-rsi 背后的模型。只想直接用的话，先看 [README](../../README.zh-CN.md) 和 [会话与运行](sessions-and-runs.md)。
+这一篇讲 JI 背后的模型。只想直接用的话，先看 [README](../../README.zh-CN.md) 和 [会话与运行](sessions-and-runs.md)。
 
 ## 一步，三个函数
 
@@ -20,9 +20,9 @@
 
 | 层 | 职责 | 类型 |
 | --- | --- | --- |
-| `@pi-rsi/kernel` | `(π, ε, δ)` 代数、`unfold`、`extend`。与 LLM 和 IO 无关 | 泛型 `S, A, O, R, D` |
-| `@pi-rsi/llm` agent | 用 pi-ai 实现 `(π, ε, δ)`，把插件编译成内核中间件 | `S = AgentState`、`O = ToolResultMessage[]`、`D = AssistantMessageEvent` |
-| `@pi-rsi/llm` session | 驱动 `unfold`，排队外部消息，遇到中断时把一次运行分段 | `Session`、`Run` |
+| `@ji/kernel` | `(π, ε, δ)` 代数、`unfold`、`extend`。与 LLM 和 IO 无关 | 泛型 `S, A, O, R, D` |
+| `@ji/llm` agent | 用 pi-ai 实现 `(π, ε, δ)`，把插件编译成内核中间件 | `S = AgentState`、`O = ToolResultMessage[]`、`D = AssistantMessageEvent` |
+| `@ji/llm` session | 驱动 `unfold`，排队外部消息，遇到中断时把一次运行分段 | `Session`、`Run` |
 
 ## 一步里发生了什么
 

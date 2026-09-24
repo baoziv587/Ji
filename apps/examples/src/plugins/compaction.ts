@@ -1,7 +1,7 @@
+import type { Plugin } from '@ji/llm'
 import type { Api, Message, Model } from '@mariozechner/pi-ai'
-import type { Plugin } from '@pi-rsi/llm'
+import { definePlugin, rewriteHistory, textOf, user } from '@ji/llm'
 import { completeSimple } from '@mariozechner/pi-ai'
-import { definePlugin, rewriteHistory, textOf, user } from '@pi-rsi/llm'
 
 export interface CompactionOptions {
   /** 写摘要用的模型。可以和主模型不同，用便宜的即可 */

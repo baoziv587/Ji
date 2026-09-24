@@ -1,4 +1,4 @@
-import type { Stream } from '@pi-rsi/kernel'
+import type { Stream } from '@ji/kernel'
 
 /** 中间件的通用形状 */
 export type Middleware<I, O> = (input: I, next: (input: I) => O) => O

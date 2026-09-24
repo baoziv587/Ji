@@ -1,5 +1,5 @@
-import type { Plugin } from '@pi-rsi/llm'
-import { definePlugin, stop, usageOf } from '@pi-rsi/llm'
+import type { Plugin } from '@ji/llm'
+import { definePlugin, stop, usageOf } from '@ji/llm'
 
 export interface BudgetOptions {
   /** 美元 */

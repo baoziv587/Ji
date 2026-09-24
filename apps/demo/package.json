@@ -1,5 +1,5 @@
 {
-  "name": "@pi-rsi/demo",
+  "name": "@ji/demo",
   "type": "module",
   "version": "0.0.0",
   "private": true,
@@ -8,8 +8,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "^0.73.1",
-    "@pi-rsi/kernel": "workspace:*",
-    "@pi-rsi/llm": "workspace:*"
+    "@ji/kernel": "workspace:*",
+    "@ji/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
   }
 }

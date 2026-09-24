@@ -1,6 +1,6 @@
+import type { Run, RunSummary, Turn } from '@ji/llm'
 // 各示例共用：选模型、显示一次运行
 import type { Api, FauxResponseStep, KnownProvider, Model } from '@mariozechner/pi-ai'
-import type { Run, RunSummary, Turn } from '@pi-rsi/llm'
 import process from 'node:process'
 import { getModels, registerFauxProvider } from '@mariozechner/pi-ai'
 

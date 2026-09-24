@@ -1,9 +1,9 @@
-// 上下文压缩：pnpm --filter @pi-rsi/examples compaction
+import { createAgent, createSession, tool } from '@ji/llm'
+// 上下文压缩：pnpm --filter @ji/examples compaction
 //
 // agent 连续读两个大文件，上下文超过 maxTokens 后，compaction 插件先让模型写摘要，
 // 再用「摘要 + 最近的消息」替换历史，然后继续工作。
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
-import { createAgent, createSession, tool } from '@pi-rsi/llm'
 import { compaction, SUMMARY_PREFIX } from './plugins/compaction.ts'
 import { pickModel, show } from './shared.ts'
 

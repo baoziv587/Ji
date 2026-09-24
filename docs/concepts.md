@@ -2,7 +2,7 @@
 
 **English** · [简体中文](zh-CN/concepts.md)
 
-This page covers the model behind pi-rsi. If you only want to use it, read the [README](../README.md) and [Sessions & Runs](sessions-and-runs.md) first.
+This page covers the model behind JI. If you only want to use it, read the [README](../README.md) and [Sessions & Runs](sessions-and-runs.md) first.
 
 ## One step, three functions
 
@@ -20,9 +20,9 @@ The kernel describes any agent as three functions:
 
 | Layer | Responsibility | Types |
 | --- | --- | --- |
-| `@pi-rsi/kernel` | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO. | Generic `S, A, O, R, D` |
-| `@pi-rsi/llm` agent | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware. | `S = AgentState`, `O = ToolResultMessage[]`, `D = AssistantMessageEvent` |
-| `@pi-rsi/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run` |
+| `@ji/kernel` | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO. | Generic `S, A, O, R, D` |
+| `@ji/llm` agent | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware. | `S = AgentState`, `O = ToolResultMessage[]`, `D = AssistantMessageEvent` |
+| `@ji/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run` |
 
 ## What happens in one step
 

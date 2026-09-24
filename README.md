@@ -1,4 +1,4 @@
-# pi-rsi
+# JI (极)
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -7,7 +7,7 @@ A small, algebraic core for LLM agents, plus a ready-to-use agent built on [pi-a
 Every agent step comes down to three functions: **decide**, **act** and **record**. Everything else, including compaction, retries, budgets, steering and metrics, is a middleware wrapped around one of them. Because recording is pure, a conversation's state is plain JSON that you can save, restore and replay.
 
 ```ts
-import { createAgent, createSession } from '@pi-rsi/llm'
+import { createAgent, createSession } from '@ji/llm'
 
 const agent = createAgent({ model, system: 'Be concise.', tools: [readFile], plugins: [compaction({ model, maxTokens: 100_000 })] })
 const chat = createSession(agent)
@@ -19,7 +19,7 @@ const { usage, tools } = await r.summary
 save(chat.state) // plain JSON: createSession(agent, { state }) picks up from here
 ```
 
-## Why pi-rsi
+## Why JI
 
 - **Four objects:** `Agent`, `Session`, `Run` and `Plugin`. A session has a single method, `send`.
 - **Plugins act at fixed points in a step.** Two plugins that use different hooks don't depend on each other's order.
@@ -40,17 +40,17 @@ MODEL=anthropic/claude-sonnet-5 pnpm demo       # real model; API key read from 
 Every `provider/model` that pi-ai supports works. More runnable scenarios are in [apps/examples](apps/examples/README.md):
 
 ```bash
-pnpm --filter @pi-rsi/examples compaction   # context compaction
-pnpm --filter @pi-rsi/examples interject    # steer / follow-up / interrupt
-pnpm --filter @pi-rsi/examples hooks        # auto-continue, retrieval, fallback model, budget
+pnpm --filter @ji/examples compaction   # context compaction
+pnpm --filter @ji/examples interject    # steer / follow-up / interrupt
+pnpm --filter @ji/examples hooks        # auto-continue, retrieval, fallback model, budget
 ```
 
 ## Packages
 
 | Package | What it is | When you touch it |
 | --- | --- | --- |
-| [`@pi-rsi/llm`](packages/llm) | The LLM agent: `createAgent`, `createSession`, `definePlugin`, `tool` | Almost always |
-| [`@pi-rsi/kernel`](packages/kernel) | A model-agnostic core: `unfold`, `extend`, lenses, reducers. Has no dependencies. | Only for non-LLM agents or building new layers |
+| [`@ji/llm`](packages/llm) | The LLM agent: `createAgent`, `createSession`, `definePlugin`, `tool` | Almost always |
+| [`@ji/kernel`](packages/kernel) | A model-agnostic core: `unfold`, `extend`, lenses, reducers. Has no dependencies. | Only for non-LLM agents or building new layers |
 | [`apps/demo`](apps/demo) | Minimal end-to-end example | Starting point |
 | [`apps/examples`](apps/examples) | Scenarios and copy-pasteable plugins | When writing your own plugin |
 
