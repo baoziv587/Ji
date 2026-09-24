@@ -2,7 +2,7 @@
 
 
 pre-push:
-  follow: true
+  parallel: true
   jobs:
     - name: typecheck
       run: pnpm typecheck
