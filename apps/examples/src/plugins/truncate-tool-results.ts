@@ -1,5 +1,5 @@
-import type { Plugin } from '@ji/llm'
-import { after, definePlugin } from '@ji/llm'
+import type { Plugin } from '@gaoxiang.ai/llm'
+import { after, definePlugin } from '@gaoxiang.ai/llm'
 
 export interface TruncateOptions {
   /** 每段文本最多保留多少字符 */

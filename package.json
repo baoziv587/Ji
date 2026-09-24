@@ -7,7 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "demo": "pnpm --filter @ji/demo start",
+    "demo": "pnpm --filter @gaoxiang.ai/demo start",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r typecheck",

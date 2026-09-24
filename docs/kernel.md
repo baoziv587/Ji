@@ -2,13 +2,13 @@
 
 **English** · [简体中文](zh-CN/kernel.md)
 
-`@ji/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@ji/llm`](sessions-and-runs.md) wraps it for you.
+`@gaoxiang.ai/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@gaoxiang.ai/llm`](sessions-and-runs.md) wraps it for you.
 
 | Entry | Contents |
 | --- | --- |
-| `@ji/kernel` | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `act`, `done` |
-| `@ji/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden` |
-| `@ji/kernel/reduce` | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan` |
+| `@gaoxiang.ai/kernel` | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `act`, `done` |
+| `@gaoxiang.ai/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden` |
+| `@gaoxiang.ai/kernel/reduce` | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan` |
 
 ## Core
 
@@ -68,4 +68,4 @@ interface Reducer<In, Acc, Out = Acc> {
 }
 ```
 
-`combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@ji/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.
+`combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@gaoxiang.ai/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.

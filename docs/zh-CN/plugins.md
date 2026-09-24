@@ -5,7 +5,7 @@
 插件是一组有名字的钩子，每个钩子在一步中的固定位置执行（见 [核心概念](concepts.md#一步里发生了什么)）。
 
 ```ts
-import { after, before, definePlugin } from '@ji/llm'
+import { after, before, definePlugin } from '@gaoxiang.ai/llm'
 
 export const myPlugin = definePlugin({
   name: 'my-plugin', // 必填，不能重名
@@ -90,7 +90,7 @@ export const myPlugin = definePlugin({
 ## 工具
 
 ```ts
-import { tool } from '@ji/llm'
+import { tool } from '@gaoxiang.ai/llm'
 import { Type } from '@mariozechner/pi-ai'
 
 const calc = tool({

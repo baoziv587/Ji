@@ -9,7 +9,7 @@
 agent 的每一步都可以拆成三个函数：**决策**、**执行**、**记录**。其他功能都是套在这三个函数上的中间件，包括压缩、重试、预算、插话和统计。记录是纯函数，所以对话状态是普通的 JSON，可以保存、恢复、重放。
 
 ```ts
-import { createAgent, createSession } from '@ji/llm'
+import { createAgent, createSession } from '@gaoxiang.ai/llm'
 
 const agent = createAgent({
   model,
@@ -62,8 +62,8 @@ pnpm hooks       # 自动继续、检索、兜底模型、预算
 
 | 包 | 是什么 | 什么时候用 |
 | --- | --- | --- |
-| [`@ji/llm`](packages/llm) | LLM agent：`createAgent`、`createSession`、`definePlugin`、`tool` | 几乎总是 |
-| [`@ji/kernel`](packages/kernel) | 与模型无关的内核：`unfold`、`extend`、lens、reducer。零依赖 | 写非 LLM 的 agent，或者搭新的一层时 |
+| [`@gaoxiang.ai/llm`](packages/llm) | LLM agent：`createAgent`、`createSession`、`definePlugin`、`tool` | 几乎总是 |
+| [`@gaoxiang.ai/kernel`](packages/kernel) | 与模型无关的内核：`unfold`、`extend`、lens、reducer。零依赖 | 写非 LLM 的 agent，或者搭新的一层时 |
 | [`apps/demo`](apps/demo) | 最小的端到端例子 | 入门 |
 | [`apps/examples`](apps/examples) | 场景示例和可以直接复制的插件 | 写自己的插件时 |
 

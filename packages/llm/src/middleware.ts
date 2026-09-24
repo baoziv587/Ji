@@ -1,4 +1,4 @@
-import type { Stream } from '@ji/kernel'
+import type { Stream } from '@gaoxiang.ai/kernel'
 
 /** 中间件的通用形状 */
 export type Middleware<I, O> = (input: I, next: (input: I) => O) => O

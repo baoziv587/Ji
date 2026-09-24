@@ -1,4 +1,4 @@
-import type { Event, Agent as KernelAgent, Stream } from '@ji/kernel'
+import type { Event, Agent as KernelAgent, Stream } from '@gaoxiang.ai/kernel'
 import type { Api, AssistantMessage, AssistantMessageEvent, Message, Model, SimpleStreamOptions, Static, Tool, ToolCall, ToolResultMessage, TSchema } from '@mariozechner/pi-ai'
 
 /** agent 状态：消息历史 + 各插件的状态（以插件名为键） */

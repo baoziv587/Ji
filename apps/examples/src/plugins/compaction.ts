@@ -1,6 +1,6 @@
-import type { Plugin } from '@ji/llm'
+import type { Plugin } from '@gaoxiang.ai/llm'
 import type { Api, Message, Model } from '@mariozechner/pi-ai'
-import { definePlugin, rewriteHistory, textOf, user } from '@ji/llm'
+import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
 import { completeSimple } from '@mariozechner/pi-ai'
 
 export interface CompactionOptions {

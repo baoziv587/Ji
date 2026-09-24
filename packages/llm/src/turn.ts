@@ -1,7 +1,7 @@
-import type { Step } from '@ji/kernel'
+import type { Step } from '@gaoxiang.ai/kernel'
 import type { AssistantMessage, Message, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { AgentAction, AgentState, RewriteAction, Turn } from './types.ts'
-import { act, done } from '@ji/kernel'
+import { act, done } from '@gaoxiang.ai/kernel'
 import { lastAssistant } from './message.ts'
 
 /**

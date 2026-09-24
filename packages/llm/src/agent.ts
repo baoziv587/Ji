@@ -2,7 +2,7 @@ import type { Api, AssistantMessage, Message, Model, SimpleStreamOptions, ToolRe
 import type { AnyPlugin, PluginList } from './plugin.ts'
 import type { AgentTool, Boundary, LLMAgent, ModelCall, ToolRunner } from './types.ts'
 import { performance } from 'node:perf_hooks'
-import { act, extend } from '@ji/kernel'
+import { act, extend } from '@gaoxiang.ai/kernel'
 import { streamSimple } from '@mariozechner/pi-ai'
 import { callsOf, isIdle } from './message.ts'
 import { assertNoConflicts, extensionOf, flattenPlugins } from './plugin.ts'

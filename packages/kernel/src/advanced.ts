@@ -1,4 +1,4 @@
-// @ji/kernel/advanced：改变 agent 类型参数的变换（RFC-0003 §2.5、附录 A.4）
+// @gaoxiang.ai/kernel/advanced：改变 agent 类型参数的变换（RFC-0003 §2.5、附录 A.4）
 //
 //   每个变换都配一个提升函数，把旧类型上的中间件搬到新类型上，并满足
 //     transform(extend(a, x)) ≃ extend(transform(a), lift(x))

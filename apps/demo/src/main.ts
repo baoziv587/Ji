@@ -1,10 +1,10 @@
-import type { Plugin } from '@ji/llm'
+import type { Plugin } from '@gaoxiang.ai/llm'
 // demo
 //   pnpm demo                                    离线：pi-ai 自带的 faux provider（逐 token 流式）
 //   MODEL=anthropic/claude-sonnet-4-6 pnpm demo   真实：pi-ai 支持的任意 provider/模型，API key 从环境变量读
 import type { Api, KnownProvider, Model } from '@mariozechner/pi-ai'
 import process from 'node:process'
-import { createAgent, createSession, definePlugin, textOf, tool } from '@ji/llm'
+import { createAgent, createSession, definePlugin, textOf, tool } from '@gaoxiang.ai/llm'
 import {
   fauxAssistantMessage,
   fauxText,

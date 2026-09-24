@@ -1,5 +1,5 @@
-import { createAgent, createSession, tool } from '@ji/llm'
-// 上下文压缩：pnpm --filter @ji/examples compaction
+import { createAgent, createSession, tool } from '@gaoxiang.ai/llm'
+// 上下文压缩：pnpm --filter @gaoxiang.ai/examples compaction
 //
 // agent 连续读两个大文件，上下文超过 maxTokens 后，compaction 插件先让模型写摘要，
 // 再用「摘要 + 最近的消息」替换历史，然后继续工作。

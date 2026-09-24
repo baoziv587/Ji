@@ -20,9 +20,9 @@
 
 | 层 | 职责 | 类型 |
 | --- | --- | --- |
-| `@ji/kernel` | `(π, ε, δ)` 代数、`unfold`、`extend`。与 LLM 和 IO 无关 | 泛型 `S, A, O, R, D` |
-| `@ji/llm` agent | 用 pi-ai 实现 `(π, ε, δ)`，把插件编译成内核中间件 | `S = AgentState`、`O = ToolResultMessage[]`、`D = AssistantMessageEvent` |
-| `@ji/llm` session | 驱动 `unfold`，排队外部消息，遇到中断时把一次运行分段 | `Session`、`Run` |
+| `@gaoxiang.ai/kernel` | `(π, ε, δ)` 代数、`unfold`、`extend`。与 LLM 和 IO 无关 | 泛型 `S, A, O, R, D` |
+| `@gaoxiang.ai/llm` agent | 用 pi-ai 实现 `(π, ε, δ)`，把插件编译成内核中间件 | `S = AgentState`、`O = ToolResultMessage[]`、`D = AssistantMessageEvent` |
+| `@gaoxiang.ai/llm` session | 驱动 `unfold`，排队外部消息，遇到中断时把一次运行分段 | `Session`、`Run` |
 
 ## 一步里发生了什么
 

@@ -20,9 +20,9 @@ The kernel describes any agent as three functions:
 
 | Layer | Responsibility | Types |
 | --- | --- | --- |
-| `@ji/kernel` | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO. | Generic `S, A, O, R, D` |
-| `@ji/llm` agent | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware. | `S = AgentState`, `O = ToolResultMessage[]`, `D = AssistantMessageEvent` |
-| `@ji/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run` |
+| `@gaoxiang.ai/kernel` | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO. | Generic `S, A, O, R, D` |
+| `@gaoxiang.ai/llm` agent | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware. | `S = AgentState`, `O = ToolResultMessage[]`, `D = AssistantMessageEvent` |
+| `@gaoxiang.ai/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run` |
 
 ## What happens in one step
 

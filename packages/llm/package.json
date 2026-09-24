@@ -1,5 +1,5 @@
 {
-  "name": "@ji/llm",
+  "name": "@gaoxiang.ai/llm",
   "type": "module",
   "version": "0.0.0",
   "private": true,
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@ji/kernel": "workspace:*",
+    "@gaoxiang.ai/kernel": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }
 }

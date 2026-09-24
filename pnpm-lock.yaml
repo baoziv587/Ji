@@ -196,10 +196,10 @@ importers:
 
   apps/demo:
     dependencies:
-      '@ji/kernel':
+      '@gaoxiang.ai/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
-      '@ji/llm':
+      '@gaoxiang.ai/llm':
         specifier: workspace:*
         version: link:../../packages/llm
       '@mariozechner/pi-ai':
@@ -208,7 +208,7 @@ importers:
 
   apps/examples:
     dependencies:
-      '@ji/llm':
+      '@gaoxiang.ai/llm':
         specifier: workspace:*
         version: link:../../packages/llm
       '@mariozechner/pi-ai':
@@ -219,7 +219,7 @@ importers:
 
   packages/llm:
     dependencies:
-      '@ji/kernel':
+      '@gaoxiang.ai/kernel':
         specifier: workspace:*
         version: link:../kernel
       '@mariozechner/pi-ai':

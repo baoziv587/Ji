@@ -1,12 +1,12 @@
-import type { Plugin } from '@ji/llm'
-// 细粒度钩子：pnpm --filter @ji/examples hooks
+import type { Plugin } from '@gaoxiang.ai/llm'
+// 细粒度钩子：pnpm --filter @gaoxiang.ai/examples hooks
 //
 //   input    agent 空闲但任务没完成时自动继续（keepGoing 插件）
 //   context  给这一次请求加上检索结果，不改历史
 //   request  出错时换兜底模型
 //   policy   超出预算就结束（budget 插件）
 import type { Api, Model } from '@mariozechner/pi-ai'
-import { before, createAgent, createSession, definePlugin, textOf, user } from '@ji/llm'
+import { before, createAgent, createSession, definePlugin, textOf, user } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxText } from '@mariozechner/pi-ai'
 import { budget } from './plugins/budget.ts'
 import { keepGoing } from './plugins/keep-going.ts'

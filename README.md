@@ -9,7 +9,7 @@ A small, algebraic core for LLM agents, plus a ready-to-use agent built on [pi-a
 Every agent step comes down to three functions: **decide**, **act** and **record**. Everything else, including compaction, retries, budgets, steering and metrics, is a middleware wrapped around one of them. Because recording is pure, a conversation's state is plain JSON that you can save, restore and replay.
 
 ```ts
-import { createAgent, createSession } from '@ji/llm'
+import { createAgent, createSession } from '@gaoxiang.ai/llm'
 
 const agent = createAgent({
   model,
@@ -62,8 +62,8 @@ pnpm hooks       # auto-continue, retrieval, fallback model, budget
 
 | Package | What it is | When you touch it |
 | --- | --- | --- |
-| [`@ji/llm`](packages/llm) | The LLM agent: `createAgent`, `createSession`, `definePlugin`, `tool` | Almost always |
-| [`@ji/kernel`](packages/kernel) | A model-agnostic core: `unfold`, `extend`, lenses, reducers. Has no dependencies. | Only for non-LLM agents or building new layers |
+| [`@gaoxiang.ai/llm`](packages/llm) | The LLM agent: `createAgent`, `createSession`, `definePlugin`, `tool` | Almost always |
+| [`@gaoxiang.ai/kernel`](packages/kernel) | A model-agnostic core: `unfold`, `extend`, lenses, reducers. Has no dependencies. | Only for non-LLM agents or building new layers |
 | [`apps/demo`](apps/demo) | Minimal end-to-end example | Starting point |
 | [`apps/examples`](apps/examples) | Scenarios and copy-pasteable plugins | When writing your own plugin |
 

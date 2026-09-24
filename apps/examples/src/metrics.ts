@@ -1,9 +1,9 @@
-// 记录耗时和费用：pnpm --filter @ji/examples metrics
+// 记录耗时和费用：pnpm --filter @gaoxiang.ai/examples metrics
 //
 // 不需要插件：Run 的每条记录带这一步的耗时和到目前为止的统计，r.summary 是整次运行的统计。
 import process from 'node:process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { createAgent, createSession, tool, usageOf } from '@ji/llm'
+import { createAgent, createSession, tool, usageOf } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { pickModel } from './shared.ts'
 

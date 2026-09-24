@@ -2,13 +2,13 @@
 
 [English](../kernel.md) · **简体中文**
 
-`@ji/kernel` 零依赖，与 LLM 无关。写非 LLM 的 agent、或者搭新的一层时直接使用；其他情况下，[`@ji/llm`](sessions-and-runs.md) 已经把它包装好了。
+`@gaoxiang.ai/kernel` 零依赖，与 LLM 无关。写非 LLM 的 agent、或者搭新的一层时直接使用；其他情况下，[`@gaoxiang.ai/llm`](sessions-and-runs.md) 已经把它包装好了。
 
 | 入口 | 内容 |
 | --- | --- |
-| `@ji/kernel` | `Agent`、`Extension`、`unfold`、`run`、`extend`、`mapState`、`mapYield`、`act`、`done` |
-| `@ji/kernel/advanced` | 改变类型参数的变换：`withState` / `focus`、`widen` / `liftWiden` |
-| `@ji/kernel/reduce` | 可组合的 reducer：`combine`、`mapInput`、`filterInput`、`mapResult`、`reduce`、`scan` |
+| `@gaoxiang.ai/kernel` | `Agent`、`Extension`、`unfold`、`run`、`extend`、`mapState`、`mapYield`、`act`、`done` |
+| `@gaoxiang.ai/kernel/advanced` | 改变类型参数的变换：`withState` / `focus`、`widen` / `liftWiden` |
+| `@gaoxiang.ai/kernel/reduce` | 可组合的 reducer：`combine`、`mapInput`、`filterInput`、`mapResult`、`reduce`、`scan` |
 
 ## 核心
 
@@ -68,4 +68,4 @@ interface Reducer<In, Acc, Out = Acc> {
 }
 ```
 
-`combine({ a: r1, b: r2 })` 一次遍历同时计算多个 reducer；`scan` 逐个输出中间结果。`@ji/llm` 就是这样实现 `Run.summary` 和插件状态的。和 `update` 一样，`reduce` 必须同步且纯。
+`combine({ a: r1, b: r2 })` 一次遍历同时计算多个 reducer；`scan` 逐个输出中间结果。`@gaoxiang.ai/llm` 就是这样实现 `Run.summary` 和插件状态的。和 `update` 一样，`reduce` 必须同步且纯。

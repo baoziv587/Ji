@@ -1,4 +1,4 @@
-import type { Extension, Step, Stream } from '@ji/kernel'
+import type { Extension, Step, Stream } from '@gaoxiang.ai/kernel'
 import type { AssistantMessage, AssistantMessageEvent, Message, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { AgentAction, AgentState, AgentTool, Boundary, ModelCall, ModelRequest, ToolContext, ToolRunner, Turn } from './types.ts'
 import { callsOf } from './message.ts'

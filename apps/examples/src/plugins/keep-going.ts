@@ -1,5 +1,5 @@
-import type { AgentState, Plugin } from '@ji/llm'
-import { definePlugin, user } from '@ji/llm'
+import type { AgentState, Plugin } from '@gaoxiang.ai/llm'
+import { definePlugin, user } from '@gaoxiang.ai/llm'
 
 export interface KeepGoingOptions {
   /** 任务是否完成。完成后不再自动继续 */

@@ -1,4 +1,4 @@
-// @ji/kernel：代数内核，与 LLM / 工具 / IO 完全无关
+// @gaoxiang.ai/kernel：代数内核，与 LLM / 工具 / IO 完全无关
 //
 //   π : S → D* · (A + R)     policy   决策：先流出若干增量 D，最后给出一个 Step
 //   ε : A → O                env      副作用
