@@ -1,0 +1,15 @@
+{
+  "name": "@pi-rsi/demo",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.73.1",
+    "@pi-rsi/kernel": "workspace:*",
+    "@pi-rsi/llm": "workspace:*"
+  }
+}

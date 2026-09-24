@@ -1,0 +1,13 @@
+{
+  "name": "@pi-rsi/kernel",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "代数内核：policy / env / update 与 unfold",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

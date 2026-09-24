@@ -1,0 +1,17 @@
+{
+  "name": "@pi-rsi/llm",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "用 pi-ai 实例化内核的 LLM agent",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.73.1",
+    "@pi-rsi/kernel": "workspace:*"
+  }
+}
