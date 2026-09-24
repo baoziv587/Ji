@@ -6,8 +6,8 @@
 
 ```ts
 const agent = createAgent({ model, system, tools, plugins, ...streamOptions }) // stateless, reusable
-const chat = createSession(agent, { state?, maxSteps? })                          // one conversation
-const r = chat.send('hi')                                                          // one run
+const chat = createSession(agent, { state, maxSteps }) // one conversation
+const r = chat.send('hi') // one run
 ```
 
 - **Agent**: model + tools + plugins. It has no state, so one agent can serve many sessions. Duplicate tool or plugin names throw `PluginConflictError`, which lists every conflict.
@@ -62,7 +62,7 @@ await printing
 
 ```ts
 chat.send('use vitest instead', { when: 'step' })
-chat.send('then update the changelog')          // follow-up
+chat.send('then update the changelog') // follow-up
 chat.send('stop, outline first', { when: 'now' })
 ```
 
@@ -89,8 +89,8 @@ The plugin list can change between save and restore. A plugin with no saved stat
 
 ```ts
 for await (const { timing, summary } of r.turns) { /* per step + running totals */ }
-const { turns, usage, modelMs, toolMs, tools } = await r.summary  // this run
-usageOf(chat.state)                                                // whole conversation
+const { turns, usage, modelMs, toolMs, tools } = await r.summary // this run
+usageOf(chat.state) // whole conversation
 ```
 
 `timing` includes `ms` and, for model turns, `modelMs`, `firstTokenMs` and `toolMs` keyed by tool call id. `toolMs` in the summary adds up parallel calls, so it can exceed wall time. `usageOf` counts only messages still in history, so compacted messages drop out.

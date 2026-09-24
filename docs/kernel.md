@@ -14,9 +14,9 @@
 
 ```ts
 interface Agent<S, A, O, R, D = never> {
-  policy: (s: S) => Stream<D, Step<A, R>>   // Stream = AsyncGenerator<D, Step>
+  policy: (s: S) => Stream<D, Step<A, R>> // Stream = AsyncGenerator<D, Step>
   env: (a: A) => Promise<O>
-  update: (s: S, a: A, o: O) => S           // synchronous, pure
+  update: (s: S, a: A, o: O) => S // synchronous, pure
 }
 ```
 
@@ -34,7 +34,10 @@ An `Extension` has up to three middlewares with the same `(input, next)` shape a
 
 ```ts
 const logged = extend(agent, {
-  env: async (a, next) => { console.log('act', a); return next(a) },
+  env: async (a, next) => {
+    console.log('act', a)
+    return next(a)
+  },
 })
 ```
 

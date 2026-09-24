@@ -9,7 +9,7 @@ Every agent step comes down to three functions: **decide**, **act** and **record
 ```ts
 import { createAgent, createSession } from '@pi-rsi/llm'
 
-const agent = createAgent({ model, system: 'Be concise.', tools: [readFile], plugins: [compaction(...)] })
+const agent = createAgent({ model, system: 'Be concise.', tools: [readFile], plugins: [compaction({ model, maxTokens: 100_000 })] })
 const chat = createSession(agent)
 
 const r = chat.send('Summarize the README')

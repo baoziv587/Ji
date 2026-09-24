@@ -8,7 +8,7 @@ A plugin is a named set of hooks. Each hook runs at a fixed point in a step (see
 import { after, before, definePlugin } from '@pi-rsi/llm'
 
 export const myPlugin = definePlugin({
-  name: 'my-plugin',                                  // required, unique
+  name: 'my-plugin', // required, unique
   tools: [/* AgentTool */],
   system: prompt => `${prompt}\nBe concise.`,
   input: (messages, { state, idle }) => messages,

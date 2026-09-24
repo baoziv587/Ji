@@ -6,8 +6,8 @@
 
 ```ts
 const agent = createAgent({ model, system, tools, plugins, ...streamOptions }) // 无状态，可复用
-const chat = createSession(agent, { state?, maxSteps? })                          // 一段对话
-const r = chat.send('hi')                                                          // 一次运行
+const chat = createSession(agent, { state, maxSteps }) // 一段对话
+const r = chat.send('hi') // 一次运行
 ```
 
 - **Agent**：模型 + 工具 + 插件。它没有状态，一个 agent 可以服务多个会话。工具或插件重名时抛出 `PluginConflictError`，并一次列出全部冲突。
@@ -62,7 +62,7 @@ await printing
 
 ```ts
 chat.send('改用 vitest', { when: 'step' })
-chat.send('然后更新 changelog')              // follow-up
+chat.send('然后更新 changelog') // follow-up
 chat.send('停，先列大纲', { when: 'now' })
 ```
 
@@ -89,8 +89,8 @@ createSession(agent, { state: messages })
 
 ```ts
 for await (const { timing, summary } of r.turns) { /* 每一步的耗时，以及到目前为止的累计 */ }
-const { turns, usage, modelMs, toolMs, tools } = await r.summary  // 这次运行
-usageOf(chat.state)                                                // 整段对话
+const { turns, usage, modelMs, toolMs, tools } = await r.summary // 这次运行
+usageOf(chat.state) // 整段对话
 ```
 
 `timing` 包含 `ms`；模型回合还有 `modelMs`、`firstTokenMs`，以及按工具调用 id 记录的 `toolMs`。summary 里的 `toolMs` 是各次调用耗时之和，并行调用会重叠，所以可能大于实际经过的时间。`usageOf` 只计算仍在历史里的消息，压缩掉的消息不再计入。

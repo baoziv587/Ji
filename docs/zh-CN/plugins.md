@@ -8,7 +8,7 @@
 import { after, before, definePlugin } from '@pi-rsi/llm'
 
 export const myPlugin = definePlugin({
-  name: 'my-plugin',                                  // 必填，不能重名
+  name: 'my-plugin', // 必填，不能重名
   tools: [/* AgentTool */],
   system: prompt => `${prompt}\nBe concise.`,
   input: (messages, { state, idle }) => messages,

@@ -9,7 +9,7 @@ agent 的每一步都可以拆成三个函数：**决策**、**执行**、**记�
 ```ts
 import { createAgent, createSession } from '@pi-rsi/llm'
 
-const agent = createAgent({ model, system: 'Be concise.', tools: [readFile], plugins: [compaction(...)] })
+const agent = createAgent({ model, system: 'Be concise.', tools: [readFile], plugins: [compaction({ model, maxTokens: 100_000 })] })
 const chat = createSession(agent)
 
 const r = chat.send('总结一下 README')
