@@ -4,9 +4,12 @@
 
 > **JI** 即「极」，取「极限」之意：内核只保留最少的部件，agent 反复执行同一步，直到得出结果。
 
-一个小而代数化的 LLM agent 内核，以及开箱即用的实现。
+> [!WARNING]
+> JI 仍在开发中，API 可能还会变，包也还没有发布到 npm。
 
-agent 的每一步都可以拆成三个函数：**决策**、**执行**、**记录**。其他功能都是套在这三个函数上的中间件，包括压缩、重试、预算、插话和统计。记录是纯函数，所以对话状态是普通的 JSON，可以保存、恢复、重放。
+一个用来搭建 LLM agent 的小内核，以及开箱即用的 agent。
+
+agent 的每一步都可以拆成三个函数：**决策**、**执行**、**记录**。其他功能都是套在这三个函数上的插件，比如压缩过长的历史、重试、限制花费、中途插话和用量统计。记录这一步没有副作用，所以对话状态是普通的 JSON，可以保存、加载、重新运行。
 
 ```ts
 import { createAgent, createSession } from '@gaoxiang.ai/llm'
@@ -32,8 +35,8 @@ save(chat.state)
 - **四个对象**：`Agent`、`Session`、`Run`、`Plugin`。会话只有一个方法 `send`。
 - **插件挂在一步中的固定位置**：写不同钩子的插件，互相之间不依赖顺序。
 - **运行中插话**：消息可以等 agent 空闲再插入，也可以等当前工具执行完插入，或者直接打断当前这一步。
-- **自带可观测性**：文字增量、每步记录、耗时、token、费用都能从运行结果直接读取，不需要额外插件。
-- **取消一路传到底**：退出任何 `for await`，底层的 HTTP 流都会被中止。
+- **自带统计**：流式文字、每一步的记录、耗时、token、费用都能从运行结果直接读取，不需要额外插件。
+- **说停就停**：退出任何 `for await`，HTTP 请求也会一起关闭。
 
 ## 快速开始
 
@@ -42,7 +45,7 @@ save(chat.state)
 ```bash
 pnpm install
 
-# 离线：用 faux provider 回放脚本
+# 离线：回放预先写好的回复，不需要 API key
 pnpm demo
 
 # 真实模型，API key 从环境变量读取
@@ -54,8 +57,8 @@ MODEL=anthropic/claude-sonnet-5 pnpm demo
 ```bash
 cd apps/examples
 pnpm compaction  # 上下文压缩
-pnpm interject   # steer / follow-up / interrupt
-pnpm hooks       # 自动继续、检索、兜底模型、预算
+pnpm interject   # 运行中插话
+pnpm hooks       # 自动继续、搜索、备用模型、花费上限
 ```
 
 ## 包
@@ -63,7 +66,7 @@ pnpm hooks       # 自动继续、检索、兜底模型、预算
 | 包 | 是什么 | 什么时候用 |
 | --- | --- | --- |
 | [`@gaoxiang.ai/llm`](packages/llm) | LLM agent：`createAgent`、`createSession`、`definePlugin`、`tool` | 几乎总是 |
-| [`@gaoxiang.ai/kernel`](packages/kernel) | 与模型无关的内核：`unfold`、`extend`、lens、reducer。零依赖 | 写非 LLM 的 agent，或者搭新的一层时 |
+| [`@gaoxiang.ai/kernel`](packages/kernel) | 不绑定任何模型的内核：`unfold`、`extend` 等工具函数。零依赖 | 写非 LLM 的 agent，或者搭新的一层时 |
 | [`apps/demo`](apps/demo) | 最小的端到端例子 | 入门 |
 | [`apps/examples`](apps/examples) | 场景示例和可以直接复制的插件 | 写自己的插件时 |
 
@@ -71,21 +74,17 @@ pnpm hooks       # 自动继续、检索、兜底模型、预算
 
 | 文档 | 内容 |
 | --- | --- |
-| [核心概念](docs/zh-CN/concepts.md) | 一步的模型、分层结构，以及设计依赖的几条不变量 |
-| [会话与运行](docs/zh-CN/sessions-and-runs.md) | 流式输出、插话、取消、保存与恢复、统计 |
+| [核心概念](docs/zh-CN/concepts.md) | 一步是怎么运行的、分层结构，以及设计遵守的几条规则 |
+| [会话与运行](docs/zh-CN/sessions-and-runs.md) | 流式输出、插话、停止、保存与加载、统计 |
 | [编写插件](docs/zh-CN/plugins.md) | 所有钩子、执行顺序，以及每种需求该用哪个钩子 |
-| [内核 API](docs/zh-CN/kernel.md) | `unfold` / `extend`，以及改变类型参数的变换（`withState`、`widen` 等） |
+| [内核 API](docs/zh-CN/kernel.md) | `unfold`、`extend` 和其他内核工具函数 |
 
 ## 开发
 
 ```bash
-pnpm test         # vitest，包含基于性质的测试（fast-check）
+pnpm test         # vitest
 pnpm typecheck    # 所有 workspace 跑 tsc
 pnpm lint         # eslint（@antfu/eslint-config）
 ```
 
 源码是 TypeScript，由 Node 直接运行，不需要构建。
-
-## 状态
-
-实验阶段。所有包都是 `0.0.0`、未发布，API 可能还会变。
