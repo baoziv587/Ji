@@ -1,0 +1,16 @@
+{
+  "name": "@pi-rsi/examples",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "compaction": "node src/compaction.ts",
+    "truncate": "node src/truncate.ts",
+    "metrics": "node src/metrics.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.73.1",
+    "@pi-rsi/llm": "workspace:*"
+  }
+}

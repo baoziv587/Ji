@@ -5,7 +5,8 @@
   "private": true,
   "description": "代数内核：policy / env / update 与 unfold",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./advanced": "./src/advanced.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

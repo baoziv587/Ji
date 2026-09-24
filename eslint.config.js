@@ -12,7 +12,7 @@ export default antfu(
   }),
   {
     // demo 是 CLI，直接打印到终端
-    files: ['apps/demo/**'],
+    files: ['apps/demo/**', 'apps/examples/**', 'packages/**'],
     rules: { 'no-console': 'off' },
   },
 )
