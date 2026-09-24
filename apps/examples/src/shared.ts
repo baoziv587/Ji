@@ -1,15 +1,14 @@
-// 各示例共用：选模型、打印事件
+// 各示例共用：选模型、显示一次运行
 import type { Api, FauxResponseStep, KnownProvider, Model } from '@mariozechner/pi-ai'
-import type { AgentEvent } from '@pi-rsi/llm'
+import type { Run, RunSummary, Turn } from '@pi-rsi/llm'
 import process from 'node:process'
 import { getModels, registerFauxProvider } from '@mariozechner/pi-ai'
-import { isHistoryRewrite, textOf } from '@pi-rsi/llm'
 
 /**
  * MODEL=anthropic/claude-sonnet-5 → 真实模型（API key 从环境变量读）
  * 不设 MODEL → pi-ai 的 faux provider，按 script 逐条回放，离线可跑
  */
-export function pickModel(script: FauxResponseStep[]): Model<Api> {
+export function pickModel(script: FauxResponseStep[], tokensPerSecond = 200): Model<Api> {
   const spec = process.env.MODEL
   if (spec) {
     const i = spec.indexOf('/')
@@ -21,33 +20,47 @@ export function pickModel(script: FauxResponseStep[]): Model<Api> {
     return model as Model<Api>
   }
 
-  const faux = registerFauxProvider({ tokensPerSecond: 200 })
+  const faux = registerFauxProvider({ tokensPerSecond })
   faux.setResponses(script)
   return faux.getModel()
 }
 
-/** 模型文字直接输出；工具结果、历史替换、结束各打印一行 */
-export function print(e: AgentEvent): void {
-  if (e.tag === 'delta') {
-    if (e.delta.type === 'text_delta') {
-      process.stdout.write(e.delta.delta)
+/** 同时读两个成员：文字边生成边输出；每一步结束时打印一行记录。结束后打印统计 */
+export async function show(r: Run): Promise<RunSummary> {
+  const text = (async () => {
+    for await (const chunk of r.text) {
+      process.stdout.write(chunk)
     }
-    return
+  })()
+
+  for await (const { t, turn } of r.turns) {
+    const line = describe(turn)
+    if (line !== undefined) {
+      console.log(`\n  [t=${t}] ${line}`)
+    }
+  }
+  await text
+
+  const summary = await r.summary
+  console.log(`\n  summary: ${summary.turns} model turns, ${summary.usage.input} in / ${summary.usage.output} out tokens, $${summary.usage.cost.toFixed(4)}`)
+  return summary
+}
+
+function describe(turn: Turn): string | undefined {
+  if (turn.kind === 'input') {
+    const label = turn.interrupted ? 'interrupt' : turn.idle ? 'user' : 'steer'
+    return `${label} → ${turn.messages.map(m => JSON.stringify(m.content)).join(', ')}`
+  }
+  if (turn.kind === 'rewrite') {
+    return `history rewritten → ${turn.messages.length} messages`
+  }
+  if (turn.results.length === 0) {
+    return undefined
   }
 
-  if (e.tag === 'done') {
-    console.log(`\n  [t=${e.t}] done: "${textOf(e.result)}"`)
-    return
-  }
-
-  if (isHistoryRewrite(e.action)) {
-    console.log(`\n  [t=${e.t}] history rewritten → ${e.state.messages.length} messages`)
-    return
-  }
-
-  for (const r of e.obs) {
+  return turn.results.map((r) => {
     const text = r.content.map(c => (c.type === 'text' ? c.text : '')).join('')
     const preview = text.length > 60 ? `${text.slice(0, 60)}… (${text.length} chars)` : text
-    console.log(`\n  [t=${e.t}] ${r.toolName}${r.isError ? ' ✗' : ''} → ${JSON.stringify(preview)}`)
-  }
+    return `${r.toolName}${r.isError ? ' ✗' : ''} → ${JSON.stringify(preview)}`
+  }).join('\n  ')
 }

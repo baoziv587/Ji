@@ -1,4 +1,4 @@
-// @pi-rsi/kernel —— 代数内核，与 LLM / 工具 / IO 完全无关
+// @pi-rsi/kernel：代数内核，与 LLM / 工具 / IO 完全无关
 //
 //   π : S → D* · (A + R)     policy   决策：先流出若干增量 D，最后给出一个 Step
 //   ε : A → O                env      副作用
@@ -39,7 +39,7 @@ export type Event<S, A, O, R, D>
     | { t: number, tag: 'act', action: A, obs: O, state: S }
     | { t: number, tag: 'done', result: R, state: S }
 
-/* ── 动词 1：unfold —— 整条轨迹（含 token 级增量）是一个惰性流 ───── */
+/* ── 动词 1：unfold，整条轨迹（含 token 级增量）是一个惰性流 ───── */
 /** 消费方 break 即取消：return() 会沿 yield* 一路传到 provider 的 HTTP 流 */
 export async function* unfold<S, A, O, R, D>(
   ag: Agent<S, A, O, R, D>,
@@ -60,7 +60,7 @@ export async function* unfold<S, A, O, R, D>(
   throw new Error(`agent did not terminate within ${maxSteps} steps`)
 }
 
-/* ── 动词 2：run —— 只要结果时，折叠整条流 ───────────────── */
+/* ── 动词 2：run，只要结果时折叠整条流 ───────────────── */
 export async function run<S, A, O, R, D>(ag: Agent<S, A, O, R, D>, s: S, maxSteps?: number): Promise<R> {
   for await (const e of unfold(ag, s, maxSteps)) {
     if (e.tag === 'done') {
@@ -70,7 +70,7 @@ export async function run<S, A, O, R, D>(ag: Agent<S, A, O, R, D>, s: S, maxStep
   throw new Error('unreachable')
 }
 
-/* ── 动词 3：extend —— 按顺序套上中间件 ───────────────── */
+/* ── 动词 3：extend，按顺序套上中间件 ───────────────── */
 /** 列表中先出现的在内层，后出现的在外层：外层最先收到输入、最后返回输出 */
 export function extend<S, A, O, R, D>(
   agent: Agent<S, A, O, R, D>,

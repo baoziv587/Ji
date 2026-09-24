@@ -12,13 +12,13 @@ import {
   registerFauxProvider,
   Type,
 } from '@mariozechner/pi-ai'
-import { createAgent, definePlugin, stream, textOf, tool, user } from '@pi-rsi/llm'
+import { createAgent, createSession, definePlugin, textOf, tool } from '@pi-rsi/llm'
 
 const calc = tool({
   name: 'calc',
   description: 'Evaluate an arithmetic expression, e.g. "2*(3+4)".',
   parameters: Type.Object({ expr: Type.String() }),
-  run: ({ expr }) => { // expr: string —— 从 schema 推断
+  run: ({ expr }) => { // expr 的类型 string 从 schema 推断
     if (!/^[\d\s+\-*/().]+$/.test(expr)) {
       throw new Error(`bad expr: ${expr}`)
     }
@@ -27,12 +27,12 @@ const calc = tool({
   },
 })
 
-/** update 中间件：只保留第一条和最近 n - 1 条消息 */
+/** update 中间件：只保留第一条和最近 n - 1 条消息。对所有 Turn 生效 */
 function keepLast(n: number): Plugin {
   return definePlugin({
     name: 'keep-last',
-    update: (state, msg, results, next) => {
-      const updated = next(state, msg, results)
+    update: (state, turn, next) => {
+      const updated = next(state, turn)
       const { messages } = updated
       if (messages.length <= n) {
         return updated
@@ -43,34 +43,32 @@ function keepLast(n: number): Plugin {
   })
 }
 
-/** 插件状态：累计工具回合消耗的 token */
-const usage = definePlugin({
-  name: 'usage',
-  state: { init: 0, reduce: (total, msg) => total + msg.usage.totalTokens },
-})
-
 const agent = createAgent({
   model: pickModel(),
   system: 'Use the calc tool for arithmetic.',
   tools: [calc],
-  plugins: [keepLast(20), usage],
+  plugins: [keepLast(20)],
 })
 
-for await (const e of stream(agent, [user('算 17*23，然后结果加 9。')])) {
-  if (e.tag === 'delta') {
-    if (e.delta.type === 'text_delta') {
-      process.stdout.write(e.delta.delta)
-    }
+const r = createSession(agent).send('算 17*23，然后结果加 9。')
+
+// 两个成员同时读：文字边生成边输出，每一步结束打印工具结果
+const printing = (async () => {
+  for await (const chunk of r.text) {
+    process.stdout.write(chunk)
   }
-  else if (e.tag === 'act') {
-    const results = e.obs.map(r => (r.isError ? '✗ ' : '') + r.content.map(c => (c.type === 'text' ? c.text : '')).join(''))
-    console.log(`\n  [t=${e.t}] tools →`, JSON.stringify(results))
-  }
-  else {
-    const tokens = usage.select(e.state) + e.result.usage.totalTokens
-    console.log(`\n  [t=${e.t}] done: "${textOf(e.result)}"  (|S| = ${e.state.messages.length}, tokens = ${tokens})`)
+})()
+
+for await (const { t, turn } of r.turns) {
+  if (turn.kind === 'model' && turn.results.length > 0) {
+    const results = turn.results.map(res => (res.isError ? '✗ ' : '') + res.content.map(c => (c.type === 'text' ? c.text : '')).join(''))
+    console.log(`\n  [t=${t}] tools →`, JSON.stringify(results))
   }
 }
+await printing
+
+const [final, state, summary] = await Promise.all([r.result, r.state, r.summary])
+console.log(`\n  done: "${textOf(final)}"  (|S| = ${state.messages.length}, ${summary.turns} model turns, ${summary.usage.input + summary.usage.output} tokens)`)
 
 function pickModel(): Model<Api> {
   const spec = process.env.MODEL

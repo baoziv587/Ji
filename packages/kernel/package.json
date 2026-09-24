@@ -6,7 +6,8 @@
   "description": "代数内核：policy / env / update 与 unfold",
   "exports": {
     ".": "./src/index.ts",
-    "./advanced": "./src/advanced.ts"
+    "./advanced": "./src/advanced.ts",
+    "./reduce": "./src/reduce.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

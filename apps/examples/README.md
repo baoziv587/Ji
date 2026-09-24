@@ -1,87 +1,118 @@
-# 示例：用插件扩展 agent
+# 示例：用会话和插件使用 agent
 
-三个可以直接运行的例子，以及它们用到的插件。插件代码在 [`src/plugins/`](src/plugins/)，可以直接复制到你的项目里改。
+可以直接运行的例子，以及它们用到的插件。插件代码在 [`src/plugins/`](src/plugins/)，可以直接复制到你的项目里改。
 
 ```bash
 pnpm --filter @pi-rsi/examples compaction   # 上下文压缩
 pnpm --filter @pi-rsi/examples truncate     # 剔除过大的工具结果
 pnpm --filter @pi-rsi/examples metrics      # 记录耗时和费用
+pnpm --filter @pi-rsi/examples interject    # 运行中插话：steer、follow-up、interrupt
+pnpm --filter @pi-rsi/examples hooks        # 细粒度钩子：自动继续、检索、兜底模型、预算
 ```
 
 默认使用 pi-ai 的 faux provider 离线回放脚本。设置 `MODEL=anthropic/claude-sonnet-5`（或 pi-ai 支持的其他 `provider/model`）即可换成真实模型，API key 从环境变量读取。
 
 ## 1. 基本用法
 
+只有四个对象：`Agent`（模型、工具、插件的组合）、`Session`（一段对话）、`Run`（一次运行）、`Plugin`（插件）。会话只有一个方法 `send`。
+
 ```ts
-import { createAgent, run, stream, tool, user } from '@pi-rsi/llm'
+import { createAgent, createSession } from '@pi-rsi/llm'
 
 const agent = createAgent({
   model, // pi-ai 的 Model
   system: 'You are a helpful assistant.',
   tools: [readFile],
-  plugins: [truncateToolResults(), metrics, compaction({ model, maxTokens: 100_000 })],
+  plugins: [truncateToolResults(), compaction({ model, maxTokens: 100_000 })],
 })
+const chat = createSession(agent)
 
 // 只要最终答案
-const answer = await run(agent, [user('hi')])
+const answer = await chat.send('hi').result
 
-// 或者逐个处理事件：模型输出的增量、每一步的工具结果、结束
-for await (const e of stream(agent, [user('hi')])) {
-  if (e.tag === 'delta') { /* e.delta：文字、思考、工具参数的增量 */ }
-  if (e.tag === 'act') { /* e.obs：这一步的工具结果；e.state：当前状态，可以保存 */ }
-  if (e.tag === 'done') { /* e.result：最终回答；e.state：最终状态 */ }
+// 边生成边输出文字，结束后看统计
+const r = chat.send('再详细一点')
+for await (const chunk of r.text) {
+  process.stdout.write(chunk)
 }
+const { usage, tools, modelMs } = await r.summary
 ```
 
-**保存与恢复。** `e.state` 是普通的 JSON 数据（消息历史 + 各插件的状态）。保存它，之后用 `stream(agent, savedState)` 继续；插件列表可以换，新插件从初始状态开始。
+`Run` 的成员：
 
-## 2. 写一个插件
+| 成员 | 内容 |
+| --- | --- |
+| `r.text` | 模型输出的文字增量，只包含开始读取之后的部分 |
+| `r.turns` | 每一步一条记录：`turn`（这一步做了什么）、`state`、`timing`、`summary`（到这一步为止的统计）。无论何时开始读，都从第一步开始 |
+| `r.summary` | 这次运行的统计：模型回合数、token、费用、模型耗时、每个工具的调用次数 / 出错次数 / 耗时 |
+| `r.result` | 最终回答 |
+| `r.state` | 最终状态，可保存 |
+| `r.abort()` | 取消 |
+
+提前退出任何 `for await` 都会取消这次运行。
+
+**保存与恢复。** `chat.state` 和 `r.state` 是普通的 JSON 数据（消息历史 + 各插件的状态）。保存它，之后用 `createSession(agent, { state: saved })` 继续；插件列表可以换，新插件从初始状态开始。整段对话的累计用量用 `usageOf(chat.state)` 读取。
+
+## 2. 运行中插话
 
 ```ts
-import { definePlugin } from '@pi-rsi/llm'
+chat.send('改用 vitest', { when: 'step' }) // steer：当前工具执行完后插入
+chat.send('然后更新 changelog') // follow-up（默认）：等 agent 空闲时插入
+chat.send('停，先列大纲', { when: 'now' }) // interrupt：取消当前这一步，马上插入
+```
+
+规则只有一条：每个步边界上，按发送顺序检查等待中的消息，条件成立就插入；每插入一条，agent 就不再空闲。所以多条 follow-up 会逐条处理，效果和每次等上一次运行结束再 `send` 相同。
+
+agent 工作时，`send` 把消息并入当前的运行，返回的是同一个 `Run`；agent 空闲时开始一次新的运行。被 interrupt 取消的那一步不写入状态。
+
+## 3. 写一个插件
+
+```ts
+import { after, before, definePlugin } from '@pi-rsi/llm'
 
 export const myPlugin = definePlugin({
   name: 'my-plugin', // 必填，不能和其他插件重名
   tools: [/* ... */], // 注册工具
   system: prompt => `${prompt}\nBe concise.`, // 修改 system prompt
-  tool: async (ctx, next) => next(ctx), // 包装每一次工具调用
-  async* policy(state, next) { // 包装模型调用
-    return yield* next(state)
-  },
-  update: (state, msg, results, next) => next(state, msg, results), // 包装状态更新
-  state: { init: 0, reduce: (n, msg, results) => n + 1 }, // 插件自己的状态
+  input: (messages, { state, idle }) => messages, // 这个步边界要插入的消息
+  context: (messages, state) => messages, // 这次请求发给模型的消息，不改历史
+  request: before(req => ({ ...req, options: { ...req.options, temperature: 0 } })), // 一次模型调用
+  tool: after(result => result), // 一次工具调用
+  update: (state, turn, next) => next(state, turn), // 写入状态
+  state: { init: 0, reduce: (n, turn) => n + 1 }, // 插件自己的状态
 })
 ```
 
-所有钩子都是 `(input, next)`：
+钩子有两种形状：
 
-- 调用 `next` 并返回它的结果 = 什么都不改
-- 改了参数再调用 `next` = 修改输入
-- 改 `next` 的返回值 = 修改输出
-- 不调用 `next` = 拦截；调用多次 = 重试
+- **变换**（`system`、`input`、`context`）：返回新的值。多个插件按数组顺序依次执行。
+- **中间件**（`policy`、`request`、`env`、`tool`、`update`）：`(input, next)`。调用 `next` 并返回它的结果 = 什么都不改；改参数再调用 = 改输入；改返回值 = 改输出；不调用 = 拦截；调用多次 = 重试。只改输入或只改输出时，用 `before` / `after` 简写。
 
-**顺序。** `plugins` 数组里后面的在外层：外层先收到输入、最后拿到输出。只有包装同一个钩子的插件之间，顺序才有影响。
+**顺序。** 同一个钩子上，`plugins` 数组里后面的中间件在外层。不同钩子之间的顺序是固定的，所以写不同钩子的插件顺序可以随意。
 
 **规则。**
 
-- `update` 和 `state.reduce` 必须同步、纯（不读时钟、不发请求），否则保存后恢复的结果会不同。需要 IO 的事放在 `tool` 或 `policy` 里，把结果写进消息，再由 `update` / `reduce` 记录。
-- `policy` 里消费 `next` 用 `return yield* next(...)`，这样取消能传到底层请求，返回值也不会丢。
+- `update` 和 `state.reduce` 必须同步、纯（不读时钟、不发请求），否则保存后恢复的结果会不同。需要 IO 的事放在 `tool`、`request` 或 `policy` 里。
+- `policy` 和 `request` 里消费 `next` 用 `return yield* next(...)`，这样取消能传到底层请求，返回值也不会丢。
 - 工具出错、拦截、拒绝时返回 `toolError(call, reason)`，不要抛错。即使抛了，也会被转成错误结果交给模型。
 
-## 3. 该写在哪里
+## 4. 该写在哪里
 
 | 我想…… | 写在 | 例子 |
 | --- | --- | --- |
-| 修改工具参数、结果 | `tool` | 截短过大的结果 |
+| 修改工具参数、结果 | `tool: before(...)` / `tool: after(...)` | `truncateToolResults` |
 | 审批、拦截、超时、重试 | `tool` | 不调用 `next` 即拦截 |
-| 测量工具耗时 | `tool` 测量，写进 `result.details` | `metrics` |
-| 限制模型看到的上下文（不改历史） | `policy`：`next({ ...state, messages: view })` | |
+| 换模型、改 temperature / thinking | `request: before(...)` | `hooks.ts` 的 `lowTemperature` |
+| 模型出错时换兜底模型 | `request` | `hooks.ts` 的 `fallbackTo` |
+| 给这一次请求加检索结果、只发最近 N 条 | `context` | `hooks.ts` 的 `retrieval` |
+| 自动继续、定时提醒 | `input` | `keepGoing` |
 | 替换历史（压缩） | `policy` 返回 `rewriteHistory(messages)` | `compaction` |
-| 累计 token、费用、计数 | `state.reduce` | `metrics` |
+| 预算、步数上限 | `policy` 返回 `stop(state)` | `budget` |
 | 截断历史（不需要调用模型） | `update` | demo 里的 `keepLast` |
-| 日志、追踪、模型耗时 | 不写插件，在消费事件流时处理 | `withStepTimings` |
+| 保存一份插件自己的数据 | `state: { init, reduce }` | `keepGoing` 记录自动继续的次数 |
+| 耗时、token、费用 | 不写插件：`r.summary`、`r.turns`、`usageOf(state)` | `metrics.ts` |
 
-## 4. 例子
+## 5. 例子
 
 ### 上下文压缩 · [`compaction.ts`](src/plugins/compaction.ts)
 
@@ -89,15 +120,7 @@ export const myPlugin = definePlugin({
 compaction({ model: cheapModel, maxTokens: 100_000, keepRecent: 6 })
 ```
 
-每次调用模型前估算上下文大小；超过 `maxTokens` 时，用 `cheapModel` 把较早的消息写成摘要，把历史替换成「摘要 + 最近 `keepRecent` 条消息」，然后照常调用模型。
-
-要点：
-
-- **写摘要在 `policy` 里做，替换历史用 `rewriteHistory`。** 写摘要要调用模型，是 IO；`update` 必须纯，不能做。`rewriteHistory` 把新历史作为这一步的结果交给 agent，由 agent 在状态里替换，事件流里会出现一个 `act` 事件（`isHistoryRewrite(e.action)` 为真）。
-- **切点不会拆开工具调用和它的结果**（`cutIndex`），否则 provider 会拒绝请求。
-- **刚压缩过、可压缩的消息太少时不再压缩**，避免反复压缩。
-- 被替换的消息不再留在状态里。需要完整记录时，在消费事件流时另存。
-- 插件的 `update`、`state.reduce` 不会收到 `rewriteHistory` 这一步，只处理模型回合。
+每次调用模型前估算上下文大小；超过 `maxTokens` 时，用 `cheapModel` 把较早的消息写成摘要，用「摘要 + 最近 `keepRecent` 条消息」替换历史。写摘要是 IO，在 `policy` 里做；替换本身由 `rewriteHistory` 交给 `update`，所以可以保存和重放。切点不会拆开工具调用和它的结果。被替换的消息需要另存时，从 `r.turns` 里 `turn.kind === 'rewrite'` 之前那一步的 `state` 读取。
 
 ### 剔除过大的工具结果 · [`truncate-tool-results.ts`](src/plugins/truncate-tool-results.ts)
 
@@ -105,39 +128,29 @@ compaction({ model: cheapModel, maxTokens: 100_000, keepRecent: 6 })
 truncateToolResults({ maxChars: 8_000 })
 ```
 
-工具结果的文本超过 `maxChars` 时，保留开头约 70% 和结尾约 20%，中间换成 `[... N characters omitted ...]`。原始长度写在 `result.details.truncated.originalChars`：`details` 只保存在历史里，不会发给模型，可以给 UI 用。
+工具结果的文本超过 `maxChars` 时，保留开头约 70% 和结尾约 20%。只改工具的输出，所以写成 `tool: after(...)`。原始长度写在 `result.details.truncated.originalChars`：`details` 只保存在历史里，不会发给模型。
 
-它包装的是每一次工具调用（`tool` 钩子），所以对所有工具生效，工具本身不用改。
+### 记录耗时和费用 · [`metrics.ts`](src/metrics.ts)
 
-### 记录耗时和费用 · [`metrics.ts`](src/plugins/metrics.ts)
-
-分三处记录，各自放在最合适的位置：
-
-| 记录什么 | 在哪里 | 为什么 |
-| --- | --- | --- |
-| 每次工具调用耗时 | `metrics` 插件的 `tool` 钩子，写进 `result.details.durationMs` | 读时钟是 IO，要在执行工具时做 |
-| 累计 token、费用、工具调用数和耗时 | `metrics` 插件的 `state.reduce` | 纯函数累加，随状态保存 |
-| 每一步首 token 延迟、模型耗时、工具耗时 | `withStepTimings(stream(...), report)` | 只是观察，不改变行为，所以不写成插件 |
+不需要插件：
 
 ```ts
-const agent = createAgent({ model, tools, plugins: [metrics] })
-const events = withStepTimings(stream(agent, input), t => console.log(t))
+const r = chat.send('...')
 
-for await (const e of events) {
-  if (e.tag === 'done') {
-    console.log(withFinalTurn(e.state, e.result)) // 加上最后一个回合的用量
-  }
+for await (const { timing, summary } of r.turns) {
+  statusBar.set(`${timing.modelMs}ms · $${summary.usage.cost}`) // 每一步的耗时和到目前为止的累计
 }
-```
 
-最后一个回合（模型直接回答、不再调用工具）不经过 `update`，所以 `metrics.select(state)` 里没有它；`withFinalTurn` 把 `done` 事件里的用量补上。
+const { turns, usage, modelMs, toolMs, tools } = await r.summary // 整次运行
+usageOf(chat.state) // 整段对话
+```
 
 faux provider 的费用恒为 0，换成真实模型后才有费用。
 
-## 5. 组合
+### 运行中插话 · [`interject.ts`](src/interject.ts)
 
-```ts
-plugins: [truncateToolResults(), metrics, compaction({ model, maxTokens: 100_000 })]
-```
+工具执行期间发送 steer 和 follow-up：steer 在工具执行完后插入，follow-up 等 agent 回答完再插入；模型写 changelog 时发送 interrupt，写了一半的内容被丢弃。
 
-三个插件包装的钩子不同（`tool` 截短、`tool` 计时、`policy` 压缩），只有前两个都包装 `tool`：`metrics` 在外层，测到的耗时包含截短的时间。反过来写也可以，结果只差这一点。
+### 细粒度钩子 · [`hooks.ts`](src/hooks.ts)
+
+`input` 自动继续（[`keep-going.ts`](src/plugins/keep-going.ts)）、`context` 加检索结果、`request` 换兜底模型和改 temperature、`policy` 预算（[`budget.ts`](src/plugins/budget.ts)）组合在一个 agent 里。

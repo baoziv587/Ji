@@ -1,34 +1,44 @@
-import type { AssistantMessage, AssistantMessageEvent, ToolResultMessage } from '@mariozechner/pi-ai'
-import type { Extension } from '@pi-rsi/kernel'
-import type { EnvUpdateExtension } from '@pi-rsi/kernel/advanced'
-import type { AgentAction, AgentState, AgentTool, LLMExtension, ToolContext, ToolRunner } from './types.ts'
-import { liftWiden } from '@pi-rsi/kernel/advanced'
-import { isHistoryRewrite } from './history.ts'
+import type { AssistantMessage, AssistantMessageEvent, Message, ToolResultMessage } from '@mariozechner/pi-ai'
+import type { Extension, Step, Stream } from '@pi-rsi/kernel'
+import type { AgentAction, AgentState, AgentTool, Boundary, ModelCall, ModelRequest, ToolContext, ToolRunner, Turn } from './types.ts'
+import { callsOf } from './message.ts'
+import { actionOf, isModelAction, turnOf } from './turn.ts'
 
-/** 插件自己的状态：纯 reducer，每步 update 之后运行，结果存在 AgentState.plugins[name] */
+/** 插件自己的状态：纯 reducer，每一步 update 之后运行，结果存在 AgentState.plugins[name] */
 export interface PluginState<State> {
   init: State
-  reduce: (own: State, msg: AssistantMessage, results: ToolResultMessage[]) => State
+  reduce: (own: State, turn: Turn) => State
 }
 
-/** 所有钩子的形状都是 (input, next)：不调用 next 即拦截，调用多次即重试 */
+/**
+ * 字段按一步中的执行顺序排列（RFC-0004 §4）。
+ * 变换 (value, context) => value 按插件顺序依次执行；中间件 (input, next) => output 前面的在内层。
+ */
 export interface PluginSpec<State = undefined> {
   name: string
   /** 注册工具。重名在 createAgent 时报错 */
   tools?: AgentTool[]
-  /** 修改 system prompt */
+  /** 变换：修改 system prompt，创建 agent 时执行一次 */
   system?: (prompt: string) => string
-  /** 包装每一次工具调用 */
+  /** 中间件：整一步。可以返回 rewriteHistory(...) 替换历史，或 stop(state) 结束 */
+  policy?: (state: AgentState, next: (state: AgentState) => PolicyStream) => PolicyStream
+  /** 变换：这个步边界要插入的消息。初始值是此刻可以送达的外部消息 */
+  input?: (messages: Message[], boundary: Boundary) => Message[] | Promise<Message[]>
+  /** 变换：这次请求发给模型的消息，不改历史 */
+  context?: (messages: Message[], state: AgentState) => Message[] | Promise<Message[]>
+  /** 中间件：一次模型调用 */
+  request?: (req: ModelRequest, next: ModelCall) => Stream<AssistantMessageEvent, AssistantMessage>
+  /** 中间件：一个模型回合的全部工具调用。没有工具调用的回合不经过它 */
+  env?: (msg: AssistantMessage, next: (msg: AssistantMessage) => Promise<ToolResultMessage[]>) => Promise<ToolResultMessage[]>
+  /** 中间件：一次工具调用 */
   tool?: (ctx: ToolContext, next: ToolRunner) => Promise<ToolResultMessage>
-  /** 包装模型调用。除了返回 next 的结果，还可以返回 rewriteHistory(...) 替换历史 */
-  policy?: ActionExtension<AgentAction>['policy']
-  /** 包装一个助手回合的全部工具执行 */
-  env?: ActionExtension<AssistantMessage>['env']
-  /** 包装状态更新。必须同步、纯 */
-  update?: ActionExtension<AssistantMessage>['update']
+  /** 中间件：写入状态。必须同步、纯；看到所有 Turn */
+  update?: (state: AgentState, turn: Turn, next: (state: AgentState, turn: Turn) => AgentState) => AgentState
   /** 插件自己的状态 */
   state?: PluginState<State>
 }
+
+export type PolicyStream = Stream<AssistantMessageEvent, Step<AgentAction, AssistantMessage>>
 
 export interface Plugin<State = undefined> extends PluginSpec<State> {
   /** 读取本插件的状态；尚未写入时返回 state.init */
@@ -80,29 +90,39 @@ export function assertNoConflicts(tools: AgentTool[], plugins: AnyPlugin[]): voi
   }
 }
 
-/**
- * 插件 → 内核中间件。env / update 与状态 reducer 只处理助手回合：
- * 经 liftWiden 提升后，HistoryRewrite 直接跳过它们
- */
-export function extensionsOf(plugin: AnyPlugin): LLMExtension[] {
-  const { name, policy, env, update, state, select } = plugin
-  const extensions: LLMExtension[] = [{ policy }, liftWiden({ env, update }, isHistoryRewrite)]
+type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
 
-  if (state) {
-    const reducer: EnvUpdateExtension<AgentState, AssistantMessage, ToolResultMessage[]> = {
-      update: (s, msg, results, next) => {
-        const updated = next(s, msg, results)
-        const own = state.reduce(select(updated), msg, results)
-        return { ...updated, plugins: { ...updated.plugins, [name]: own } }
-      },
-    }
-    extensions.push(liftWiden(reducer, isHistoryRewrite))
+/**
+ * 插件的 policy / env / update / state → 内核中间件。
+ * env 只包装带工具调用的模型回合；update 和 state 看到的是 Turn，这里负责与内核的 (action, obs) 互转。
+ */
+export function extensionOf(plugin: AnyPlugin): LLMExtension {
+  const { name, policy, env, update, state, select } = plugin
+  const ext: LLMExtension = { policy }
+
+  if (env) {
+    ext.env = (action, next) => (hasToolCalls(action) ? env(action, next) : next(action))
   }
 
-  return extensions
+  if (update || state) {
+    ext.update = (s, action, results, next) => {
+      const turn = turnOf(action, results)
+      const inner = (s2: AgentState, turn2: Turn): AgentState => next(s2, ...actionOf(turn2))
+      const updated = update ? update(s, turn, inner) : inner(s, turn)
+
+      if (!state) {
+        return updated
+      }
+      return { ...updated, plugins: { ...updated.plugins, [name]: state.reduce(select(updated), turn) } }
+    }
+  }
+
+  return ext
 }
 
-type ActionExtension<A> = Extension<AgentState, A, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
+function hasToolCalls(action: AgentAction): action is AssistantMessage {
+  return isModelAction(action) && callsOf(action).length > 0
+}
 
 function duplicateNames(items: ReadonlyArray<{ name: string }>): string[] {
   return [...Map.groupBy(new Set(items), item => item.name)]

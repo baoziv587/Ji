@@ -19,7 +19,7 @@ export const SUMMARY_PREFIX = '[Summary of the earlier conversation]'
  *
  * - 写摘要要调用模型，是 IO，所以放在 policy 里做
  * - 替换历史通过 rewriteHistory 交给 update，结果进入 AgentState，保存后恢复不需要重新摘要
- * - 被替换的消息不再发给模型，也不再留在状态里；需要完整记录时，在消费事件流时另存
+ * - 被替换的消息不再发给模型，也不再留在状态里；需要完整记录时，从 r.turns 中 rewrite 之前那一步的 state 读取
  */
 export function compaction({ model, maxTokens, keepRecent = 6 }: CompactionOptions): Plugin {
   return definePlugin({

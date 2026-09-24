@@ -1,10 +1,11 @@
-import type { Api, FauxResponseStep, Message, Model, ToolCall } from '@mariozechner/pi-ai'
-import type { AgentEvent, AgentState, LLMAgent } from '@pi-rsi/llm'
+import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, ToolCall } from '@mariozechner/pi-ai'
+import type { Turn, TurnEvent } from '@pi-rsi/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
-import { createAgent, isHistoryRewrite, stream, tool, toolResult, user } from '@pi-rsi/llm'
+import { createAgent, createSession, textOf, tool, toolResult, user } from '@pi-rsi/llm'
 import { describe, expect, it, onTestFinished } from 'vitest'
+import { budget } from './budget.ts'
 import { compaction, cutIndex, SUMMARY_PREFIX } from './compaction.ts'
-import { metrics, withFinalTurn, withStepTimings } from './metrics.ts'
+import { keepGoing } from './keep-going.ts'
 import { truncate, truncateToolResults } from './truncate-tool-results.ts'
 
 function fauxModel(script: FauxResponseStep[]): Model<Api> {
@@ -14,21 +15,15 @@ function fauxModel(script: FauxResponseStep[]): Model<Api> {
   return faux.getModel()
 }
 
-async function collect(events: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
-  const all: AgentEvent[] = []
-  for await (const e of events) {
-    all.push(e)
+async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
+  const all: T[] = []
+  for await (const x of source) {
+    all.push(x)
   }
   return all
 }
 
-async function finalState(agent: LLMAgent, messages: Message[]): Promise<AgentState> {
-  const last = (await collect(stream(agent, messages))).at(-1)
-  if (last?.tag !== 'done') {
-    throw new Error('agent did not finish')
-  }
-  return last.state
-}
+const kinds = (turns: TurnEvent[]): Turn['kind'][] => turns.map(e => e.turn.kind)
 
 const echo = tool({
   name: 'echo',
@@ -36,7 +31,8 @@ const echo = tool({
   parameters: Type.Object({ text: Type.String() }),
   run: ({ text }) => text,
 })
-const callEcho = (text: string): ReturnType<typeof fauxAssistantMessage> => fauxAssistantMessage([fauxToolCall('echo', { text })], { stopReason: 'toolUse' })
+const callEcho = (text: string): AssistantMessage => fauxAssistantMessage([fauxToolCall('echo', { text })], { stopReason: 'toolUse' })
+const replyToLastUser = (ctx: Context): AssistantMessage => fauxAssistantMessage(`re:${ctx.messages.findLast(m => m.role === 'user')?.content}`)
 
 describe('compaction', () => {
   it('切点不会落在工具结果上', () => {
@@ -51,21 +47,19 @@ describe('compaction', () => {
     const model = fauxModel([callEcho(big), callEcho('b'), fauxAssistantMessage('the summary'), fauxAssistantMessage('answer')])
     const agent = createAgent({ model, tools: [echo], plugins: [compaction({ model, maxTokens: 400, keepRecent: 2 })] })
 
-    const events = await collect(stream(agent, [user('go')]))
-    const rewrites = events.filter(e => e.tag === 'act' && isHistoryRewrite(e.action))
-    const last = events.at(-1)
+    const r = createSession(agent).send('go')
+    const [turns, state] = await Promise.all([collect(r.turns), r.state])
 
-    expect(rewrites).toHaveLength(1)
-    expect(last?.tag === 'done' && last.state.messages[0]).toMatchObject({ role: 'user', content: `${SUMMARY_PREFIX}\nthe summary` })
-    expect(last?.tag === 'done' && last.state.messages[1].role).toBe('assistant')
+    expect(kinds(turns).filter(k => k === 'rewrite')).toHaveLength(1)
+    expect(state.messages[0]).toMatchObject({ role: 'user', content: `${SUMMARY_PREFIX}\nthe summary` })
+    expect(state.messages[1].role).toBe('assistant')
   })
 
   it('没超限时不压缩', async () => {
     const model = fauxModel([callEcho('small'), fauxAssistantMessage('answer')])
     const agent = createAgent({ model, tools: [echo], plugins: [compaction({ model, maxTokens: 10_000 })] })
 
-    const events = await collect(stream(agent, [user('go')]))
-    expect(events.some(e => e.tag === 'act' && isHistoryRewrite(e.action))).toBe(false)
+    expect((await createSession(agent).send('go').summary).rewrites).toBe(0)
   })
 })
 
@@ -84,37 +78,39 @@ describe('truncateToolResults', () => {
     const model = fauxModel([callEcho('y'.repeat(5_000)), callEcho('ok'), fauxAssistantMessage('answer')])
     const agent = createAgent({ model, tools: [echo], plugins: [truncateToolResults({ maxChars: 500 })] })
 
-    const results = (await finalState(agent, [user('go')])).messages.filter(m => m.role === 'toolResult')
+    const results = (await createSession(agent).send('go').state).messages.filter(m => m.role === 'toolResult')
     expect(JSON.stringify(results[0].content).length).toBeLessThan(700)
     expect(results[0].details).toEqual({ truncated: { originalChars: 5_000 } })
     expect(results[1].details).toBeUndefined()
   })
 })
 
-describe('metrics', () => {
-  it('记录每次工具调用耗时，并累计 token 和工具调用数', async () => {
-    const model = fauxModel([fauxAssistantMessage([fauxToolCall('echo', { text: 'a' }), fauxToolCall('echo', { text: 'b' })], { stopReason: 'toolUse' }), fauxAssistantMessage('answer')])
-    const agent = createAgent({ model, tools: [echo], plugins: [metrics] })
+describe('keepGoing', () => {
+  it('agent 空闲但任务没完成时插入「继续」，完成后停止', async () => {
+    const model = fauxModel([fauxAssistantMessage('step 1'), fauxAssistantMessage('step 2 DONE')])
+    const plugin = keepGoing({ isDone: s => s.messages.some(m => m.role === 'assistant' && textOf(m).includes('DONE')), prompt: 'continue' })
 
-    const events = await collect(stream(agent, [user('go')]))
-    const last = events.at(-1)
-    if (last?.tag !== 'done') {
-      throw new Error('agent did not finish')
-    }
-
-    const own = metrics.select(last.state)
-    expect(own).toMatchObject({ turns: 1, toolCalls: 2 })
-    expect(own.inputTokens).toBeGreaterThan(0)
-    expect(last.state.messages.filter(m => m.role === 'toolResult').every(r => typeof r.details?.durationMs === 'number')).toBe(true)
-    expect(withFinalTurn(last.state, last.result).turns).toBe(2)
+    const state = await createSession(createAgent({ model, plugins: [plugin] })).send('go').state
+    expect(state.messages.map(m => (m.role === 'assistant' ? textOf(m) : m.content))).toEqual(['go', 'step 1', 'continue', 'step 2 DONE'])
+    expect(plugin.select(state)).toBe(1)
   })
 
-  it('withStepTimings 每步报告一次，事件原样转发', async () => {
-    const agent = createAgent({ model: fauxModel([callEcho('a'), fauxAssistantMessage('answer')]), tools: [echo] })
-    const timings: number[] = []
+  it('最多继续 maxTimes 次', async () => {
+    const model = fauxModel([replyToLastUser, replyToLastUser, replyToLastUser])
+    const plugin = keepGoing({ isDone: () => false, maxTimes: 2, prompt: 'continue' })
 
-    const events = await collect(withStepTimings(stream(agent, [user('go')]), timing => timings.push(timing.t)))
-    expect(timings).toEqual([0, 1])
-    expect(events.filter(e => e.tag !== 'delta').map(e => e.tag)).toEqual(['act', 'done'])
+    const summary = await createSession(createAgent({ model, plugins: [plugin] })).send('go').summary
+    expect(summary.turns).toBe(3)
+  })
+})
+
+describe('budget', () => {
+  it('累计用量超过上限时结束，以最后一条助手消息作为结果', async () => {
+    const model = fauxModel([callEcho('a'), callEcho('b'), fauxAssistantMessage('never reached')])
+    const agent = createAgent({ model, tools: [echo], plugins: [budget({ maxTokens: 1 })] })
+
+    const r = createSession(agent).send('go')
+    expect((await r.summary).turns).toBe(1)
+    expect((await r.result).stopReason).toBe('toolUse')
   })
 })

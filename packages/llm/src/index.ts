@@ -1,16 +1,37 @@
-// @pi-rsi/llm —— 用 pi-ai 实例化内核：厂商适配、消息格式、流式折叠全部交给 pi-ai
+// @pi-rsi/llm：用 pi-ai 实例化内核（RFC-0004）
 //
-//   S = AgentState             消息历史 + 各插件的状态
-//   A = AssistantMessage       带 toolCall 的助手回合
-//   O = ToolResultMessage[]
-//   R = AssistantMessage       最终回答（含 usage / cost / stopReason）
-//   D = AssistantMessageEvent  text_delta / toolcall_delta / thinking_delta …
-//
-//   扩展方式见 RFC-0003：definePlugin + createAgent
+//   使用者只接触四个对象：
+//     Agent    createAgent({ model, tools, plugins })   模型、工具、插件的组合，不含状态
+//     Session  createSession(agent)                     一段对话；唯一的方法 send(message, { when })
+//     Run      session.send(...) 的返回值               文字流、每步记录、统计、最终结果
+//     Plugin   definePlugin({ ... })                    在一步的固定位置改变行为
 
-export { type AgentInput, type AgentOptions, createAgent, initialState, run, stream } from './agent.ts'
-export { isHistoryRewrite, rewriteHistory } from './history.ts'
+export { type Agent, type AgentOptions, createAgent } from './agent.ts'
 export { callsOf, textOf, user } from './message.ts'
+export { after, before, type Middleware } from './middleware.ts'
 export { definePlugin, type Plugin, PluginConflictError, type PluginList, type PluginSpec, type PluginState } from './plugin.ts'
+export type { Run } from './run.ts'
+export { createSession, type Session, type SessionOptions } from './session.ts'
+export { usageOf } from './summary.ts'
 export { tool, toolError, toolResult } from './tool.ts'
-export type { AgentAction, AgentEvent, AgentState, AgentTool, HistoryRewrite, LLMAgent, LLMExtension, ToolContext, ToolRunner } from './types.ts'
+export { rewriteHistory, stop } from './turn.ts'
+export type {
+  AgentAction,
+  AgentEvent,
+  AgentState,
+  AgentTool,
+  Boundary,
+  InputAction,
+  ModelCall,
+  ModelRequest,
+  PendingMessage,
+  RewriteAction,
+  RunSummary,
+  ToolContext,
+  ToolRunner,
+  Turn,
+  TurnEvent,
+  TurnTiming,
+  UsageTotals,
+  When,
+} from './types.ts'

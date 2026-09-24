@@ -3,9 +3,9 @@
 // agent 连续读两个大文件，上下文超过 maxTokens 后，compaction 插件先让模型写摘要，
 // 再用「摘要 + 最近的消息」替换历史，然后继续工作。
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
-import { createAgent, stream, tool, user } from '@pi-rsi/llm'
+import { createAgent, createSession, tool } from '@pi-rsi/llm'
 import { compaction, SUMMARY_PREFIX } from './plugins/compaction.ts'
-import { pickModel, print } from './shared.ts'
+import { pickModel, show } from './shared.ts'
 
 const readFile = tool({
   name: 'read_file',
@@ -32,6 +32,4 @@ const agent = createAgent({
   plugins: [compaction({ model, maxTokens: 600, keepRecent: 2 })],
 })
 
-for await (const e of stream(agent, [user('a.ts 和 b.ts 分别导出了什么？')])) {
-  print(e)
-}
+await show(createSession(agent).send('a.ts 和 b.ts 分别导出了什么？'))

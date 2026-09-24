@@ -1,16 +1,15 @@
-import type { Api, AssistantMessage, AssistantMessageEvent, Message, Model, SimpleStreamOptions, ToolResultMessage } from '@mariozechner/pi-ai'
-import type { Agent, Stream } from '@pi-rsi/kernel'
+import type { Api, AssistantMessage, Message, Model, SimpleStreamOptions, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { AnyPlugin, PluginList } from './plugin.ts'
-import type { AgentEvent, AgentState, AgentTool, LLMAgent, ToolRunner } from './types.ts'
+import type { AgentTool, Boundary, LLMAgent, ModelCall, ToolRunner } from './types.ts'
+import { performance } from 'node:perf_hooks'
 import { streamSimple } from '@mariozechner/pi-ai'
-import { act, done, extend, run as runKernel, unfold } from '@pi-rsi/kernel'
-import { widen } from '@pi-rsi/kernel/advanced'
-import { isHistoryRewrite } from './history.ts'
-import { callsOf } from './message.ts'
-import { assertNoConflicts, extensionsOf, flattenPlugins } from './plugin.ts'
+import { act, extend } from '@pi-rsi/kernel'
+import { callsOf, isIdle } from './message.ts'
+import { assertNoConflicts, extensionOf, flattenPlugins } from './plugin.ts'
 import { toolError, toolRunner } from './tool.ts'
+import { applyTurn, isModelAction, stop, turnOf } from './turn.ts'
 
-export interface AgentOptions extends SimpleStreamOptions {
+export interface AgentOptions extends Omit<SimpleStreamOptions, 'signal'> {
   model: Model<Api>
   system?: string
   tools?: AgentTool[]
@@ -18,92 +17,147 @@ export interface AgentOptions extends SimpleStreamOptions {
   plugins?: PluginList
 }
 
+/** 内部：Agent 在每次运行时实例化的入口，不从包中导出 */
+export const instantiate: unique symbol = Symbol('instantiate')
+
+/** 模型、工具、插件的组合。不含状态，可以复用；通过 createSession 运行 */
+export interface Agent {
+  readonly [instantiate]: (ctx: RunContext) => LLMAgent
+}
+
+/** 内部：属于一次运行、而不属于 agent 的东西 */
+export interface RunContext {
+  /** 取消当前这一步：中断或 abort 时触发 */
+  signal: AbortSignal
+  /** 这个步边界上可以送达的外部消息 */
+  offer: (boundary: Boundary) => Message[]
+  /** 这个步边界是否由中断产生 */
+  interrupted: () => boolean
+  /** 记录一次工具调用的耗时 */
+  toolTime: (callId: string, ms: number) => void
+}
+
 /** 唯一的装配入口。工具或插件重名时抛 PluginConflictError，列出全部冲突 */
-export function createAgent(options: AgentOptions): LLMAgent {
+export function createAgent(options: AgentOptions): Agent {
   const { model, system = '', tools = [], plugins = [], ...streamOptions } = options
 
   const list = flattenPlugins(plugins)
   const allTools = [...new Set([...tools, ...list.flatMap(p => p.tools ?? [])])]
   assertNoConflicts(allTools, list)
 
-  const prompt = list.reduce((acc, p) => p.system?.(acc) ?? acc, system)
-  const runTool = list.reduce(wrapToolRunner, toolRunner(allTools))
+  const parts: Parts = {
+    model,
+    systemPrompt: list.reduce((acc, p) => p.system?.(acc) ?? acc, system),
+    tools: allTools,
+    runTool: list.reduce(wrapToolRunner, toolRunner(allTools)),
+    plugins: list,
+    streamOptions,
+  }
+  const extensions = list.map(extensionOf)
 
-  const turns = turnAgent({ model, system: prompt, tools: allTools, runTool, streamOptions })
-  const base = widen(turns, isHistoryRewrite, {
-    env: async () => [],
-    update: (state, rewrite) => ({ ...state, messages: rewrite.messages }),
-  })
-  return extend(base, ...list.flatMap(extensionsOf))
-}
-
-/** 输入是消息列表时从空的插件状态开始；是 AgentState 时从该状态继续（恢复、热插拔） */
-export type AgentInput = AgentState | Message[]
-
-export function stream(agent: LLMAgent, input: AgentInput, maxSteps?: number): Stream<AgentEvent, void> {
-  return unfold(agent, toState(input), maxSteps)
-}
-
-export function run(agent: LLMAgent, input: AgentInput, maxSteps?: number): Promise<AssistantMessage> {
-  return runKernel(agent, toState(input), maxSteps)
-}
-
-export function initialState(messages: Message[]): AgentState {
-  return { messages, plugins: {} }
+  return {
+    [instantiate]: ctx => extend(baseAgent(parts, ctx), ...extensions),
+  }
 }
 
 /* ── 内部 ─────────────────────────────────────────────── */
 
-interface TurnOptions {
+interface Parts {
   model: Model<Api>
-  system: string
+  systemPrompt: string
   tools: AgentTool[]
   runTool: ToolRunner
-  streamOptions: SimpleStreamOptions
+  plugins: AnyPlugin[]
+  streamOptions: Omit<SimpleStreamOptions, 'signal'>
 }
 
-/** 只处理助手回合的 agent；HistoryRewrite 由 createAgent 用 widen 加上 */
-type TurnAgent = Agent<AgentState, AssistantMessage, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
+/**
+ * 一步（RFC-0004 §4）：
+ *   ① input   有要插入的消息 → 插入；没有且 agent 空闲 → 结束
+ *   ② context 这次请求发给模型的消息
+ *   ③ request 调用一次模型
+ * 模型回合总是先写入状态，下一步才判断是否结束，所以最终回答也经过 update。
+ */
+function baseAgent(parts: Parts, ctx: RunContext): LLMAgent {
+  const { model, systemPrompt, plugins, streamOptions } = parts
+  const specs = parts.tools.map(({ name, description, parameters }) => ({ name, description, parameters }))
 
-function turnAgent({ model, system, tools, runTool, streamOptions }: TurnOptions): TurnAgent {
-  const specs = tools.map(({ name, description, parameters }) => ({ name, description, parameters }))
-  const systemPrompt = system === '' ? undefined : system
-  const signal = streamOptions.signal ?? new AbortController().signal // 未传入时是一个永不中止的 signal
+  const inputs = plugins.flatMap(p => (p.input ? [p.input] : []))
+  const contexts = plugins.flatMap(p => (p.context ? [p.context] : []))
+  const request = plugins.reduce(wrapRequest, callModel(ctx.signal))
 
   return {
-    // π：转发 pi-ai 的事件流；消费方 break（generator.return）→ abort 底层请求
     async* policy(state) {
-      const ctl = new AbortController()
-      const requestSignal = AbortSignal.any([signal, ctl.signal])
-      const events = streamSimple(model, { systemPrompt, messages: state.messages, tools: specs }, { ...streamOptions, signal: requestSignal })
+      const boundary = { state, idle: isIdle(state) }
+      const messages = await applyTransforms(inputs, ctx.offer(boundary), boundary)
 
-      let finished = false
-      try {
-        yield* events
-        finished = true
+      if (messages.length > 0) {
+        return act({ kind: 'input', messages, idle: boundary.idle, interrupted: ctx.interrupted() })
       }
-      finally {
-        if (!finished) {
-          ctl.abort()
-        }
+      if (boundary.idle) {
+        return stop(state)
       }
 
-      const msg = await events.result()
-      if (msg.stopReason === 'error' || msg.stopReason === 'aborted') {
-        throw new Error(`${model.provider}/${model.id} ${msg.stopReason}: ${msg.errorMessage}`)
-      }
-
-      return callsOf(msg).length > 0 ? act(msg) : done(msg)
+      const view = await applyTransforms(contexts, state.messages, state)
+      const msg = yield* request({ model, systemPrompt, messages: view, tools: specs, options: streamOptions, state })
+      return act(msg)
     },
 
-    // ε：并行执行；中间件或工具抛出的异常都转为 isError 结果交还模型（I8）
-    env: msg => Promise.all(
-      callsOf(msg).map(call => runTool({ call, signal }).catch(e => toolError(call, e))),
-    ),
+    env: action => (isModelAction(action) ? runTools(parts.runTool, action, ctx) : Promise.resolve([])),
 
-    // δ：只追加
-    update: (state, msg, results) => ({ ...state, messages: [...state.messages, msg, ...results] }),
+    update: (state, action, results) => applyTurn(state, turnOf(action, results)),
   }
+}
+
+/** 最内层的 request：转发 pi-ai 的事件流；消费方提前退出时 abort 底层请求 */
+function callModel(signal: AbortSignal): ModelCall {
+  return async function* ({ model, systemPrompt, messages, tools, options }) {
+    const ctl = new AbortController()
+    const requestSignal = AbortSignal.any([signal, ctl.signal])
+    const context = { systemPrompt: systemPrompt === '' ? undefined : systemPrompt, messages, tools }
+    const events = streamSimple(model, context, { ...options, signal: requestSignal })
+
+    let finished = false
+    try {
+      yield* events
+      finished = true
+    }
+    finally {
+      if (!finished) {
+        ctl.abort()
+      }
+    }
+
+    const msg = await events.result()
+    if (msg.stopReason === 'error' || msg.stopReason === 'aborted') {
+      throw new Error(`${model.provider}/${model.id} ${msg.stopReason}: ${msg.errorMessage}`)
+    }
+    return msg
+  }
+}
+
+/** 并行执行；中间件或工具抛出的异常都转为 isError 结果交还模型（I8） */
+function runTools(runTool: ToolRunner, msg: AssistantMessage, ctx: RunContext): Promise<ToolResultMessage[]> {
+  return Promise.all(callsOf(msg).map(async (call) => {
+    const start = performance.now()
+    try {
+      return await runTool({ call, signal: ctx.signal })
+    }
+    catch (e) {
+      return toolError(call, e)
+    }
+    finally {
+      ctx.toolTime(call.id, performance.now() - start)
+    }
+  }))
+}
+
+async function applyTransforms<T, C>(fns: Array<(value: T, context: C) => T | Promise<T>>, value: T, context: C): Promise<T> {
+  let result = value
+  for (const f of fns) {
+    result = await f(result, context)
+  }
+  return result
 }
 
 function wrapToolRunner(next: ToolRunner, plugin: AnyPlugin): ToolRunner {
@@ -111,6 +165,7 @@ function wrapToolRunner(next: ToolRunner, plugin: AnyPlugin): ToolRunner {
   return tool ? ctx => tool(ctx, next) : next
 }
 
-function toState(input: AgentInput): AgentState {
-  return Array.isArray(input) ? initialState(input) : input
+function wrapRequest(next: ModelCall, plugin: AnyPlugin): ModelCall {
+  const { request } = plugin
+  return request ? req => request(req, next) : next
 }

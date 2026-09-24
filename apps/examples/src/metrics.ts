@@ -1,12 +1,11 @@
 // 记录耗时和费用：pnpm --filter @pi-rsi/examples metrics
 //
-// - 每步模型 / 工具耗时：用 withStepTimings 包装事件流（只观察）
-// - 每次工具调用耗时、累计 token 和费用：metrics 插件，结果存在 AgentState 里
+// 不需要插件：Run 的每条记录带这一步的耗时和到目前为止的统计，r.summary 是整次运行的统计。
+import process from 'node:process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
-import { createAgent, stream, tool, user } from '@pi-rsi/llm'
-import { metrics, withFinalTurn, withStepTimings } from './plugins/metrics.ts'
-import { pickModel, print } from './shared.ts'
+import { createAgent, createSession, tool, usageOf } from '@pi-rsi/llm'
+import { pickModel } from './shared.ts'
 
 const search = tool({
   name: 'search',
@@ -23,25 +22,27 @@ const model = pickModel([
   fauxAssistantMessage('两个关键词各有 3 条结果。'),
 ])
 
-const agent = createAgent({ model, tools: [search], plugins: [metrics] })
-const events = withStepTimings(stream(agent, [user('帮我搜一下 pi-ai 和 agent kernel')]), (timing) => {
-  console.log(`\n  [t=${timing.t}] first token ${ms(timing.firstTokenMs)}, model ${ms(timing.modelMs)}, tools ${ms(timing.toolsMs)}`)
-})
+const chat = createSession(createAgent({ model, tools: [search] }))
+const r = chat.send('帮我搜一下 pi-ai 和 agent kernel')
 
-for await (const e of events) {
-  print(e)
-
-  if (e.tag === 'act') {
-    for (const r of e.obs) {
-      console.log(`  ${r.toolName} took ${ms(r.details?.durationMs)}`)
-    }
+// 每一步：这一步的耗时，以及到目前为止的累计（可以直接显示在状态栏）
+for await (const { t, turn, timing, summary } of r.turns) {
+  if (turn.kind !== 'model') {
+    continue
   }
 
-  if (e.tag === 'done') {
-    const total = withFinalTurn(e.state, e.result)
-    console.log(`\n  total: ${total.turns} turns, ${total.inputTokens} in / ${total.outputTokens} out tokens, $${total.cost.toFixed(4)}, ${total.toolCalls} tool calls totalling ${ms(total.toolMs)}`)
-  }
+  const tools = Object.values(timing.toolMs ?? {}).map(ms).join(', ')
+  process.stdout.write(`[t=${t}] first token ${ms(timing.firstTokenMs)}, model ${ms(timing.modelMs)}`)
+  console.log(`${tools ? `, tools ${tools}` : ''} · so far $${summary.usage.cost.toFixed(4)}, ${summary.usage.output} output tokens`)
 }
+
+// 整次运行
+const { turns, usage, modelMs, toolMs, tools } = await r.summary
+console.log(`\ntotal: ${turns} model turns, ${usage.input} in / ${usage.output} out tokens, $${usage.cost.toFixed(4)}`)
+console.log(`model ${ms(modelMs)}, tools ${ms(toolMs)}:`, tools)
+
+// 整段对话（跨多次运行）
+console.log('session usage:', usageOf(chat.state))
 
 function ms(value: number | undefined): string {
   return `${Math.round(value ?? 0)}ms`

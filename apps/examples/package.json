@@ -7,6 +7,8 @@
     "compaction": "node src/compaction.ts",
     "truncate": "node src/truncate.ts",
     "metrics": "node src/metrics.ts",
+    "interject": "node src/interject.ts",
+    "hooks": "node src/hooks.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
