@@ -2,6 +2,8 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
+> **JI** (*jí*, 极) means *limit*, as in 极限: the core is kept to the smallest set of pieces, and an agent repeats one step until it reaches its result.
+
 A small, algebraic core for LLM agents, plus a ready-to-use agent built on [pi-ai](https://github.com/badlogic/pi-mono/tree/main/packages/ai).
 
 Every agent step comes down to three functions: **decide**, **act** and **record**. Everything else, including compaction, retries, budgets, steering and metrics, is a middleware wrapped around one of them. Because recording is pure, a conversation's state is plain JSON that you can save, restore and replay.
