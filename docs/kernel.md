@@ -61,7 +61,11 @@ A `Lens<T, S>` must satisfy the three lens laws: get-set, set-get and set-set. `
 ## Reducers (`/reduce`)
 
 ```ts
-interface Reducer<In, Acc, Out = Acc> { init: Acc, reduce: (acc: Acc, x: In) => Acc, result?: (acc: Acc) => Out }
+interface Reducer<In, Acc, Out = Acc> {
+  init: Acc
+  reduce: (acc: Acc, x: In) => Acc
+  result?: (acc: Acc) => Out
+}
 ```
 
 `combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@ji/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.

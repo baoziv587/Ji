@@ -9,9 +9,9 @@ This page covers the model behind JI. If you only want to use it, read the [READ
 The kernel describes any agent as three functions:
 
 ```
-π  policy  : S → D* · (A + R)   decide: stream deltas D, then return an action A or a result R
+π  policy  : S → D* · (A + R)   decide: stream deltas D, then return A or R
 ε  env     : A → O              act:    perform the side effect
-δ  update  : S × A × O → S      record: compute the next state (synchronous, pure)
+δ  update  : S × A × O → S      record: compute the next state (sync, pure)
 ```
 
 `unfold` repeats *decide → act → record* until the policy returns a result. The output is a lazy stream of events. `extend` wraps any of the three functions in middleware, and that is the only way to extend an agent.

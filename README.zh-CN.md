@@ -11,14 +11,20 @@ agent 的每一步都可以拆成三个函数：**决策**、**执行**、**记�
 ```ts
 import { createAgent, createSession } from '@ji/llm'
 
-const agent = createAgent({ model, system: 'Be concise.', tools: [readFile], plugins: [compaction({ model, maxTokens: 100_000 })] })
+const agent = createAgent({
+  model,
+  system: 'Be concise.',
+  tools: [readFile],
+  plugins: [compaction({ model, maxTokens: 100_000 })],
+})
 const chat = createSession(agent)
 
 const r = chat.send('总结一下 README')
 for await (const chunk of r.text) process.stdout.write(chunk)
 
 const { usage, tools } = await r.summary
-save(chat.state) // 普通 JSON：createSession(agent, { state }) 可以从这里继续
+// 普通 JSON：createSession(agent, { state }) 可以从这里继续
+save(chat.state)
 ```
 
 ## 为什么用它
@@ -35,16 +41,21 @@ save(chat.state) // 普通 JSON：createSession(agent, { state }) 可以从这�
 
 ```bash
 pnpm install
-pnpm demo                                       # 离线：用 pi-ai 的 faux provider 回放脚本
-MODEL=anthropic/claude-sonnet-5 pnpm demo       # 真实模型，API key 从环境变量读取
+
+# 离线：用 pi-ai 的 faux provider 回放脚本
+pnpm demo
+
+# 真实模型，API key 从环境变量读取
+MODEL=anthropic/claude-sonnet-5 pnpm demo
 ```
 
 pi-ai 支持的任何 `provider/model` 都可以用。更多可以直接运行的场景在 [apps/examples](apps/examples/README.md)：
 
 ```bash
-pnpm --filter @ji/examples compaction   # 上下文压缩
-pnpm --filter @ji/examples interject    # steer / follow-up / interrupt
-pnpm --filter @ji/examples hooks        # 自动继续、检索、兜底模型、预算
+cd apps/examples
+pnpm compaction  # 上下文压缩
+pnpm interject   # steer / follow-up / interrupt
+pnpm hooks       # 自动继续、检索、兜底模型、预算
 ```
 
 ## 包

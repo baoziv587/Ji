@@ -5,9 +5,14 @@
 ## 三个对象
 
 ```ts
-const agent = createAgent({ model, system, tools, plugins, ...streamOptions }) // 无状态，可复用
-const chat = createSession(agent, { state, maxSteps }) // 一段对话
-const r = chat.send('hi') // 一次运行
+// 无状态，可复用
+const agent = createAgent({ model, system, tools, plugins, ...streamOptions })
+
+// 一段对话
+const chat = createSession(agent, { state, maxSteps })
+
+// 一次运行
+const r = chat.send('hi')
 ```
 
 - **Agent**：模型 + 工具 + 插件。它没有状态，一个 agent 可以服务多个会话。工具或插件重名时抛出 `PluginConflictError`，并一次列出全部冲突。
@@ -88,7 +93,9 @@ createSession(agent, { state: messages })
 ## 统计，不需要插件
 
 ```ts
-for await (const { timing, summary } of r.turns) { /* 每一步的耗时，以及到目前为止的累计 */ }
+for await (const { timing, summary } of r.turns) {
+  // 每一步的耗时，以及到目前为止的累计
+}
 const { turns, usage, modelMs, toolMs, tools } = await r.summary // 这次运行
 usageOf(chat.state) // 整段对话
 ```

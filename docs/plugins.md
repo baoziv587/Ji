@@ -13,7 +13,10 @@ export const myPlugin = definePlugin({
   system: prompt => `${prompt}\nBe concise.`,
   input: (messages, { state, idle }) => messages,
   context: (messages, state) => messages,
-  request: before(req => ({ ...req, options: { ...req.options, temperature: 0 } })),
+  request: before(req => ({
+    ...req,
+    options: { ...req.options, temperature: 0 },
+  })),
   tool: after(result => result),
   update: (state, turn, next) => next(state, turn),
   state: { init: 0, reduce: (n, turn) => n + 1 },

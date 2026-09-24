@@ -5,9 +5,14 @@
 ## The objects
 
 ```ts
-const agent = createAgent({ model, system, tools, plugins, ...streamOptions }) // stateless, reusable
-const chat = createSession(agent, { state, maxSteps }) // one conversation
-const r = chat.send('hi') // one run
+// stateless, reusable
+const agent = createAgent({ model, system, tools, plugins, ...streamOptions })
+
+// one conversation
+const chat = createSession(agent, { state, maxSteps })
+
+// one run
+const r = chat.send('hi')
 ```
 
 - **Agent**: model + tools + plugins. It has no state, so one agent can serve many sessions. Duplicate tool or plugin names throw `PluginConflictError`, which lists every conflict.
@@ -88,7 +93,9 @@ The plugin list can change between save and restore. A plugin with no saved stat
 ## Metrics without plugins
 
 ```ts
-for await (const { timing, summary } of r.turns) { /* per step + running totals */ }
+for await (const { timing, summary } of r.turns) {
+  // per step + running totals
+}
 const { turns, usage, modelMs, toolMs, tools } = await r.summary // this run
 usageOf(chat.state) // whole conversation
 ```

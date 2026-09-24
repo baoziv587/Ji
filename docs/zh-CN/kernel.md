@@ -61,7 +61,11 @@ transform(extend(a, x)) ≃ extend(transform(a), lift(x))
 ## Reducer（`/reduce`）
 
 ```ts
-interface Reducer<In, Acc, Out = Acc> { init: Acc, reduce: (acc: Acc, x: In) => Acc, result?: (acc: Acc) => Out }
+interface Reducer<In, Acc, Out = Acc> {
+  init: Acc
+  reduce: (acc: Acc, x: In) => Acc
+  result?: (acc: Acc) => Out
+}
 ```
 
 `combine({ a: r1, b: r2 })` 一次遍历同时计算多个 reducer；`scan` 逐个输出中间结果。`@ji/llm` 就是这样实现 `Run.summary` 和插件状态的。和 `update` 一样，`reduce` 必须同步且纯。

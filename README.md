@@ -11,14 +11,20 @@ Every agent step comes down to three functions: **decide**, **act** and **record
 ```ts
 import { createAgent, createSession } from '@ji/llm'
 
-const agent = createAgent({ model, system: 'Be concise.', tools: [readFile], plugins: [compaction({ model, maxTokens: 100_000 })] })
+const agent = createAgent({
+  model,
+  system: 'Be concise.',
+  tools: [readFile],
+  plugins: [compaction({ model, maxTokens: 100_000 })],
+})
 const chat = createSession(agent)
 
 const r = chat.send('Summarize the README')
 for await (const chunk of r.text) process.stdout.write(chunk)
 
 const { usage, tools } = await r.summary
-save(chat.state) // plain JSON: createSession(agent, { state }) picks up from here
+// plain JSON: createSession(agent, { state }) picks up from here
+save(chat.state)
 ```
 
 ## Why JI
@@ -35,16 +41,21 @@ Requires **Node ≥ 24** (runs `.ts` directly) and **pnpm**.
 
 ```bash
 pnpm install
-pnpm demo                                       # offline: replays a script via pi-ai's faux provider
-MODEL=anthropic/claude-sonnet-5 pnpm demo       # real model; API key read from env
+
+# offline: replays a script via pi-ai's faux provider
+pnpm demo
+
+# real model; API key read from env
+MODEL=anthropic/claude-sonnet-5 pnpm demo
 ```
 
 Every `provider/model` that pi-ai supports works. More runnable scenarios are in [apps/examples](apps/examples/README.md):
 
 ```bash
-pnpm --filter @ji/examples compaction   # context compaction
-pnpm --filter @ji/examples interject    # steer / follow-up / interrupt
-pnpm --filter @ji/examples hooks        # auto-continue, retrieval, fallback model, budget
+cd apps/examples
+pnpm compaction  # context compaction
+pnpm interject   # steer / follow-up / interrupt
+pnpm hooks       # auto-continue, retrieval, fallback model, budget
 ```
 
 ## Packages
