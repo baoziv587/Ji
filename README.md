@@ -4,7 +4,7 @@
 
 > **JI** (*jí*, 极) means *limit*, as in 极限: the core is kept to the smallest set of pieces, and an agent repeats one step until it reaches its result.
 
-A small, algebraic core for LLM agents, plus a ready-to-use agent built on [pi-ai](https://github.com/badlogic/pi-mono/tree/main/packages/ai).
+A small, algebraic core for LLM agents, plus a ready-to-use agent.
 
 Every agent step comes down to three functions: **decide**, **act** and **record**. Everything else, including compaction, retries, budgets, steering and metrics, is a middleware wrapped around one of them. Because recording is pure, a conversation's state is plain JSON that you can save, restore and replay.
 
@@ -42,14 +42,14 @@ Requires **Node ≥ 24** (runs `.ts` directly) and **pnpm**.
 ```bash
 pnpm install
 
-# offline: replays a script via pi-ai's faux provider
+# offline: replays a script via a faux provider
 pnpm demo
 
 # real model; API key read from env
 MODEL=anthropic/claude-sonnet-5 pnpm demo
 ```
 
-Every `provider/model` that pi-ai supports works. More runnable scenarios are in [apps/examples](apps/examples/README.md):
+Any supported `provider/model` works. More runnable scenarios are in [apps/examples](apps/examples/README.md):
 
 ```bash
 cd apps/examples

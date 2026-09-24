@@ -4,7 +4,7 @@
 
 > **JI** 即「极」，取「极限」之意：内核只保留最少的部件，agent 反复执行同一步，直到得出结果。
 
-一个小而代数化的 LLM agent 内核，以及基于 [pi-ai](https://github.com/badlogic/pi-mono/tree/main/packages/ai) 的开箱即用实现。
+一个小而代数化的 LLM agent 内核，以及开箱即用的实现。
 
 agent 的每一步都可以拆成三个函数：**决策**、**执行**、**记录**。其他功能都是套在这三个函数上的中间件，包括压缩、重试、预算、插话和统计。记录是纯函数，所以对话状态是普通的 JSON，可以保存、恢复、重放。
 
@@ -42,14 +42,14 @@ save(chat.state)
 ```bash
 pnpm install
 
-# 离线：用 pi-ai 的 faux provider 回放脚本
+# 离线：用 faux provider 回放脚本
 pnpm demo
 
 # 真实模型，API key 从环境变量读取
 MODEL=anthropic/claude-sonnet-5 pnpm demo
 ```
 
-pi-ai 支持的任何 `provider/model` 都可以用。更多可以直接运行的场景在 [apps/examples](apps/examples/README.md)：
+任何支持的 `provider/model` 都可以用。更多可以直接运行的场景在 [apps/examples](apps/examples/README.md)：
 
 ```bash
 cd apps/examples
