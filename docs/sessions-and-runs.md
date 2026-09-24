@@ -19,6 +19,19 @@ const r = chat.send('hi')
 - **Session**: holds `state` (last recorded state) and `pending` (undelivered messages). Its only method is `send`.
 - **Run**: runs from the first step until the agent is idle and no deliverable messages remain.
 
+## Thinking level
+
+`reasoning` is one of pi-ai's stream options; pass it straight to `createAgent`. Leave it unset for no thinking.
+
+```ts
+const agent = createAgent({ model, reasoning: 'high' }) // 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+```
+
+Before each model call, the level is checked against the model that request actually uses. A level the model doesn't support becomes the nearest supported one (preferring the higher one), and it is dropped for models that can't think. For example, DeepSeek supports only `high` and `xhigh`, so `'medium'` is sent as `'high'`. Use pi-ai's `getSupportedThinkingLevels(model)` to list the supported levels.
+
+- **Per request:** a `request: before(req => ({ ...req, options: { ...req.options, reasoning: 'xhigh' } }))` plugin. Its level is checked the same way.
+- **Mid-conversation:** agents have no state, so continue the same state with a new agent: `createSession(createAgent({ ...options, reasoning: 'xhigh' }), { state: chat.state })`.
+
 ## Reading a run
 
 All members share one execution, so you can read several at once.

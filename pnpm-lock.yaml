@@ -208,6 +208,9 @@ importers:
 
   apps/examples:
     dependencies:
+      '@clack/prompts':
+        specifier: ^1.8.1
+        version: 1.8.1
       '@gaoxiang.ai/llm':
         specifier: workspace:*
         version: link:../../packages/llm

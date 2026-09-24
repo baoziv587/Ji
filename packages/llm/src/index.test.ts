@@ -1,5 +1,5 @@
 // 用 pi-ai 的 faux provider 验证 RFC-0003 / RFC-0004：钩子、插件状态、Run、会话与插话
-import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, ToolResultMessage } from '@mariozechner/pi-ai'
+import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, SimpleStreamOptions, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { AgentTool, PluginSpec, Turn, TurnEvent } from './index.ts'
 import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
@@ -322,6 +322,48 @@ describe('钩子', () => {
 
     await createSession(createAgent({ model, tools: [echo], plugins: [spy] })).send('go').result
     expect(seen).toEqual(['input', 'model', 'model'])
+  })
+})
+
+describe('思考档位（reasoning）', () => {
+  /** 和 DeepSeek 一样只支持 high、xhigh 的模型；记下每次请求实际带的 reasoning */
+  function thinker(seen: unknown[], { reasoning = true, calls = 1 } = {}): Model<Api> {
+    const faux = registerFauxProvider({ models: [{ id: 'thinker', reasoning }] })
+    faux.setResponses(Array.from({ length: calls }, () => (_ctx: Context, options: SimpleStreamOptions | undefined) => {
+      seen.push(options?.reasoning)
+      return fauxAssistantMessage('ok')
+    }))
+    onTestFinished(() => faux.unregister())
+    return { ...faux.getModel(), thinkingLevelMap: { minimal: null, low: null, medium: null, high: 'high', xhigh: 'max' } }
+  }
+
+  it('支持的档位原样传入，不支持的取最近的可用档位，不设就不带', async () => {
+    const seen: unknown[] = []
+    const model = thinker(seen, { calls: 3 })
+
+    for (const reasoning of ['xhigh', 'medium', undefined] as const) {
+      await createSession(createAgent({ model, reasoning })).send('go').result
+    }
+    expect(seen).toEqual(['xhigh', 'high', undefined])
+  })
+
+  it('模型不能思考时去掉 reasoning', async () => {
+    const seen: unknown[] = []
+    const model = thinker(seen, { reasoning: false })
+
+    await createSession(createAgent({ model, reasoning: 'high' })).send('go').result
+    expect(seen).toEqual([undefined])
+  })
+
+  it('request 插件按请求改档位，同样按模型校验', async () => {
+    const seen: unknown[] = []
+    const think = definePlugin({
+      name: 'think',
+      request: before(req => ({ ...req, options: { ...req.options, reasoning: 'low' } })),
+    })
+
+    await createSession(createAgent({ model: thinker(seen), plugins: [think] })).send('go').result
+    expect(seen).toEqual(['high'])
   })
 })
 

@@ -3,12 +3,16 @@ import type { AnyPlugin, PluginList } from './plugin.ts'
 import type { AgentTool, Boundary, LLMAgent, ModelCall, ToolRunner } from './types.ts'
 import { performance } from 'node:perf_hooks'
 import { act, extend } from '@gaoxiang.ai/kernel'
-import { streamSimple } from '@mariozechner/pi-ai'
+import { clampThinkingLevel, streamSimple } from '@mariozechner/pi-ai'
 import { callsOf, isIdle } from './message.ts'
 import { assertNoConflicts, extensionOf, flattenPlugins } from './plugin.ts'
 import { toolError, toolRunner } from './tool.ts'
 import { applyTurn, isModelAction, stop, turnOf } from './turn.ts'
 
+/**
+ * 其余字段是 pi-ai 的流选项，每次模型调用都会带上（temperature、maxTokens……）。
+ * reasoning 是思考档位：不设就不思考；模型不支持的档位按这次请求的模型取最近的可用档位
+ */
 export interface AgentOptions extends Omit<SimpleStreamOptions, 'signal'> {
   model: Model<Api>
   system?: string
@@ -115,7 +119,7 @@ function callModel(signal: AbortSignal): ModelCall {
     const ctl = new AbortController()
     const requestSignal = AbortSignal.any([signal, ctl.signal])
     const context = { systemPrompt: systemPrompt === '' ? undefined : systemPrompt, messages, tools }
-    const events = streamSimple(model, context, { ...options, signal: requestSignal })
+    const events = streamSimple(model, context, { ...supportedReasoning(model, options), signal: requestSignal })
 
     let finished = false
     try {
@@ -134,6 +138,19 @@ function callModel(signal: AbortSignal): ModelCall {
     }
     return msg
   }
+}
+
+/**
+ * 把 reasoning 换成这次请求的模型支持的档位：不支持的档位取最近的可用档位（优先更高），
+ * 模型不能思考时去掉。放在最内层，所以 request 插件换了模型或改了档位也会经过它
+ */
+function supportedReasoning(model: Model<Api>, options: SimpleStreamOptions): SimpleStreamOptions {
+  if (options.reasoning === undefined) {
+    return options
+  }
+
+  const level = clampThinkingLevel(model, options.reasoning)
+  return { ...options, reasoning: level === 'off' ? undefined : level }
 }
 
 /** 并行执行；中间件或工具抛出的异常都转为 isError 结果交还模型（I8） */

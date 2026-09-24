@@ -9,9 +9,11 @@
     "metrics": "node src/metrics.ts",
     "interject": "node src/interject.ts",
     "hooks": "node src/hooks.ts",
+    "repl": "node src/repl.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clack/prompts": "^1.8.1",
     "@gaoxiang.ai/llm": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }

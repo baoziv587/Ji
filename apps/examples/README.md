@@ -8,6 +8,7 @@ pnpm --filter @gaoxiang.ai/examples truncate     # 剔除过大的工具结果
 pnpm --filter @gaoxiang.ai/examples metrics      # 记录耗时和费用
 pnpm --filter @gaoxiang.ai/examples interject    # 运行中插话：steer、follow-up、interrupt
 pnpm --filter @gaoxiang.ai/examples hooks        # 细粒度钩子：自动继续、检索、兜底模型、预算
+pnpm --filter @gaoxiang.ai/examples repl         # 极简 REPL：DeepSeek + clack，需要 DEEPSEEK_API_KEY
 ```
 
 默认使用 pi-ai 的 faux provider 离线回放脚本。设置 `MODEL=anthropic/claude-sonnet-5`（或 pi-ai 支持的其他 `provider/model`）即可换成真实模型，API key 从环境变量读取。
@@ -154,3 +155,18 @@ faux provider 的费用恒为 0，换成真实模型后才有费用。
 ### 细粒度钩子 · [`hooks.ts`](src/hooks.ts)
 
 `input` 自动继续（[`keep-going.ts`](src/plugins/keep-going.ts)）、`context` 加检索结果、`request` 换兜底模型和改 temperature、`policy` 预算（[`budget.ts`](src/plugins/budget.ts)）组合在一个 agent 里。
+
+### 极简 REPL · [`repl.ts`](src/repl.ts)
+
+```bash
+DEEPSEEK_API_KEY=sk-... pnpm --filter @gaoxiang.ai/examples repl
+DEEPSEEK_MODEL=deepseek-v4-pro ...   # 换模型，默认 deepseek-v4-flash
+DEEPSEEK_THINKING=high ...           # 打开思考，默认 off；可用档位 off / high / xhigh
+```
+
+用 [clack](https://bomb.sh/docs/clack/basics/getting-started/) 读输入。一个会话接一个 `send`，读 `Run` 本身（`for await (const e of r)`）：`text_delta` 边生成边写出，`toolcall_end` 显示工具名和参数，`act` 显示工具结果，等待模型或工具时显示状态行和已等待的秒数。
+
+- 回答中按 Ctrl+C 调用 `r.abort()`，只停止这一次回答；会话回到发送前的状态，那条消息填回输入框，可以改了再发。出错时也一样。
+- `/think <档位>` 在对话中切换思考档位：用新档位 `createAgent`，再用 `createSession(agent, { state: chat.state })` 接着聊。思考过程（`thinking_delta`）灰色显示。
+- 在输入框按 Ctrl+C 或输入 `/exit` 退出。
+- 状态行没有用 clack 的 `spinner`：它把 stdin 切到 raw 模式，Ctrl+C 会直接退出进程。

@@ -19,6 +19,19 @@ const r = chat.send('hi')
 - **Session**：持有 `state`（最后写入的状态）和 `pending`（尚未送达的消息）。唯一的方法是 `send`。
 - **Run**：从第一步开始，到 agent 空闲、并且没有可送达的消息为止。
 
+## 思考档位
+
+`reasoning` 是 pi-ai 的流选项之一，直接传给 `createAgent`。不设就不思考。
+
+```ts
+const agent = createAgent({ model, reasoning: 'high' }) // 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+```
+
+每次调用模型前，会按这次请求实际用的模型校验档位：模型不支持的档位取最近的可用档位（优先更高的一档），模型不能思考时去掉。例如 DeepSeek 只支持 `high` 和 `xhigh`，传 `'medium'` 发出去的是 `'high'`。可用档位用 pi-ai 的 `getSupportedThinkingLevels(model)` 查。
+
+- **按请求改**：写一个 `request: before(req => ({ ...req, options: { ...req.options, reasoning: 'xhigh' } }))` 插件，同样会经过校验。
+- **对话中途换档**：agent 不含状态，换一个 agent 接着同一个状态聊：`createSession(createAgent({ ...options, reasoning: 'xhigh' }), { state: chat.state })`。
+
 ## 读取一次运行
 
 所有成员共享同一次执行，可以同时读取多个。
