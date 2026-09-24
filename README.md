@@ -61,6 +61,32 @@ pnpm interject   # send messages while the agent runs
 pnpm hooks       # auto-continue, search, backup model, spending limit
 ```
 
+### Chat in your terminal
+
+[`repl.ts`](apps/examples/src/repl.ts) is a small chat REPL built on JI and DeepSeek, in about 300 lines. It streams replies, shows the model's thinking and each tool call with its result, and prints tokens, cache hits and cost after every reply.
+
+```bash
+DEEPSEEK_API_KEY=sk-... pnpm repl
+DEEPSEEK_API_KEY=sk-... DEEPSEEK_THINKING=high pnpm repl   # start with thinking on
+```
+
+```
+◆  You
+│  Is 391 prime? Check with calc.
+│
+◌  Thinking
+┊  391 = 17 × 23. Let me verify with calc.
+│
+▸  calc(expr: "391/17")
+✓  calc  23
+│
+│  No, 391 is not prime: 391 = 17 × 23.
+│
+│  1.8s · in 916 · out 246 · cached 512 (56%) · $0.0001
+```
+
+`/think high` changes the thinking level mid-chat, Ctrl+C stops the current reply, and `/exit` quits. How it's built is explained in the [apps/examples README](apps/examples/README.md#极简-repl--replts) (Chinese).
+
 ## Packages
 
 | Package | What it is | When you touch it |

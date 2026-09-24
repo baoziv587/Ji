@@ -61,6 +61,32 @@ pnpm interject   # 运行中插话
 pnpm hooks       # 自动继续、搜索、备用模型、花费上限
 ```
 
+### 在终端里聊一聊
+
+[`repl.ts`](apps/examples/src/repl.ts) 是用 JI 和 DeepSeek 写的聊天 REPL，大约 300 行。回答边生成边显示，能看到模型的思考过程、每次工具调用和结果，每条回答后显示 token、缓存命中和费用。
+
+```bash
+DEEPSEEK_API_KEY=sk-... pnpm repl
+DEEPSEEK_API_KEY=sk-... DEEPSEEK_THINKING=high pnpm repl   # 一开始就打开思考
+```
+
+```
+◆  You
+│  Is 391 prime? Check with calc.
+│
+◌  Thinking
+┊  391 = 17 × 23. Let me verify with calc.
+│
+▸  calc(expr: "391/17")
+✓  calc  23
+│
+│  No, 391 is not prime: 391 = 17 × 23.
+│
+│  1.8s · in 916 · out 246 · cached 512 (56%) · $0.0001
+```
+
+对话中用 `/think high` 切换思考档位，Ctrl+C 停止当前回答，`/exit` 退出。实现说明见 [apps/examples › 极简 REPL](apps/examples/README.md#极简-repl--replts)。
+
 ## 包
 
 | 包 | 是什么 | 什么时候用 |
