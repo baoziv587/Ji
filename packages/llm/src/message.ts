@@ -13,6 +13,10 @@ export const textOf = (m: AssistantMessage): string =>
 export const callsOf = (m: AssistantMessage): ToolCall[] =>
   m.content.filter((c): c is ToolCall => c.type === 'toolCall')
 
+export function isAssistant(m: Message): m is AssistantMessage {
+  return m.role === 'assistant'
+}
+
 export function isIdle(state: AgentState): boolean {
   const last = state.messages.at(-1)
   if (last === undefined) {
@@ -23,5 +27,5 @@ export function isIdle(state: AgentState): boolean {
 }
 
 export function lastAssistant(state: AgentState): AssistantMessage | undefined {
-  return state.messages.findLast((m): m is AssistantMessage => m.role === 'assistant')
+  return state.messages.findLast(isAssistant)
 }
