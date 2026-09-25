@@ -1,9 +1,9 @@
-// 极简 REPL：DEEPSEEK_API_KEY=sk-... pnpm --filter @gaoxiang.ai/examples repl
+// Minimal REPL: DEEPSEEK_API_KEY=sk-... pnpm --filter @gaoxiang.ai/examples repl
 //
-//   回车发送；回答边生成边显示，工具调用和结果各占一行
-//   回答中按 Ctrl+C 只停止这一次回答；在输入框按 Ctrl+C 或输入 /exit 退出
-//   DEEPSEEK_MODEL=deepseek-v4-pro 换模型（默认 deepseek-v4-flash）
-//   DEEPSEEK_THINKING=high 打开思考（默认 off）；对话中用 /think <档位> 切换，思考过程灰色显示
+//   Enter sends; replies stream in, with one line per tool call and one per result
+//   Ctrl+C during a reply stops only that reply; Ctrl+C at the prompt or /exit quits
+//   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
+//   DEEPSEEK_THINKING=high turns thinking on (default off); /think <level> switches it mid-chat, thinking shows in gray
 import type { Agent, Run, UsageTotals } from '@gaoxiang.ai/llm'
 import type { Api, Model, ModelThinkingLevel, ToolCall, ToolResultMessage } from '@mariozechner/pi-ai'
 import process from 'node:process'
@@ -20,7 +20,7 @@ const calc = tool({
     if (!/^[\d\s+\-*/().]+$/.test(expr)) {
       throw new Error(`bad expr: ${expr}`)
     }
-    // eslint-disable-next-line no-new-func -- expr 已被上面的白名单正则限制为纯算术
+    // eslint-disable-next-line no-new-func -- the allowlist regex above limits expr to plain arithmetic
     return String(new Function(`return (${expr})`)())
   },
 })
@@ -32,18 +32,22 @@ const now = tool({
   run: () => new Date().toString(),
 })
 
-/** 用户按 Ctrl+C 停止回答时，run 以它 reject */
+/** The run rejects with this when the user presses Ctrl+C to stop a reply. */
 const STOPPED = new Error('stopped by user')
 
-/* ── 显示一次运行 ─────────────────────────────────────── */
-
 /**
- * 等待时显示状态行；思考和文字边生成边写出；工具调用在参数完整时显示，结果在执行完时显示。
- * 每种内容的形状和颜色都不同，不只靠颜色区分：
- *   ◌ Thinking / ┊ 灰色斜体    思考
- *   │ 正常颜色                 回答
- *   ▸ 青色 name(args)         工具输入
- *   ✓ 绿色 / ✗ 红色            工具输出
+ * Maps run events to terminal lines. ASCII stand-ins for the real glyphs; every kind differs in shape as well as
+ * color, so the output still reads without color.
+ *
+ *   |                          <- Gutter opens a block with a bare rail
+ *   o  Thinking                <- title, thinking blocks only
+ *   :  The user wants 17*23    <- thinking_delta: gray rail, dim italic text
+ *   |
+ *   |  Let me compute that.    <- text_delta: plain rail, normal text
+ *   |                          <- blank line before the first call of a turn only
+ *   >  calc(expr: "17*23")     <- toolcall_end: shown once the arguments are complete
+ *   v  calc  391               <- act: one line per result, green (or red x on error)
+ *   @  Running calc 1s         <- Status: one line redrawn in place, erased before anything else is written
  */
 async function render(r: Run): Promise<void> {
   const started = performance.now()
@@ -66,7 +70,7 @@ async function render(r: Run): Promise<void> {
         const call = e.delta.toolCall
         status.hide()
         out.end()
-        // 同一回合的多个调用连在一起，不空行
+        // Calls from the same turn stay together without blank lines
         log.message(describeCall(call), {
           symbol: styleText('cyan', '▸'),
           spacing: afterCall ? 0 : 1,
@@ -95,7 +99,7 @@ async function render(r: Run): Promise<void> {
   log.message(dim(`${seconds}s · ${describeUsage(usage)}`))
 }
 
-/** pi-ai 的 input 不含缓存命中的部分，所以发给模型的提示 token = input + cacheRead + cacheWrite */
+/** pi-ai's input excludes cache hits, so the prompt tokens sent to the model = input + cacheRead + cacheWrite. */
 function describeUsage(usage: UsageTotals): string {
   const prompt = usage.input + usage.cacheRead + usage.cacheWrite
   const rate = prompt === 0 ? 0 : Math.round((usage.cacheRead / prompt) * 100)
@@ -103,7 +107,7 @@ function describeUsage(usage: UsageTotals): string {
   return `in ${n(prompt)} · out ${n(usage.output)} · cached ${n(usage.cacheRead)} (${rate}%) · $${usage.cost.toFixed(4)}`
 }
 
-/** 写成函数调用：calc(expr: "17*23") */
+/** Formats as a call: calc(expr: "17*23") */
 function describeCall(call: ToolCall): string {
   const args = Object.entries(call.arguments)
     .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
@@ -111,13 +115,13 @@ function describeCall(call: ToolCall): string {
   return `${styleText('bold', call.name)}${dim('(')}${clip(args)}${dim(')')}`
 }
 
-/** 工具名灰色，结果用正常颜色（出错时红色），和灰色的思考、统计区分开 */
+/** Dim tool name and normal-colored result (red on error), to stand apart from the dim thinking and stats. */
 function describeResult(result: ToolResultMessage): string {
   const body = clip(result.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join(''))
   return `${dim(result.toolName)}  ${result.isError ? styleText('red', body) : body}`
 }
 
-/** 压成一行，并按终端宽度截断，避免折行打断左侧竖线 */
+/** Collapses to one line clipped to the terminal width, so wrapping doesn't break the left rail. */
 function clip(s: string): string {
   const max = Math.max(40, (process.stdout.columns || 80) - 16)
   const line = s.replaceAll(/\s+/g, ' ').trim()
@@ -126,7 +130,6 @@ function clip(s: string): string {
 
 type BlockKind = 'thinking' | 'text'
 
-/** 每种文字块的样式：标题行（可选）、左侧竖线、文字 */
 const BLOCKS: Record<BlockKind, { title?: string; rail: string; paint: (s: string) => string }> = {
   thinking: {
     title: `${styleText('gray', '◌')}  ${styleText(['dim', 'italic'], 'Thinking')}`,
@@ -136,7 +139,11 @@ const BLOCKS: Record<BlockKind, { title?: string; rail: string; paint: (s: strin
   text: { rail: bar(), paint: s => s },
 }
 
-/** 把流式文字写在 clack 的竖线右侧，和上下的提示框对齐。思考和回答各成一块 */
+/**
+ * Writes streamed text to the right of clack's rail, lined up with the prompts above and below. Thinking and
+ * answer text each get their own block. The rail is written lazily, when a line gets its first text or turns out
+ * to be blank, so a chunk ending in '\n' leaves no dangling rail and end() knows whether a line is still open.
+ */
 class Gutter {
   private open: BlockKind | undefined
   private atLineStart = true
@@ -151,7 +158,7 @@ class Gutter {
 
     chunk.split('\n').forEach((part, i) => {
       if (i > 0) {
-        // 空行也画竖线，段落之间不断开
+        // Blank lines get a rail too, so paragraphs stay connected
         process.stdout.write(this.atLineStart ? `${rail}\n` : '\n')
         this.atLineStart = true
       }
@@ -166,7 +173,7 @@ class Gutter {
     })
   }
 
-  /** 结束当前文字块，让下一个输出从新的一行开始 */
+  /** Closes the current block so the next output starts on a fresh line. */
   end(): void {
     if (this.open && !this.atLineStart) {
       process.stdout.write('\n')
@@ -177,8 +184,8 @@ class Gutter {
 }
 
 /**
- * 单行状态：图标 + 说明 + 已等待的秒数。
- * 不用 clack 的 spinner：它把 stdin 切到 raw 模式，Ctrl+C 会直接退出进程，而不是停止这次回答。
+ * One status line: icon, label, and seconds waited.
+ * Not clack's spinner: it puts stdin in raw mode, so Ctrl+C would exit the process instead of stopping the reply.
  */
 class Status {
   private static readonly frames = ['◒', '◐', '◓', '◑']
@@ -194,7 +201,7 @@ class Status {
     }
 
     this.since = performance.now()
-    process.stdout.write('\x1B[?25l') // 隐藏光标
+    process.stdout.write('\x1B[?25l') // hide the cursor
     this.draw()
     this.timer = setInterval(() => this.draw(), 80)
   }
@@ -206,7 +213,7 @@ class Status {
 
     clearInterval(this.timer)
     this.timer = undefined
-    process.stdout.write('\r\x1B[2K\x1B[?25h') // 清掉这一行，恢复光标
+    process.stdout.write('\r\x1B[2K\x1B[?25h') // clear the line, show the cursor
   }
 
   private draw(): void {
@@ -237,12 +244,12 @@ function pickModel(id: string): Model<Api> {
   return found as Model<Api>
 }
 
-/** 读用户给的档位；不在这个模型的可用档位里就返回 undefined */
+/** undefined when this model doesn't support the given level. */
 function parseThinking(model: Model<Api>, value: string): ModelThinkingLevel | undefined {
   return getSupportedThinkingLevels(model).find(level => level === value)
 }
 
-/** agent 不含状态：换档位就换一个 agent，会话从同一个状态继续 */
+/** Agents hold no state: a new level means a new agent, and the session continues from the same state. */
 function agentFor(model: Model<Api>, thinking: ModelThinkingLevel): Agent {
   return createAgent({
     model,
@@ -252,7 +259,7 @@ function agentFor(model: Model<Api>, thinking: ModelThinkingLevel): Agent {
   })
 }
 
-/* ── 主循环（放在最后：上面的 class 声明要先求值） ── */
+// The main loop comes last because the class declarations above must be evaluated before render() runs.
 
 if (!process.env.DEEPSEEK_API_KEY) {
   cancel('DEEPSEEK_API_KEY is not set. Run `export DEEPSEEK_API_KEY=sk-...` and try again.')
@@ -270,7 +277,7 @@ if (!thinking) {
 let agent = agentFor(model, thinking)
 let chat = createSession(agent)
 
-// 输入框里的 Ctrl+C 由 clack 处理（返回 cancel）；这里只在回答进行中收到
+// clack handles Ctrl+C at the prompt (returning a cancel), so SIGINT only arrives here mid-reply
 let current: Run | undefined
 process.on('SIGINT', () => (current ? current.abort(STOPPED) : process.exit(130)))
 
@@ -282,7 +289,7 @@ log.message(
   { spacing: 0 },
 )
 
-/** 停止或出错后，把没完成的那条消息填回输入框，改一改再发 */
+/** After a stop or an error, the unanswered message goes back into the input to edit and resend. */
 let retry = ''
 
 for (;;) {
@@ -317,7 +324,7 @@ for (;;) {
   try {
     await render(current)
   } catch (error) {
-    // 回到发送前：这条消息不留在历史里，下一条不会接着回答它
+    // Roll back to before the send, so the next message doesn't pick up this unanswered one
     chat = createSession(agent, { state: before })
     retry = message
     if (error === STOPPED) {

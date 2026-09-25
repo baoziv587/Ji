@@ -1,6 +1,7 @@
-// 记录耗时和费用：pnpm --filter @gaoxiang.ai/examples metrics
+// Timing and cost: pnpm --filter @gaoxiang.ai/examples metrics
 //
-// 不需要插件：Run 的每条记录带这一步的耗时和到目前为止的统计，r.summary 是整次运行的统计。
+// No plugin needed: every record of a Run carries that step's timing and the totals so far,
+// and r.summary holds the totals for the whole run.
 import process from 'node:process'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createAgent, createSession, tool, usageOf } from '@gaoxiang.ai/llm'
@@ -20,19 +21,19 @@ const search = tool({
 const model = pickModel([
   fauxAssistantMessage(
     [
-      fauxText('查两个关键词。'),
+      fauxText('Searching both terms.'),
       fauxToolCall('search', { query: 'pi-ai' }),
       fauxToolCall('search', { query: 'agent kernel' }),
     ],
     { stopReason: 'toolUse' },
   ),
-  fauxAssistantMessage('两个关键词各有 3 条结果。'),
+  fauxAssistantMessage('Each term has 3 results.'),
 ])
 
 const chat = createSession(createAgent({ model, tools: [search] }))
-const r = chat.send('帮我搜一下 pi-ai 和 agent kernel')
+const r = chat.send('Search for pi-ai and agent kernel')
 
-// 每一步：这一步的耗时，以及到目前为止的累计（可以直接显示在状态栏）
+// The running totals on each record are what a status bar would show
 for await (const { t, turn, timing, summary } of r.turns) {
   if (turn.kind !== 'model') {
     continue
@@ -47,12 +48,11 @@ for await (const { t, turn, timing, summary } of r.turns) {
   )
 }
 
-// 整次运行
 const { turns, usage, modelMs, toolMs, tools } = await r.summary
 console.log(`\ntotal: ${turns} model turns, ${usage.input} in / ${usage.output} out tokens, $${usage.cost.toFixed(4)}`)
 console.log(`model ${ms(modelMs)}, tools ${ms(toolMs)}:`, tools)
 
-// 整段对话（跨多次运行）
+// usageOf(state) covers the whole conversation, across runs
 console.log('session usage:', usageOf(chat.state))
 
 function ms(value: number | undefined): string {

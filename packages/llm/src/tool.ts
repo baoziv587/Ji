@@ -2,20 +2,20 @@ import type { ToolCall, ToolResultMessage, TSchema } from '@mariozechner/pi-ai'
 import type { AgentTool, ToolRunner } from './types.ts'
 import { validateToolCall } from '@mariozechner/pi-ai'
 
-/** 只为让 run 的参数从 schema 推断出类型 */
+/** Identity; exists so `run`'s arguments are inferred from the schema. */
 export const tool = <T extends TSchema>(t: AgentTool<T>): AgentTool<T> => t
 
 export function toolResult(call: ToolCall, text: string): ToolResultMessage {
   return resultOf(call, text, false)
 }
 
-/** 拦截、拒绝或失败时返回给模型的结果；不要抛错（I8） */
+/** Return this to intercept, deny or report failure to the model instead of throwing (I8). */
 export function toolError(call: ToolCall, error: unknown): ToolResultMessage {
   const text = error instanceof Error ? error.message : String(error)
   return resultOf(call, text, true)
 }
 
-/** 基础 runner：按 schema 校验参数并执行。异常原样抛出，外层中间件（重试、超时）能看到 */
+/** Rethrows instead of converting to toolError so outer tool middleware (retry, timeout) can see the failure. */
 export function toolRunner(tools: AgentTool[]): ToolRunner {
   const byName = new Map(tools.map(t => [t.name, t]))
 

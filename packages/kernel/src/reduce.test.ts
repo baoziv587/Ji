@@ -1,4 +1,4 @@
-// RFC-0004 附录 B.2 的定律 R1–R4
+// Laws R1–R4 from RFC-0004 appendix B.2
 import type { Reducer } from './reduce.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'

@@ -5,31 +5,27 @@ import type { AgentState, Boundary, PendingMessage, When } from './types.ts'
 import { user } from './message.ts'
 import { AgentRun } from './run.ts'
 
-/** 一段对话：保存状态，接收消息 */
 export interface Session {
   /**
-   * 发送一条消息，返回处理它的运行。字符串会被当作用户消息。
-   * agent 正在工作时消息并入当前运行，返回的就是当前的 Run；agent 空闲时开始一次新的运行。
+   * Returns the Run that will handle the message; a string becomes a user message.
+   * While a Run is in progress the message joins it and that Run is returned; otherwise a new Run starts.
    */
   send: (message: string | Message, options?: { when?: When }) => Run
-  /** 最后一次写入的状态，不含进行中的部分输出 */
+  /** Last committed state; excludes partial output of the step in progress. */
   readonly state: AgentState
-  /** 尚未送达的消息 */
   readonly pending: readonly PendingMessage[]
 }
 
 export interface SessionOptions {
-  /** 从保存的状态或消息列表继续 */
+  /** Resume from a saved state or message list. */
   state?: AgentState | Message[]
-  /** 一次运行最多多少步。插入消息、结束各占一步。默认 64 */
+  /** Step limit per Run; inserting messages and finishing each take a step. Default 64. */
   maxSteps?: number
 }
 
 export function createSession(agent: Agent, options: SessionOptions = {}): Session {
   return new AgentSession(agent, options)
 }
-
-/* ── 内部 ─────────────────────────────────────────────── */
 
 class AgentSession implements Session, RunHost {
   readonly agent: Agent
@@ -64,8 +60,20 @@ class AgentSession implements Session, RunHost {
   }
 
   /**
-   * 送达规则（RFC-0004 §7.2）：按发送顺序逐条检查，条件成立就送达；
-   * 每送达一条，agent 就不再空闲，所以多条 follow-up 会逐条处理
+   * Message queue (RFC-0004 §7.2):
+   *
+   *   send(msg, { when }) -> queue.push -> Run in progress?  yes: join it ('now' also interrupts it)
+   *                                                          no:  start a new Run
+   *
+   *   offer(boundary), called by the Run at every step boundary; scans the queue in send order:
+   *     'idle'          -> delivered if b.idle
+   *     'step' | 'now'  -> always delivered
+   *     fn              -> delivered if fn(b)
+   *     each delivery appends to b.state and sets b.idle = false, so at most one 'idle' message goes per
+   *     boundary and queued follow-ups run one at a time (S1)
+   *
+   *   offer does not dequeue: the Run calls remove() once the step they were offered to completes,
+   *   so messages offered to an interrupted or aborted step stay queued.
    */
   offer(boundary: Boundary): PendingMessage[] {
     const delivered: PendingMessage[] = []

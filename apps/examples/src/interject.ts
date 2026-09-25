@@ -1,10 +1,10 @@
-// 运行中插话：pnpm --filter @gaoxiang.ai/examples interject
+// Interjecting mid-run: pnpm --filter @gaoxiang.ai/examples interject
 //
-//   chat.send(text, { when: 'step' })   steer：下一个步边界插入（等当前工具执行完）
-//   chat.send(text)                     follow-up：等 agent 空闲时插入
-//   chat.send(text, { when: 'now' })    interrupt：取消当前这一步，马上插入
+//   chat.send(text, { when: 'step' })   steer: inserted at the next step boundary (after the running tool finishes)
+//   chat.send(text)                     follow-up: inserted once the agent is idle
+//   chat.send(text, { when: 'now' })    interrupt: cancels the current step and inserts right away
 //
-// agent 工作时，这些消息都并入当前的运行，返回的是同一个 Run。
+// While the agent is working, all of these join the current run and return the same Run.
 import type { Context } from '@mariozechner/pi-ai'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createAgent, createSession, tool } from '@gaoxiang.ai/llm'
@@ -21,39 +21,39 @@ const runTests = tool({
   },
 })
 
-/** faux 模型：回答最后一条用户消息 */
 function reply(ctx: Context): ReturnType<typeof fauxAssistantMessage> {
   const last = ctx.messages.findLast(m => m.role === 'user')
-  return fauxAssistantMessage(`好的：${last?.content}。`)
+  return fauxAssistantMessage(`OK: ${last?.content}.`)
 }
 
 const model = pickModel(
   [
-    fauxAssistantMessage([fauxText('先跑一遍测试。'), fauxToolCall('run_tests', { runner: 'jest' })], {
+    fauxAssistantMessage([fauxText('Running the tests first.'), fauxToolCall('run_tests', { runner: 'jest' })], {
       stopReason: 'toolUse',
     }),
-    reply, // 看到 steer「改用 vitest」
-    fauxAssistantMessage(`## Changelog\n${Array.from({ length: 40 }, (_, i) => `- 第 ${i + 1} 条修改`).join('\n')}`), // 处理 follow-up「然后更新 changelog」，写到一半被 interrupt
-    reply, // 看到 interrupt「停，先列大纲」
+    reply, // sees the steer "Use vitest instead"
+    // handles the follow-up "Then update the changelog"; interrupted halfway through
+    fauxAssistantMessage(`## Changelog\n${Array.from({ length: 40 }, (_, i) => `- Change ${i + 1}`).join('\n')}`),
+    reply, // sees the interrupt "Stop, outline it first"
   ],
   60,
 )
 
 const chat = createSession(createAgent({ model, tools: [runTests] }))
-const r = chat.send('修复失败的测试')
+const r = chat.send('Fix the failing tests')
 
-// 工具执行期间：steer 等工具执行完就插入；follow-up 等 agent 空闲才插入
+// While the tool runs: the steer lands as soon as the tool finishes; the follow-up waits until the agent is idle
 setTimeout(() => {
-  chat.send('改用 vitest', { when: 'step' })
-  chat.send('然后更新 changelog')
+  chat.send('Use vitest instead', { when: 'step' })
+  chat.send('Then update the changelog')
 }, 100)
 
-// 模型在写 changelog 时：interrupt 取消这一步，被取消的输出不写入状态
+// While the model writes the changelog: interrupt cancels the step, and the cancelled output never reaches the state
 const interrupt = setInterval(() => {
   const last = chat.state.messages.at(-1)
-  if (last?.role === 'user' && last.content === '然后更新 changelog') {
+  if (last?.role === 'user' && last.content === 'Then update the changelog') {
     clearInterval(interrupt)
-    setTimeout(() => chat.send('停，先列大纲', { when: 'now' }), 200)
+    setTimeout(() => chat.send('Stop, outline it first', { when: 'now' }), 200)
   }
 }, 20)
 

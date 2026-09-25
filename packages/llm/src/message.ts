@@ -13,7 +13,6 @@ export const textOf = (m: AssistantMessage): string =>
 export const callsOf = (m: AssistantMessage): ToolCall[] =>
   m.content.filter((c): c is ToolCall => c.type === 'toolCall')
 
-/** agent 空闲：历史为空，或最后一条是没有工具调用的助手消息 */
 export function isIdle(state: AgentState): boolean {
   const last = state.messages.at(-1)
   if (last === undefined) {

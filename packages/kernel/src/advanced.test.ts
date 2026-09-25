@@ -17,7 +17,7 @@ const base: Agent<S, number, number, string, string> = {
   update: (s, _a, o) => [...s, o],
 }
 
-/** 只含 env / update 的中间件，liftWiden 能提升 */
+/** env / update only, so liftWiden can lift them */
 const envAndUpdate: EnvUpdateExtension<S, number, number>[] = [
   { env: (a, next) => next(a * 2) },
   { env: async (a, next) => (await next(a)) + 1 },
@@ -56,7 +56,7 @@ describe('widen: adds action kinds', () => {
   const isCompact = (x: number | Compact): x is Compact => typeof x === 'object'
   const handlers = { env: async () => -1, update: (s: S): S => [s.length] }
 
-  // 外层在新类型上发出新动作，确保新分支被走到
+  // The outer layer emits a new action on the widened type so the new branch is exercised
   const trigger: Extension<S, number | Compact, number, string, string> = {
     policy: (s, next) =>
       s.length === 2 && !s.includes(-1)
@@ -79,7 +79,7 @@ describe('widen: adds action kinds', () => {
 
   it('liftWiden rejects policy middleware at the type level', () => {
     const policyExt: Ext = { policy: (s, next) => next(s) }
-    // @ts-expect-error policy 中间件的输出含动作类型，没有通用提升
+    // @ts-expect-error policy middleware outputs the action type, so there is no generic lift
     expect(() => liftWiden(policyExt, isCompact)).not.toThrow()
   })
 })
@@ -91,7 +91,7 @@ describe('withState: extends state', () => {
   }
   const lens: Lens<T, S> = { get: t => t.messages, set: (t, messages) => ({ ...t, messages }) }
 
-  // 外层读写 T 的其余部分，确保 lens 之外的状态被正确保留
+  // The outer layer reads and writes the rest of T to check that state outside the lens is preserved
   const counter: Extension<T, number, number, string, string> = {
     update: (t, a, o, next) => {
       const t1 = next(t, a, o)

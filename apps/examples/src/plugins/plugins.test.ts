@@ -51,7 +51,8 @@ describe('compaction', () => {
 
   it('over the limit, replaces history with a summary plus recent messages, then continues', async () => {
     const big = 'x'.repeat(2_000)
-    // 第一轮后只有 3 条消息，切点为 1，太少不压缩；第二轮后才压缩
+    // After the first tool round there are only 3 messages and the cut is 1, too few to compact;
+    // compaction only kicks in after the second round
     const model = fauxModel([
       callEcho(big),
       callEcho('b'),

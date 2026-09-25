@@ -2,15 +2,15 @@ import type { Plugin } from '@gaoxiang.ai/llm'
 import { after, definePlugin } from '@gaoxiang.ai/llm'
 
 export interface TruncateOptions {
-  /** 每段文本最多保留多少字符 */
+  /** Maximum characters kept per text block. */
   maxChars?: number
 }
 
 /**
- * 剔除体积过大的工具结果：超过 maxChars 的文本保留开头和结尾，中间换成一行说明。
+ * Trims oversized tool results: text over maxChars keeps its head and tail, with a one-line note in between.
  *
- * 只改工具的输出，所以用 after。原始长度记在 result.details.truncated 里：
- * details 只保存在历史中，不会发给模型，可以给 UI 或日志用。
+ * Only the tool's output changes, so `after` is enough. The original length goes in result.details.truncated:
+ * details stay in the history and are never sent to the model, so UIs and logs can use them.
  */
 export function truncateToolResults({ maxChars = 8_000 }: TruncateOptions = {}): Plugin {
   return definePlugin({
@@ -31,7 +31,7 @@ export function truncateToolResults({ maxChars = 8_000 }: TruncateOptions = {}):
   })
 }
 
-/** 保留开头约 70% 和结尾约 20%：开头通常有结构信息，结尾通常有汇总或错误 */
+/** Keeps ~70% from the head and ~20% from the tail: heads usually carry structure, tails a summary or the error. */
 export function truncate(text: string, maxChars: number): string {
   if (text.length <= maxChars) {
     return text

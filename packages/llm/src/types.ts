@@ -13,17 +13,15 @@ import type {
   TSchema,
 } from '@mariozechner/pi-ai'
 
-/** agent 状态：消息历史 + 各插件的状态（以插件名为键） */
+/** `plugins` is keyed by plugin name. */
 export interface AgentState {
   messages: Message[]
   plugins: Readonly<Record<string, unknown>>
 }
 
 /**
- * 每一步一条记录。update、插件的 state.reduce、Run.turns 看到的是同一个序列（I13）。
- * - model：模型回合及其工具结果；最终回答的 results 为 []
- * - input：在步边界插入的外部消息
- * - rewrite：rewriteHistory 替换了整个历史
+ * One record per step. update, plugin state.reduce and Run.turns all see the same sequence (I13).
+ * The final answer is a 'model' turn with `results: []`.
  */
 export type Turn =
   | { kind: 'model'; message: AssistantMessage; results: ToolResultMessage[] }
@@ -33,9 +31,9 @@ export type Turn =
 export interface InputAction {
   kind: 'input'
   messages: Message[]
-  /** 插入时 agent 是否空闲 */
+  /** Whether the agent was idle when the messages were inserted. */
   idle: boolean
-  /** 这个步边界是否由中断产生 */
+  /** Whether this step boundary was produced by an interrupt. */
   interrupted: boolean
 }
 
@@ -44,32 +42,30 @@ export interface RewriteAction {
   messages: Message[]
 }
 
-/** 内核的动作：模型回合，或者不需要执行工具的历史编辑 */
 export type AgentAction = AssistantMessage | InputAction | RewriteAction
 
-/** 步边界：两步之间，模型没有在输出，工具也没有在执行 */
+/** Between two steps: the model is not streaming and no tool is running. */
 export interface Boundary {
   state: AgentState
-  /** agent 空闲：历史为空，或最后一条是没有工具调用的助手消息 */
+  /** History is empty, or its last message is an assistant message without tool calls. */
   idle: boolean
 }
 
-/** 一次模型调用的全部输入。request 钩子可以改其中任何字段 */
+/** Everything a model call needs; a request hook may change any field except `state`. */
 export interface ModelRequest {
   model: Model<Api>
   systemPrompt: string
-  /** context 钩子的结果 */
+  /** Output of the context hooks, not the stored history. */
   messages: Message[]
-  /** 这一次请求可用的工具 */
   tools: Tool[]
   options: SimpleStreamOptions
-  /** 只读 */
+  /** Read-only. */
   state: AgentState
 }
 
 export type ModelCall = (req: ModelRequest) => Stream<AssistantMessageEvent, AssistantMessage>
 
-/** 内核层的 LLM agent。每次运行由 createAgent 的结果实例化一次 */
+/** Instantiated once per Run from the result of createAgent. */
 export type LLMAgent = KernelAgent<
   AgentState,
   AgentAction,
@@ -79,8 +75,9 @@ export type LLMAgent = KernelAgent<
 >
 export type AgentEvent = Event<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
 
-/** pi-ai 的 Tool（TypeBox schema）+ run。run 用方法签名是有意的：参数双变，AgentTool<具体 schema> 才能放进 AgentTool[] */
+/** A pi-ai Tool (TypeBox schema) plus `run`. */
 export type AgentTool<T extends TSchema = TSchema> = Tool<T> & {
+  /** Method syntax on purpose: its parameters are bivariant, so AgentTool<SpecificSchema> fits in AgentTool[]. */
   // eslint-disable-next-line ts/method-signature-style
   run(args: Static<T>, signal: AbortSignal): string | Promise<string>
 }
@@ -90,10 +87,10 @@ export interface ToolContext {
   signal: AbortSignal
 }
 
-/** 执行一次工具调用。抛出的异常由 agent 转成 isError 结果交还模型（I8） */
+/** Runs one tool call. The agent turns anything thrown into an isError result for the model (I8). */
 export type ToolRunner = (ctx: ToolContext) => Promise<ToolResultMessage>
 
-/** 累计用量。cost 为美元，来自 provider 的计价 */
+/** `cost` is in USD, as priced by the provider. */
 export interface UsageTotals {
   input: number
   output: number
@@ -103,45 +100,47 @@ export interface UsageTotals {
 }
 
 export interface TurnTiming {
-  /** 这一步总耗时 */
   ms: number
-  /** 模型回合：从这一步开始到模型输出结束 */
+  /** Model turns only: from the start of the step to the end of model output. */
   modelMs?: number
-  /** 模型回合：到第一段内容（文字、思考或工具参数） */
+  /** Model turns only: to the first content delta (text, thinking or tool arguments). */
   firstTokenMs?: number
-  /** 模型回合：每个工具调用的耗时，以 toolCall.id 为键 */
+  /** Model turns only: keyed by toolCall.id. */
   toolMs?: Record<string, number>
 }
 
 export interface RunSummary {
-  /** 模型回合数 */
+  /** Number of model turns. */
   turns: number
   usage: UsageTotals
   modelMs: number
-  /** 各次工具调用耗时之和；并行调用会重叠，所以可能大于实际经过的时间 */
+  /** Sum over tool calls; parallel calls overlap, so this can exceed wall-clock time. */
   toolMs: number
-  /** 以工具名为键 */
+  /** Keyed by tool name. */
   tools: Record<string, { calls: number; errors: number; ms: number }>
-  /** 插入的外部消息数 */
+  /** Number of inserted external messages. */
   inputs: number
-  /** 历史被替换的次数 */
+  /** Number of times the history was replaced. */
   rewrites: number
 }
 
 export interface TurnEvent {
   t: number
   turn: Turn
-  /** 这一步之后的状态 */
+  /** State after this step. */
   state: AgentState
   timing: TurnTiming
-  /** 这次运行到这一步为止的统计 */
+  /** Run stats up to and including this step. */
   summary: RunSummary
 }
 
-/** 外部消息的送达条件：'idle' 等 agent 空闲，'step' 任意步边界，'now' 取消当前这一步后立即插入 */
+/**
+ * When a queued message may be delivered: 'idle' waits until the agent is idle, 'step' takes any step boundary,
+ * 'now' cancels the current step and inserts at once.
+ */
 export type When = 'idle' | 'step' | 'now' | ((boundary: Boundary) => boolean)
 
-/** 会话中尚未送达的消息 */
+/** A message queued in the session, not yet delivered. */
 export interface PendingMessage {
   message: Message
   when: When

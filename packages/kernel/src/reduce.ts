@@ -1,9 +1,9 @@
-// @gaoxiang.ai/kernel/reduce：对序列的归约（RFC-0004 附录 B.2）
+// @gaoxiang.ai/kernel/reduce: reductions over sequences (RFC-0004 appendix B.2)
 //
-//   只供库的实现和写底层扩展时使用。LLM 层用它实现 Run.summary 和插件状态，
-//   使用者看到的是现成的字段，不直接接触这些函数。
+//   For library internals and low-level extensions only. The LLM layer uses it to implement Run.summary and
+//   plugin state; end users see the ready-made fields and never touch these functions directly.
 
-/** reduce 必须同步、纯；result 默认原样返回累加值 */
+/** reduce must be synchronous and pure; without result, the accumulator is the output. */
 export interface Reducer<In, Acc, Out = Acc> {
   init: Acc
   reduce: (acc: Acc, input: In) => Acc
@@ -12,18 +12,16 @@ export interface Reducer<In, Acc, Out = Acc> {
 
 type AnyReducer<In> = Reducer<In, any, any>
 type AccOf<R> = R extends { init: infer Acc } ? Acc : never
-/** 没有 result 时结果就是累加值 */
 type OutOf<R> = R extends { result: (acc: any) => infer Out } ? Out : AccOf<R>
 type AccsOf<Rs> = { [K in keyof Rs]: AccOf<Rs[K]> }
 type OutsOf<Rs> = { [K in keyof Rs]: OutOf<Rs[K]> }
 
-/** 一次遍历同时计算多个 reducer（R1） */
+/** Runs several reducers in a single pass (R1). */
 export function combine<In, Rs extends Record<string, AnyReducer<In>>>(
   reducers: Rs,
 ): Reducer<In, AccsOf<Rs>, OutsOf<Rs>> {
   const entries = Object.entries(reducers)
 
-  /** 对每个 reducer 求一个值，按原来的 key 拼回对象 */
   function each<T>(f: (key: string, r: AnyReducer<In>) => unknown): T {
     return Object.fromEntries(entries.map(([key, r]) => [key, f(key, r)])) as T
   }
@@ -52,7 +50,7 @@ export function mapResult<In, Acc, Out, Next>(r: Reducer<In, Acc, Out>, f: (out:
   return { ...r, result: acc => f(resultOf(r, acc)) }
 }
 
-/** 没有 result 时 Out 就是 Acc（类型参数的默认值），原样返回 */
+/** Without result, Out defaults to Acc, so acc is returned as is. */
 export function resultOf<Acc, Out>(r: Reducer<any, Acc, Out>, acc: Acc): Out {
   return r.result ? r.result(acc) : passThrough<Out>(acc)
 }
@@ -72,7 +70,7 @@ function passThrough<T>(value: unknown): T {
   return value as T
 }
 
-/** 每个输入之后输出一次中间结果（R4） */
+/** Emits the intermediate result after every input (R4). */
 export async function* scan<In, Acc, Out>(
   source: AsyncIterable<In> | Iterable<In>,
   r: Reducer<In, Acc, Out>,

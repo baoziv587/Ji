@@ -1,7 +1,7 @@
+// Demo: an agent with a calc tool and a history-trimming plugin.
+//   pnpm demo                                    offline: pi-ai's built-in faux provider (streams token by token)
+//   MODEL=anthropic/claude-sonnet-4-6 pnpm demo   real: any provider/model pi-ai supports, API key read from env
 import type { Plugin } from '@gaoxiang.ai/llm'
-// demo
-//   pnpm demo                                    离线：pi-ai 自带的 faux provider（逐 token 流式）
-//   MODEL=anthropic/claude-sonnet-4-6 pnpm demo   真实：pi-ai 支持的任意 provider/模型，API key 从环境变量读
 import type { Api, KnownProvider, Model } from '@mariozechner/pi-ai'
 import process from 'node:process'
 import { createAgent, createSession, definePlugin, textOf, tool } from '@gaoxiang.ai/llm'
@@ -19,16 +19,16 @@ const calc = tool({
   description: 'Evaluate an arithmetic expression, e.g. "2*(3+4)".',
   parameters: Type.Object({ expr: Type.String() }),
   run: ({ expr }) => {
-    // expr 的类型 string 从 schema 推断
+    // expr is typed as string, inferred from the schema
     if (!/^[\d\s+\-*/().]+$/.test(expr)) {
       throw new Error(`bad expr: ${expr}`)
     }
-    // eslint-disable-next-line no-new-func -- expr 已被上面的白名单正则限制为纯算术
+    // eslint-disable-next-line no-new-func -- the allowlist regex above limits expr to plain arithmetic
     return String(new Function(`return (${expr})`)())
   },
 })
 
-/** update 中间件：只保留第一条和最近 n - 1 条消息。对所有 Turn 生效 */
+/** Update middleware that keeps the first message and the most recent n - 1. It runs on every Turn. */
 function keepLast(n: number): Plugin {
   return definePlugin({
     name: 'keep-last',
@@ -51,9 +51,9 @@ const agent = createAgent({
   plugins: [keepLast(20)],
 })
 
-const r = createSession(agent).send('算 17*23，然后结果加 9。')
+const r = createSession(agent).send('Compute 17*23, then add 9 to the result.')
 
-// 两个成员同时读：文字边生成边输出，每一步结束打印工具结果
+// Read two streams at once: text is printed as it streams, tool results at the end of each step
 const printing = (async () => {
   for await (const chunk of r.text) {
     process.stdout.write(chunk)
@@ -89,16 +89,16 @@ function pickModel(): Model<Api> {
 
   const faux = registerFauxProvider({ tokensPerSecond: 80 })
   faux.setResponses([
-    fauxAssistantMessage([fauxText('先算乘法。'), fauxToolCall('calc', { expr: '17*23' })], {
+    fauxAssistantMessage([fauxText('Multiply first.'), fauxToolCall('calc', { expr: '17*23' })], {
       stopReason: 'toolUse',
     }),
-    fauxAssistantMessage([fauxText('故意漏掉参数。'), fauxToolCall('calc', {})], {
+    fauxAssistantMessage([fauxText('Leaving out the argument on purpose.'), fauxToolCall('calc', {})], {
       stopReason: 'toolUse',
     }),
-    fauxAssistantMessage([fauxText('再加 9。'), fauxToolCall('calc', { expr: '391+9' })], {
+    fauxAssistantMessage([fauxText('Now add 9.'), fauxToolCall('calc', { expr: '391+9' })], {
       stopReason: 'toolUse',
     }),
-    fauxAssistantMessage('17×23 = 391，再加 9 得 400。'),
+    fauxAssistantMessage('17*23 = 391, plus 9 is 400.'),
   ])
   return faux.getModel()
 }

@@ -3,15 +3,13 @@ import type { Usage } from '@mariozechner/pi-ai'
 import type { AgentState, RunSummary, Turn, TurnTiming, UsageTotals } from './types.ts'
 import { combine } from '@gaoxiang.ai/kernel/reduce'
 
-/** 在 summaryReducer 初始化时就要用到，所以放在最前面 */
+// Declared first: summaryReducer reads it at module initialization.
 const NO_USAGE: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }
 
-/** state.messages 中所有助手消息的用量之和。压缩后被替换的消息不再计入 */
+/** Sums usage over the assistant messages in state; messages replaced by a history rewrite no longer count. */
 export function usageOf(state: AgentState): UsageTotals {
   return state.messages.reduce((total, m) => (m.role === 'assistant' ? addUsage(total, m.usage) : total), NO_USAGE)
 }
-
-/* ── 供 Run 使用：Run.summary 是下面这个 reducer 对每一步的归约 ─── */
 
 export interface TimedTurn {
   turn: Turn
@@ -27,8 +25,6 @@ export const summaryReducer: Reducer<TimedTurn, RunSummary> = combine({
   inputs: counter(({ turn }) => (turn.kind === 'input' ? turn.messages.length : 0)),
   rewrites: counter(({ turn }) => (turn.kind === 'rewrite' ? 1 : 0)),
 })
-
-/* ── 内部 ─────────────────────────────────────────────── */
 
 function addUsage(total: UsageTotals, usage: Usage): UsageTotals {
   return {

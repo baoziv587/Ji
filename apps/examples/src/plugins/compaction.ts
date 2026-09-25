@@ -4,22 +4,25 @@ import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
 import { completeSimple } from '@mariozechner/pi-ai'
 
 export interface CompactionOptions {
-  /** 写摘要用的模型。可以和主模型不同，用便宜的即可 */
+  /** Model that writes the summary. It can differ from the main model; a cheap one is fine. */
   model: Model<Api>
-  /** 上下文估算超过这么多 token 时压缩 */
+  /** Compact once the estimated context exceeds this many tokens. */
   maxTokens: number
-  /** 压缩时原样保留最近的多少条消息 */
+  /** How many recent messages to keep verbatim when compacting. */
   keepRecent?: number
 }
 
 export const SUMMARY_PREFIX = '[Summary of the earlier conversation]'
 
 /**
- * 上下文压缩：历史太长时，让模型把较早的消息写成摘要，用「摘要 + 最近几条消息」替换历史。
+ * Context compaction: when the history grows too long, the model summarizes the older messages and the history
+ * becomes "summary + the last few messages".
  *
- * - 写摘要要调用模型，是 IO，所以放在 policy 里做
- * - 替换历史通过 rewriteHistory 交给 update，结果进入 AgentState，保存后恢复不需要重新摘要
- * - 被替换的消息不再发给模型，也不再留在状态里；需要完整记录时，从 r.turns 中 rewrite 之前那一步的 state 读取
+ * - Writing the summary calls a model, which is IO, so it happens in policy.
+ * - The replacement goes through update via rewriteHistory, so it lands in AgentState and a restored session
+ *   does not need to summarize again.
+ * - Replaced messages are neither sent to the model nor kept in state. For the full record, read the state
+ *   of the step before the rewrite from r.turns.
  */
 export function compaction({ model, maxTokens, keepRecent = 6 }: CompactionOptions): Plugin {
   return definePlugin({
@@ -29,7 +32,7 @@ export function compaction({ model, maxTokens, keepRecent = 6 }: CompactionOptio
       const { messages } = state
       const cut = cutIndex(messages, keepRecent)
 
-      // 没超限，或者能压缩的消息太少（比如刚压缩过），就正常调用模型
+      // Under the limit, or too few messages to be worth summarizing (e.g. right after a compaction)
       if (estimateTokens(messages) <= maxTokens || cut < 2) {
         return yield* next(state)
       }
@@ -40,15 +43,23 @@ export function compaction({ model, maxTokens, keepRecent = 6 }: CompactionOptio
   })
 }
 
-/** 粗略估计：约 4 个字符 1 个 token。要更准可以改用上一个助手回合的 usage.input */
+/** Rough estimate of ~4 characters per token. For accuracy, use usage.input from the last assistant turn. */
 function estimateTokens(messages: Message[]): number {
   return Math.ceil(JSON.stringify(messages).length / 4)
 }
 
 /**
- * 从哪里切开：保留最近 keepRecent 条。
- * 切点不能落在工具结果上，否则工具结果会和发起它的工具调用分开，provider 会拒绝请求；
- * 所以向前移到发起调用的助手消息。
+ * Keeps the last keepRecent messages, but the kept part must not start on a tool result: providers reject a
+ * tool result separated from the call that produced it, so the cut steps back to the assistant message that
+ * made the calls.
+ *
+ *   index 0     1     2       3     4       5       6
+ *   msgs  user  asst  result  asst  result  result  asst    keepRecent = 3
+ *                             ^     ^
+ *                             |     +-- length - keepRecent = 4 is a toolResult
+ *                             +-------- step back past toolResults -> cut = 3
+ *
+ *   [0, cut) -> summarized        [cut, end) -> kept verbatim
  */
 export function cutIndex(messages: Message[], keepRecent: number): number {
   let cut = Math.max(0, messages.length - keepRecent)
@@ -72,7 +83,6 @@ async function summarize(model: Model<Api>, messages: Message[]): Promise<string
   return textOf(reply)
 }
 
-/** 把消息渲染成纯文本，交给摘要模型 */
 function transcript(messages: Message[]): string {
   return messages
     .map(m => {

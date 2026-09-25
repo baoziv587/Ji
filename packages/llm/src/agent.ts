@@ -10,39 +10,55 @@ import { toolError, toolRunner } from './tool.ts'
 import { applyTurn, isModelAction, stop, turnOf } from './turn.ts'
 
 /**
- * 其余字段是 pi-ai 的流选项，每次模型调用都会带上（temperature、maxTokens……）。
- * reasoning 是思考档位：不设就不思考；模型不支持的档位按这次请求的模型取最近的可用档位
+ * The remaining fields are pi-ai stream options sent with every model call (temperature, maxTokens, ...).
+ * `reasoning` is the thinking level: unset means no thinking; a level the request's model does not support is mapped
+ * to the nearest one it does.
  */
 export interface AgentOptions extends Omit<SimpleStreamOptions, 'signal'> {
   model: Model<Api>
   system?: string
   tools?: AgentTool[]
-  /** 前面的在内层，后面的在外层。可以嵌套 */
+  /** Earlier plugins are nested inside later ones. May nest. */
   plugins?: PluginList
 }
 
-/** 内部：Agent 在每次运行时实例化的入口，不从包中导出 */
+/** Not re-exported from index.ts: only a Run instantiates an Agent. */
 export const instantiate: unique symbol = Symbol('instantiate')
 
-/** 模型、工具、插件的组合。不含状态，可以复用；通过 createSession 运行 */
+/** Stateless and reusable; run it through createSession. */
 export interface Agent {
   readonly [instantiate]: (ctx: RunContext) => LLMAgent
 }
 
-/** 内部：属于一次运行、而不属于 agent 的东西 */
+/** What belongs to one Run rather than to the Agent. */
 export interface RunContext {
-  /** 取消当前这一步：中断或 abort 时触发 */
+  /** Fires on interrupt or abort, cancelling the current step. */
   signal: AbortSignal
-  /** 这个步边界上可以送达的外部消息 */
+  /** Queued messages deliverable at this boundary. */
   offer: (boundary: Boundary) => Message[]
-  /** 这个步边界是否由中断产生 */
   interrupted: () => boolean
-  /** 记录一次工具调用的耗时 */
   toolTime: (callId: string, ms: number) => void
 }
 
-/** 唯一的装配入口。工具或插件重名时抛 PluginConflictError，列出全部冲突 */
+/** Throws PluginConflictError listing every duplicate tool or plugin name. */
 export function createAgent(options: AgentOptions): Agent {
+  /**
+   * How the flattened plugin list [p1, p2] is compiled:
+   *
+   *   transforms, applied in list order            runs
+   *     system    system -> p1 -> p2                once, here
+   *     input     offered messages -> p1 -> p2      every step boundary
+   *     context   state.messages -> p1 -> p2        every model request
+   *
+   *   middleware, later plugins wrap earlier ones (p2 sees the input first and the output last)
+   *     policy^   p2( p1( baseAgent.policy ) )      every step
+   *     env^      p2( p1( runTools ) )              every model turn with tool calls
+   *     update^   p2( p1( applyTurn ) )             every step; each layer then runs its own state.reduce
+   *     request   p2( p1( callModel ) )             every model call
+   *     tool      p2( p1( toolRunner ) )            every tool call, inside runTools
+   *
+   *   ^ kernel middleware: extensionOf, then extend() on every instantiation
+   */
   const { model, system = '', tools = [], plugins = [], ...streamOptions } = options
 
   const list = flattenPlugins(plugins)
@@ -64,8 +80,6 @@ export function createAgent(options: AgentOptions): Agent {
   }
 }
 
-/* ── 内部 ─────────────────────────────────────────────── */
-
 interface Parts {
   model: Model<Api>
   systemPrompt: string
@@ -76,11 +90,22 @@ interface Parts {
 }
 
 /**
- * 一步（RFC-0004 §4）：
- *   ① input   有要插入的消息 → 插入；没有且 agent 空闲 → 结束
- *   ② context 这次请求发给模型的消息
- *   ③ request 调用一次模型
- * 模型回合总是先写入状态，下一步才判断是否结束，所以最终回答也经过 update。
+ * One step (RFC-0004 §4); plugin policies wrap it and may return rewriteHistory / stop instead:
+ *
+ *   boundary = { state, idle }
+ *   input transforms( ctx.offer(boundary) )
+ *     |-- messages ----> act(InputAction) ------------------------+
+ *     |                                                            |
+ *     |-- none, busy --> context transforms( state.messages )     |
+ *     |                  -> request -> deltas ... message          |
+ *     |                  -> act(AssistantMessage)                  |
+ *     |                  -> env: run its tool calls in parallel -->+
+ *     |                                                            v
+ *     |                              update: applyTurn -> next boundary
+ *     |
+ *     +-- none, idle --> stop(state) = done(last assistant message): the run ends
+ *
+ * A model turn is written before the next step checks for idle, so the final answer also goes through update.
  */
 function baseAgent(parts: Parts, ctx: RunContext): LLMAgent {
   const { model, systemPrompt, plugins, streamOptions } = parts
@@ -124,7 +149,7 @@ function baseAgent(parts: Parts, ctx: RunContext): LLMAgent {
   }
 }
 
-/** 最内层的 request：转发 pi-ai 的事件流；消费方提前退出时 abort 底层请求 */
+// Innermost request. If the consumer stops iterating early, abort the underlying HTTP request too.
 function callModel(signal: AbortSignal): ModelCall {
   return async function* ({ model, systemPrompt, messages, tools, options }) {
     const ctl = new AbortController()
@@ -158,8 +183,8 @@ function callModel(signal: AbortSignal): ModelCall {
 }
 
 /**
- * 把 reasoning 换成这次请求的模型支持的档位：不支持的档位取最近的可用档位（优先更高），
- * 模型不能思考时去掉。放在最内层，所以 request 插件换了模型或改了档位也会经过它
+ * Maps an unsupported level to the nearest available one (preferring higher) and drops it for models that cannot
+ * think. Called innermost so a request plugin that switches the model or level is still clamped.
  */
 function supportedReasoning(model: Model<Api>, options: SimpleStreamOptions): SimpleStreamOptions {
   if (options.reasoning === undefined) {
@@ -170,7 +195,7 @@ function supportedReasoning(model: Model<Api>, options: SimpleStreamOptions): Si
   return { ...options, reasoning: level === 'off' ? undefined : level }
 }
 
-/** 并行执行；中间件或工具抛出的异常都转为 isError 结果交还模型（I8） */
+// Anything thrown by tool middleware or the tool itself becomes an isError result for the model (I8).
 function runTools(runTool: ToolRunner, msg: AssistantMessage, ctx: RunContext): Promise<ToolResultMessage[]> {
   return Promise.all(
     callsOf(msg).map(async call => {

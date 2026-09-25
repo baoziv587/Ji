@@ -2,18 +2,18 @@ import type { AgentState, Plugin } from '@gaoxiang.ai/llm'
 import { definePlugin, user } from '@gaoxiang.ai/llm'
 
 export interface KeepGoingOptions {
-  /** 任务是否完成。完成后不再自动继续 */
+  /** Once this returns true, the plugin stops nudging. */
   isDone: (state: AgentState) => boolean
-  /** 最多自动继续几次 */
+  /** Maximum number of automatic nudges. */
   maxTimes?: number
   prompt?: string
 }
 
 /**
- * 自动继续：agent 空闲、没有用户消息要处理、任务又没完成时，插入一条「继续」。
+ * Inserts a "keep going" message when the agent is idle, no user message is waiting, and the task is not done.
  *
- * 用 input 钩子：它在每个步边界拿到此刻可以送达的用户消息，返回要插入的消息。
- * 已经自动继续了几次记在插件状态里，随状态保存。
+ * Uses the input hook, which receives the user messages deliverable at each step boundary and returns
+ * the ones to insert. The nudge count lives in plugin state, so it is saved along with the session.
  */
 export function keepGoing({
   isDone,

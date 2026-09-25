@@ -3,7 +3,7 @@ import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { act, done, extend, mapState, run, unfold } from './index.ts'
 
-/* ── 被测 agent：S = number[]，每步追加 env 的结果，长度到 3 结束 ── */
+// Agent under test: S = number[], each step appends env's result, done at length 3
 type S = number[]
 type Ext = Extension<S, number, number, string, string>
 type TestAgent = Agent<S, number, number, string, string>
@@ -17,7 +17,7 @@ const base: TestAgent = {
   update: (s, _a, o) => [...s, o],
 }
 
-/** 每个字段各有 pre / post / around，覆盖三种形态 */
+/** One pre / post / around per field, covering all three shapes */
 interface Sample {
   field: 'policy' | 'env' | 'update'
   kind: 'pre' | 'post' | 'around'
@@ -64,7 +64,7 @@ const exts = fc.array(
   { maxLength: 4 },
 )
 
-/** 事件序列即可观测行为；超步数的异常也记为一个事件 */
+/** The event sequence is the observable behavior; a maxSteps error is recorded as an event too */
 async function trace(agent: TestAgent): Promise<unknown[]> {
   const events: unknown[] = []
   try {

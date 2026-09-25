@@ -19,31 +19,29 @@ import { summaryReducer } from './summary.ts'
 import { turnOf } from './turn.ts'
 
 /**
- * 一次运行：从开始到 agent 空闲且没有可插入的消息。
- * 各成员共享这一次运行；提前退出任何 for await 都会取消整次运行（I7）。
+ * Lasts until the agent is idle and no queued message can be inserted.
+ * All members share one run; leaving any `for await` early cancels the whole run (I7).
  */
 export interface Run extends AsyncIterable<AgentEvent> {
-  /** 模型输出的文字增量，只包含开始读取之后的部分 */
+  /** Text deltas produced after reading starts; earlier ones are not replayed. */
   readonly text: AsyncIterable<string>
-  /** 每一步一条记录；无论何时开始读，都从第一步开始 */
+  /** One record per step; always replays from the first step, whenever reading starts. */
   readonly turns: AsyncIterable<TurnEvent>
-  /** 这次运行的统计。运行被取消或出错时 reject */
+  /** Rejects if the run is aborted or fails. */
   readonly summary: Promise<RunSummary>
-  /** 最终回答 */
   readonly result: Promise<AssistantMessage>
-  /** 最终状态，可保存 */
   readonly state: Promise<AgentState>
-  /** 取消运行。尚未送达的消息留在会话里 */
+  /** Undelivered messages stay queued in the session. */
   abort: (reason?: unknown) => void
 }
 
-/** 内部：Run 与所属会话之间的接口 */
+/** What a Run needs from its Session. */
 export interface RunHost {
   readonly agent: Agent
   readonly maxSteps: number
-  /** 最后写入的状态。Run 每写入一步就更新它 */
+  /** Last committed state; the Run updates it after every step. */
   state: AgentState
-  /** 这个步边界上可以送达的消息，不从队列中移除 */
+  /** Does not dequeue; see remove. */
   offer: (boundary: Boundary) => PendingMessage[]
   remove: (delivered: PendingMessage[]) => void
 }
@@ -69,7 +67,7 @@ export class AgentRun implements Run {
 
   private acc = summaryReducer.init
   private steps = 0
-  /** 当前这一步取出、写入后才从队列移除的消息 */
+  /** Offered to the step in flight; dequeued only once that step is committed. */
   private offered: PendingMessage[] = []
   private interruptedBoundary = false
   private stopping: { kind: 'interrupt' } | { kind: 'abort'; reason: unknown } | undefined
@@ -79,7 +77,7 @@ export class AgentRun implements Run {
   constructor(host: RunHost) {
     this.host = host
 
-    // 这三个 Promise 可能没有人等待；预先挂上处理函数，避免未处理的 rejection
+    // Nobody may await these; attach handlers up front so a failure is not an unhandled rejection.
     for (const { promise } of Object.values(this.outcome)) {
       promise.catch(noop)
     }
@@ -116,7 +114,7 @@ export class AgentRun implements Run {
     this.stopSegment()
   }
 
-  /** 取消当前这一步，丢弃未写入的内容，从最后写入的状态继续 */
+  /** Cancels the step in flight, drops anything uncommitted, and continues from the last committed state. */
   interrupt(): void {
     if (this.finished || this.stopping) {
       return
@@ -127,9 +125,23 @@ export class AgentRun implements Run {
     this.stopSegment()
   }
 
-  /* ── 驱动 ─────────────────────────────────────────── */
-
-  /** 一次运行由若干段 unfold 组成：每次中断结束一段，从最后写入的状态开始下一段 */
+  /**
+   * A Run is a chain of segments, each one kernel unfold started from the last committed state:
+   *
+   *   drive
+   *     +-> runSegment: unfold(agent[instantiate](ctx), host.state, maxSteps - steps)
+   *     |     delta  -> publish
+   *     |     act    -> publish, dequeue offered, commit (host.state, log, summary acc, steps++)
+   *     |     done   -> publish, dequeue offered, return { result }
+   *     |     interrupt() / abort() -> 'stopped': the step in flight is dropped uncommitted
+   *     |
+   *     +-- 'stopped' by interrupt -> the next boundary reports interrupted: true
+   *     +-- done, but a queued message has become deliverable
+   *
+   *   'stopped' by abort -> fail(reason)          done otherwise -> finish(result)
+   *
+   * steps, t and the summary carry across segments, so the whole Run shares one maxSteps budget.
+   */
   private async drive(): Promise<void> {
     try {
       for (;;) {
@@ -144,7 +156,7 @@ export class AgentRun implements Run {
           continue
         }
 
-        // 结束前再看一次：运行结束前到达的消息由同一次运行处理
+        // A message that became deliverable after the last boundary belongs to this Run, not a new one.
         const state = this.host.state
         if (this.host.offer({ state, idle: isIdle(state) }).length > 0) {
           continue
@@ -192,7 +204,7 @@ export class AgentRun implements Run {
         const pending = events.next()
         pending.catch(noop)
 
-        // stopped 放在前面：中断与一步的完成同时发生时，中断优先，这一步被丢弃
+        // `stopped` goes first: when an interrupt and a step completion coincide, the interrupt wins.
         const next = await Promise.race([stopped, pending])
         if (next === 'stopped') {
           return 'stopped'
@@ -218,7 +230,7 @@ export class AgentRun implements Run {
         this.commit(e.action, e.obs, e.state)
       }
     } finally {
-      // 被中断时 unfold 可能还停在工具或模型调用上；不等待它，让它在 signal 中止后自行结束
+      // unfold may still be inside a tool or model call; don't wait for it, it ends once the signal aborts.
       events.return(undefined).catch(noop)
     }
   }
@@ -259,8 +271,14 @@ export class AgentRun implements Run {
     this.notify()
   }
 
-  /* ── 读取 ─────────────────────────────────────────── */
-
+  /*
+   *   unfold events --publish--> one buffer per live reader --> for await (run), run.text
+   *                                                             (only events after subscribing)
+   *   commit -------------------> log[] ----------------------> run.turns (replays from log[0])
+   *   finish / fail ------------> result, state, summary promises
+   *
+   * notify() replaces `changed`, waking every waiting reader. A reader that exits early aborts the run.
+   */
   private publish(e: AgentEvent): void {
     for (const buffer of this.subscribers) {
       buffer.push(e)
@@ -327,7 +345,6 @@ export class AgentRun implements Run {
     }
   }
 
-  /** 读者提前退出（break 或抛出异常）时取消运行 */
   private abortIfRunning(): void {
     if (!this.finished) {
       this.abort()
@@ -341,9 +358,7 @@ export class AgentRun implements Run {
   }
 }
 
-/* ── 内部 ─────────────────────────────────────────────── */
-
-/** 测量一步的耗时。只是观察，不影响行为，所以不进入状态 */
+/** Timing is observation only and never affects behavior, so it lives here rather than in state. */
 class StepClock {
   private start = 0
   private firstToken: number | undefined
@@ -369,7 +384,7 @@ class StepClock {
     this.tools[id] = ms
   }
 
-  /** 结束这一步，返回它的耗时，并开始计下一步 */
+  /** Also restarts the clock for the next step. */
   lap(model: boolean): TurnTiming {
     const now = performance.now()
     const timing: TurnTiming = { ms: now - this.start }

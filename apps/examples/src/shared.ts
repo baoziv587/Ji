@@ -1,12 +1,12 @@
+// Shared by the examples: picking a model and displaying a run.
 import type { Run, RunSummary, Turn } from '@gaoxiang.ai/llm'
-// 各示例共用：选模型、显示一次运行
 import type { Api, FauxResponseStep, KnownProvider, Model } from '@mariozechner/pi-ai'
 import process from 'node:process'
 import { getModels, registerFauxProvider } from '@mariozechner/pi-ai'
 
 /**
- * MODEL=anthropic/claude-sonnet-5 → 真实模型（API key 从环境变量读）
- * 不设 MODEL → pi-ai 的 faux provider，按 script 逐条回放，离线可跑
+ * MODEL=anthropic/claude-sonnet-5 -> a real model (API key read from env).
+ * Without MODEL -> pi-ai's faux provider replays `script` step by step, so the example runs offline.
  */
 export function pickModel(script: FauxResponseStep[], tokensPerSecond = 200): Model<Api> {
   const spec = process.env.MODEL
@@ -25,7 +25,7 @@ export function pickModel(script: FauxResponseStep[], tokensPerSecond = 200): Mo
   return faux.getModel()
 }
 
-/** 同时读两个成员：文字边生成边输出；每一步结束时打印一行记录。结束后打印统计 */
+/** Reads two streams at once: text as it streams, plus one line per finished step. Prints the totals at the end. */
 export async function show(r: Run): Promise<RunSummary> {
   const text = (async () => {
     for await (const chunk of r.text) {

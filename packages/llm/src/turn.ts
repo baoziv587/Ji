@@ -5,14 +5,15 @@ import { act, done } from '@gaoxiang.ai/kernel'
 import { lastAssistant } from './message.ts'
 
 /**
- * 在 policy 中间件里返回它，用 messages 替换整个历史。
- * 生成新历史需要的 IO（例如调用模型写摘要）在 policy 里完成；替换本身由 update 完成，所以可以重放。
+ * Return from a policy middleware to replace the whole history with `messages`.
+ * Do any IO needed to build them (e.g. a summarizing model call) in the policy; the replacement itself happens in
+ * update, so it stays replayable.
  */
 export function rewriteHistory(messages: Message[]): Step<RewriteAction, never> {
   return act({ kind: 'rewrite', messages })
 }
 
-/** 在 policy 中间件里返回它，以最后一条助手消息作为结果结束运行 */
+/** Return from a policy middleware to end the run with the last assistant message as its result. */
 export function stop(state: AgentState): Step<never, AssistantMessage> {
   const last = lastAssistant(state)
   if (last === undefined) {
@@ -21,8 +22,6 @@ export function stop(state: AgentState): Step<never, AssistantMessage> {
 
   return done(last)
 }
-
-/* ── 供内部使用：内核的 (action, obs) 与 Turn 互相转换 ─────────── */
 
 export function isModelAction(action: AgentAction): action is AssistantMessage {
   return 'role' in action
@@ -36,7 +35,6 @@ export function actionOf(turn: Turn): [AgentAction, ToolResultMessage[]] {
   return turn.kind === 'model' ? [turn.message, turn.results] : [turn, []]
 }
 
-/** 内置的 update：把一条记录写入历史 */
 export function applyTurn(state: AgentState, turn: Turn): AgentState {
   switch (turn.kind) {
     case 'model':

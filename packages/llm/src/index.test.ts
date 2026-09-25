@@ -1,4 +1,4 @@
-// 用 pi-ai 的 faux provider 验证 RFC-0003 / RFC-0004：钩子、插件状态、Run、会话与插话
+// Verifies RFC-0003 / RFC-0004 against pi-ai's faux provider: hooks, plugin state, Run, sessions and interjections
 import type {
   Api,
   AssistantMessage,
@@ -27,8 +27,6 @@ import {
   user,
 } from './index.ts'
 
-/* ── 测试工具 ───────────────────────────────────────── */
-
 const echo = tool({
   name: 'echo',
   description: 'upper-case x',
@@ -46,7 +44,7 @@ function fauxModel(responses: FauxResponseStep[], options?: { tokensPerSecond: n
   return faux.getModel()
 }
 
-/** 一问一答：回答「re:最后一条用户消息」 */
+/** Replies `re:<last user message>`. */
 function replyToLastUser(ctx: Context): AssistantMessage {
   const last = ctx.messages.findLast(m => m.role === 'user')
   return fauxAssistantMessage(`re:${last?.content}`)
@@ -64,12 +62,11 @@ function contentOf(m: Message): string {
   if (typeof m.content === 'string') {
     return m.content
   }
-  return m.content.map(c => (c.type === 'text' ? c.text : c.type === 'toolCall' ? `→${c.name}` : '')).join('')
+  return m.content.map(c => (c.type === 'text' ? c.text : c.type === 'toolCall' ? `->${c.name}` : '')).join('')
 }
 
 const kinds = (turns: TurnEvent[]): Turn['kind'][] => turns.map(e => e.turn.kind)
 
-/** 手动控制的闸门：工具在 wait() 上等待，测试在合适的时刻 open() */
 function gate(): { wait: () => Promise<void>; open: () => void; started: Promise<void> } {
   const opened = Promise.withResolvers<void>()
   const started = Promise.withResolvers<void>()
@@ -83,7 +80,6 @@ function gate(): { wait: () => Promise<void>; open: () => void; started: Promise
   }
 }
 
-/** 记录进出顺序的工具中间件 */
 function tracer(name: string, log: string[]): PluginSpec {
   return {
     name,
@@ -95,8 +91,6 @@ function tracer(name: string, log: string[]): PluginSpec {
     },
   }
 }
-
-/* ── 基本运行 ───────────────────────────────────────── */
 
 describe('basic run', () => {
   it('runs tools in parallel; schema validation failures go back to the model as isError results', async () => {
@@ -160,8 +154,6 @@ describe('basic run', () => {
     expect(tags.filter(t => t !== 'delta')).toEqual(['act', 'act', 'done'])
   })
 })
-
-/* ── 插件中间件（RFC-0003） ─────────────────────────── */
 
 describe('plugin middleware', () => {
   it('later plugins in the array wrap earlier ones', async () => {
@@ -270,8 +262,6 @@ describe('conflict checks', () => {
   })
 })
 
-/* ── 插件状态 ───────────────────────────────────────── */
-
 describe('plugin state', () => {
   const modelTurns = definePlugin({
     name: 'model-turns',
@@ -300,8 +290,6 @@ describe('plugin state', () => {
     expect(modelTurns.select(second)).toBe(1)
   })
 })
-
-/* ── 钩子（RFC-0004 §4） ────────────────────────────── */
 
 describe('hooks', () => {
   it('input: continues once automatically when the agent is idle', async () => {
@@ -381,7 +369,7 @@ describe('hooks', () => {
 })
 
 describe('reasoning levels', () => {
-  /** 和 DeepSeek 一样只支持 high、xhigh 的模型；记下每次请求实际带的 reasoning */
+  /** Like DeepSeek, supports only high and xhigh; records the reasoning each request actually carries. */
   function thinker(seen: unknown[], { reasoning = true, calls = 1 } = {}): Model<Api> {
     const faux = registerFauxProvider({ models: [{ id: 'thinker', reasoning }] })
     faux.setResponses(
@@ -466,8 +454,6 @@ describe('rewriteHistory', () => {
   })
 })
 
-/* ── Run：记录与统计（RFC-0004 §6） ─────────────────── */
-
 describe('run records and stats', () => {
   const failing = tool({
     ...echo,
@@ -519,8 +505,6 @@ describe('run records and stats', () => {
     expect(turns[0].timing.modelMs).toBeUndefined()
   })
 })
-
-/* ── 会话与插话（RFC-0004 §7） ──────────────────────── */
 
 describe('sessions and interjections', () => {
   const blocked = (g: ReturnType<typeof gate>): AgentTool =>
@@ -665,7 +649,7 @@ describe('sessions and interjections', () => {
 
     const r = chat.send('first')
     chat.send('later')
-    await r.text[Symbol.asyncIterator]().next() // 等到第一段文字
+    await r.text[Symbol.asyncIterator]().next() // wait for the first text delta
     r.abort()
 
     await expect(r.result).rejects.toThrow(/aborted/)

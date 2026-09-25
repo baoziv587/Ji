@@ -1,10 +1,10 @@
-// @gaoxiang.ai/llm：用 pi-ai 实例化内核（RFC-0004）
+// @gaoxiang.ai/llm: the kernel instantiated with pi-ai (RFC-0004)
 //
-//   使用者只接触四个对象：
-//     Agent    createAgent({ model, tools, plugins })   模型、工具、插件的组合，不含状态
-//     Session  createSession(agent)                     一段对话；唯一的方法 send(message, { when })
-//     Run      session.send(...) 的返回值               文字流、每步记录、统计、最终结果
-//     Plugin   definePlugin({ ... })                    在一步的固定位置改变行为
+//   Users only touch four objects:
+//     Agent    createAgent({ model, tools, plugins })   model + tools + plugins, stateless
+//     Session  createSession(agent)                     one conversation; its only method is send(message, { when })
+//     Run      returned by session.send(...)            text stream, per-step records, stats, final result
+//     Plugin   definePlugin({ ... })                    changes behavior at fixed points of a step
 
 export { type Agent, type AgentOptions, createAgent } from './agent.ts'
 export { callsOf, textOf, user } from './message.ts'

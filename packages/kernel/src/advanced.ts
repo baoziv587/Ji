@@ -1,18 +1,17 @@
-// @gaoxiang.ai/kernel/advanced：改变 agent 类型参数的变换（RFC-0003 §2.5、附录 A.4）
+// @gaoxiang.ai/kernel/advanced: transforms that change an agent's type parameters (RFC-0003 §2.5, appendix A.4)
 //
-//   每个变换都配一个提升函数，把旧类型上的中间件搬到新类型上，并满足
+//   Each transform comes with a lift that moves middleware from the old types to the new ones, such that
 //     transform(extend(a, x)) ≃ extend(transform(a), lift(x))
-//   所以代码总能写成：extend(transform(base), ...extensions)
+//   so code can always be written as extend(transform(base), ...extensions)
 
 import type { Agent, Extension } from './index.ts'
 
-/** 从 T 中取出 / 放回 S。须满足：set(t, get(t)) = t；get(set(t, s)) = s；set(set(t, a), b) = set(t, b) */
+/** Must satisfy: set(t, get(t)) = t; get(set(t, s)) = s; set(set(t, a), b) = set(t, b) */
 export interface Lens<T, S> {
   get: (t: T) => S
   set: (t: T, s: S) => T
 }
 
-/* ── 扩大状态：S → T ─────────────────────────────────── */
 export function withState<S, T, A, O, R, D>(agent: Agent<S, A, O, R, D>, lens: Lens<T, S>): Agent<T, A, O, R, D> {
   return {
     policy: t => agent.policy(lens.get(t)),
@@ -21,7 +20,17 @@ export function withState<S, T, A, O, R, D>(agent: Agent<S, A, O, R, D>, lens: L
   }
 }
 
-/** 把写在 S 上的中间件提升到 T：只让它看到 S 部分，其余部分原样保留 */
+/**
+ * Lifts middleware written for S to T: it only sees the S part, the rest of T is preserved.
+ * The focused update, with S-level middleware m and T-level next:
+ *
+ *     m(get(t), a, o, inner)            m may call inner 0..n times
+ *       |
+ *       +-- inner(s', a2, o2) --> latest = next(set(t, s'), a2, o2)   (always from the original t)
+ *       |                    <--  get(latest)
+ *       v
+ *     s'' --> set(latest, s'')          S from m, rest of T from the last next() (t if none)
+ */
 export function focus<S, T, A, O, R, D>(ext: Extension<S, A, O, R, D>, lens: Lens<T, S>): Extension<T, A, O, R, D> {
   const { policy, env, update } = ext
   const focused: Extension<T, A, O, R, D> = { env }
@@ -44,13 +53,12 @@ export function focus<S, T, A, O, R, D>(ext: Extension<S, A, O, R, D>, lens: Len
   return focused
 }
 
-/* ── 增加动作种类：A → A | N ─────────────────────────── */
 export interface WidenHandlers<S, N, O> {
   env: (n: N) => Promise<O>
   update: (s: S, n: N, o: O) => S
 }
 
-/** policy 不变；新动作由外层中间件发出，由 handlers 执行和记录 */
+/** Adds action kinds A → A | N. policy is unchanged: outer middleware emits new actions, handlers run them. */
 export function widen<S, A, N, O, R, D>(
   agent: Agent<S, A, O, R, D>,
   isNew: (x: A | N) => x is N,
@@ -63,14 +71,14 @@ export function widen<S, A, N, O, R, D>(
   }
 }
 
-/** 不含 policy 的中间件。可直接传给 extend，与 R、D 无关 */
+/** Middleware without policy; passes to extend for any R and D. */
 export type EnvUpdateExtension<S, A, O> = Omit<Extension<S, A, O, never, never>, 'policy'> & {
   policy?: never
 }
 
 /**
- * 把写在 A 上的 env / update 中间件提升到 A | N：新动作直接交给 next，旧动作走原中间件。
- * policy 中间件的输出含 A，没有通用提升；类型上拒绝，须直接针对新类型编写。
+ * Lifts env / update middleware from A to A | N: new actions go straight to next, old ones through the middleware.
+ * Policy middleware outputs A and has no generic lift, so it is rejected by the type; write it against A | N directly.
  */
 export function liftWiden<S, A, N, O>(
   ext: EnvUpdateExtension<S, A, O>,
