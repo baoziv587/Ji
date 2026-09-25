@@ -1,5 +1,12 @@
 # git hooks：pnpm install 时由 lefthook 的 postinstall 自动安装
 
+# 只格式化暂存的文件，格式化后自动重新 git add
+pre-commit:
+  jobs:
+    - name: format
+      run: pnpm format --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
 pre-push:
   parallel: true
   jobs:
