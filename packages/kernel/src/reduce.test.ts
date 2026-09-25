@@ -24,8 +24,8 @@ async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
   return all
 }
 
-describe('reducer 定律', () => {
-  it('积（R1）：combine 一次遍历等于分别遍历', async () => {
+describe('reducer laws', () => {
+  it('product (R1): combine in one pass equals separate passes', async () => {
     await fc.assert(
       fc.asyncProperty(inputs, reducers, reducers, async (xs, a, b) => {
         expect(await reduce(xs, combine({ a, b }))).toEqual({
@@ -37,7 +37,7 @@ describe('reducer 定律', () => {
     )
   })
 
-  it('分段（R2）：前一段的累加值可以作为后一段的初值', async () => {
+  it('segments (R2): the accumulator of one segment can seed the next', async () => {
     await fc.assert(
       fc.asyncProperty(inputs, inputs, reducers, async (xs, ys, r) => {
         const prefix = xs.reduce(r.reduce, r.init)
@@ -47,7 +47,7 @@ describe('reducer 定律', () => {
     )
   })
 
-  it('融合（R3）：先过滤 / 转换序列，等于过滤 / 转换 reducer 的输入', async () => {
+  it('fusion (R3): filtering / mapping the sequence equals filtering / mapping the reducer input', async () => {
     const even = (x: number): boolean => x % 2 === 0
     const double = (x: number): number => x * 2
 
@@ -60,7 +60,7 @@ describe('reducer 定律', () => {
     )
   })
 
-  it('scan（R4）：每个输入输出一次，最后一次等于 reduce', async () => {
+  it('scan (R4): emits once per input, the last equals reduce', async () => {
     await fc.assert(
       fc.asyncProperty(inputs, reducers, async (xs, r) => {
         const steps = await collect(scan(xs, r))
@@ -73,7 +73,7 @@ describe('reducer 定律', () => {
     )
   })
 
-  it('mapResult 只改最终结果', async () => {
+  it('mapResult changes only the final result', async () => {
     expect(
       await reduce(
         [1, 2, 3],
@@ -82,7 +82,7 @@ describe('reducer 定律', () => {
     ).toBe(20)
   })
 
-  it('combine({}) 是单位元', async () => {
+  it('combine({}) is the identity', async () => {
     expect(await reduce([1, 2], combine({}))).toEqual({})
   })
 })

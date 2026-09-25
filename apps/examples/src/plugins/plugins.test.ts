@@ -37,7 +37,7 @@ const replyToLastUser = (ctx: Context): AssistantMessage =>
   fauxAssistantMessage(`re:${ctx.messages.findLast(m => m.role === 'user')?.content}`)
 
 describe('compaction', () => {
-  it('切点不会落在工具结果上', () => {
+  it('never cuts at a tool result', () => {
     const call: ToolCall = { type: 'toolCall', id: 't1', name: 'echo', arguments: {} }
     const messages: Message[] = [
       user('q'),
@@ -49,7 +49,7 @@ describe('compaction', () => {
     expect(cutIndex(messages, 2)).toBe(1)
   })
 
-  it('超过上限时用「摘要 + 最近消息」替换历史，然后继续', async () => {
+  it('over the limit, replaces history with a summary plus recent messages, then continues', async () => {
     const big = 'x'.repeat(2_000)
     // 第一轮后只有 3 条消息，切点为 1，太少不压缩；第二轮后才压缩
     const model = fauxModel([
@@ -75,7 +75,7 @@ describe('compaction', () => {
     expect(state.messages[1].role).toBe('assistant')
   })
 
-  it('没超限时不压缩', async () => {
+  it('does not compact under the limit', async () => {
     const model = fauxModel([callEcho('small'), fauxAssistantMessage('answer')])
     const agent = createAgent({
       model,
@@ -88,7 +88,7 @@ describe('compaction', () => {
 })
 
 describe('truncateToolResults', () => {
-  it('保留开头和结尾，中间换成说明', () => {
+  it('keeps the head and tail and replaces the middle with a note', () => {
     const text = `HEAD${'-'.repeat(10_000)}TAIL`
     const short = truncate(text, 1_000)
 
@@ -98,7 +98,7 @@ describe('truncateToolResults', () => {
     expect(truncate('small', 1_000)).toBe('small')
   })
 
-  it('超过上限的工具结果被截短，原始长度记在 details', async () => {
+  it('truncates tool results over the limit and records the original length in details', async () => {
     const model = fauxModel([callEcho('y'.repeat(5_000)), callEcho('ok'), fauxAssistantMessage('answer')])
     const agent = createAgent({
       model,
@@ -114,7 +114,7 @@ describe('truncateToolResults', () => {
 })
 
 describe('keepGoing', () => {
-  it('agent 空闲但任务没完成时插入「继续」，完成后停止', async () => {
+  it('inserts "continue" when the agent is idle but the task is unfinished, stops when done', async () => {
     const model = fauxModel([fauxAssistantMessage('step 1'), fauxAssistantMessage('step 2 DONE')])
     const plugin = keepGoing({
       isDone: s => s.messages.some(m => m.role === 'assistant' && textOf(m).includes('DONE')),
@@ -131,7 +131,7 @@ describe('keepGoing', () => {
     expect(plugin.select(state)).toBe(1)
   })
 
-  it('最多继续 maxTimes 次', async () => {
+  it('continues at most maxTimes times', async () => {
     const model = fauxModel([replyToLastUser, replyToLastUser, replyToLastUser])
     const plugin = keepGoing({ isDone: () => false, maxTimes: 2, prompt: 'continue' })
 
@@ -141,7 +141,7 @@ describe('keepGoing', () => {
 })
 
 describe('budget', () => {
-  it('累计用量超过上限时结束，以最后一条助手消息作为结果', async () => {
+  it('stops when total usage exceeds the limit, using the last assistant message as the result', async () => {
     const model = fauxModel([callEcho('a'), callEcho('b'), fauxAssistantMessage('never reached')])
     const agent = createAgent({ model, tools: [echo], plugins: [budget({ maxTokens: 1 })] })
 

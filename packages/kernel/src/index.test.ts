@@ -82,23 +82,23 @@ async function expectSame(a: TestAgent, b: TestAgent): Promise<void> {
 }
 
 describe('unfold / run', () => {
-  it('run 折叠整条轨迹，只返回结果', async () => {
+  it('run folds the whole trajectory and returns only the result', async () => {
     expect(await run(base, [])).toBe('60')
   })
 
-  it('超过 maxSteps 抛错', async () => {
+  it('throws when maxSteps is exceeded', async () => {
     const endless = extend(base, { update: (s, a, o, next) => next(s, a, o).slice(-1) })
     await expect(run(endless, [], 5)).rejects.toThrow('did not terminate within 5 steps')
   })
 })
 
-describe('extend：附录 A.1 的定律', () => {
-  it('空中间件不改变行为', async () => {
+describe('extend: laws from appendix A.1', () => {
+  it('an empty extension does not change behavior', async () => {
     await expectSame(extend(base, {}), base)
     await expectSame(extend(base), base)
   })
 
-  it('分批应用 = 一次应用（承诺 1）', async () => {
+  it('applying in batches equals applying at once (guarantee 1)', async () => {
     await fc.assert(
       fc.asyncProperty(exts, exts, async (xs, ys) => {
         await expectSame(extend(extend(base, ...xs), ...ys), extend(base, ...xs, ...ys))
@@ -107,7 +107,7 @@ describe('extend：附录 A.1 的定律', () => {
     )
   })
 
-  it('不同字段上的中间件可交换（承诺 2）', async () => {
+  it('middleware on different fields commute (guarantee 2)', async () => {
     await fc.assert(
       fc.asyncProperty(sample, sample, async (x, y) => {
         fc.pre(x.field !== y.field)
@@ -117,7 +117,7 @@ describe('extend：附录 A.1 的定律', () => {
     )
   })
 
-  it('同一字段上的 pre 与 post 可交换（承诺 2）', async () => {
+  it('pre and post on the same field commute (guarantee 2)', async () => {
     for (const field of ['policy', 'env', 'update'] as const) {
       const pre = samples.find(x => x.field === field && x.kind === 'pre')!.ext
       const post = samples.find(x => x.field === field && x.kind === 'post')!.ext
@@ -125,13 +125,13 @@ describe('extend：附录 A.1 的定律', () => {
     }
   })
 
-  it('灵敏度：同一字段上两个 pre 交换顺序，行为不同', async () => {
+  it('sensitivity: swapping two pres on the same field changes behavior', async () => {
     const double: Ext = { env: (a, next) => next(a * 2) }
     const inc: Ext = { env: (a, next) => next(a + 1) }
     expect(await trace(extend(base, double, inc))).not.toEqual(await trace(extend(base, inc, double)))
   })
 
-  it('外层先收到输入、最后返回输出', async () => {
+  it('the outer layer receives input first and returns output last', async () => {
     const log: string[] = []
     const tag = (name: string): Ext => ({
       env: async (a, next) => {
@@ -146,7 +146,7 @@ describe('extend：附录 A.1 的定律', () => {
     expect(log).toEqual(['outer>', 'inner>', '<inner', '<outer'])
   })
 
-  it('mapState = update 上的 post', async () => {
+  it('mapState equals a post on update', async () => {
     const f = (s: S): S => s.map(v => v + 1)
     await expectSame(mapState(base, f), extend(base, { update: (s, a, o, next) => f(next(s, a, o)) }))
   })

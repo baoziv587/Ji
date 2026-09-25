@@ -98,8 +98,8 @@ function tracer(name: string, log: string[]): PluginSpec {
 
 /* ── 基本运行 ───────────────────────────────────────── */
 
-describe('基本运行', () => {
-  it('工具并行执行，schema 校验失败作为 isError 结果交还模型', async () => {
+describe('basic run', () => {
+  it('runs tools in parallel; schema validation failures go back to the model as isError results', async () => {
     const model = fauxModel([
       fauxAssistantMessage([fauxToolCall('echo', { x: 'hi' }), fauxToolCall('echo', { y: 1 })], {
         stopReason: 'toolUse',
@@ -114,12 +114,12 @@ describe('基本运行', () => {
     expect(textOf(final)).toBe('got HI')
   })
 
-  it('最终回答写入状态（S8）', async () => {
+  it('writes the final answer into state (S8)', async () => {
     const r = createSession(createAgent({ model: fauxModel([fauxAssistantMessage('ok')]) })).send('go')
     expect((await r.state).messages.at(-1)).toBe(await r.result)
   })
 
-  it('stopReason=error 时 result 和 summary reject，turns 抛出', async () => {
+  it('on stopReason=error, result and summary reject and turns throws', async () => {
     const model = fauxModel([
       fauxAssistantMessage([fauxText('partial')], { stopReason: 'error', errorMessage: 'boom' }),
     ])
@@ -130,7 +130,7 @@ describe('基本运行', () => {
     await expect(collect(r.turns)).rejects.toThrow(/boom/)
   })
 
-  it('提前退出 r.text 会取消运行，底层请求被 abort', async () => {
+  it('breaking out of r.text cancels the run and aborts the underlying request', async () => {
     let seen: AbortSignal | undefined
     const model = fauxModel(
       [
@@ -154,7 +154,7 @@ describe('基本运行', () => {
     expect(seen?.aborted).toBe(true)
   })
 
-  it('底层事件仍然可以逐个读取', async () => {
+  it('raw events can still be read one by one', async () => {
     const r = createSession(createAgent({ model: fauxModel([fauxAssistantMessage('ok')]) })).send('go')
     const tags = (await collect(r)).map(e => e.tag)
     expect(tags.filter(t => t !== 'delta')).toEqual(['act', 'act', 'done'])
@@ -163,8 +163,8 @@ describe('基本运行', () => {
 
 /* ── 插件中间件（RFC-0003） ─────────────────────────── */
 
-describe('插件中间件', () => {
-  it('数组中后面的插件在外层', async () => {
+describe('plugin middleware', () => {
+  it('later plugins in the array wrap earlier ones', async () => {
     const log: string[] = []
     const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
     const plugins = [definePlugin(tracer('inner', log)), definePlugin(tracer('outer', log))]
@@ -173,7 +173,7 @@ describe('插件中间件', () => {
     expect(log).toEqual(['outer>', 'inner>', '<inner', '<outer'])
   })
 
-  it('不调用 next 即拦截：工具不执行，模型收到 isError 结果', async () => {
+  it('not calling next intercepts: the tool does not run and the model gets an isError result', async () => {
     let ran = false
     const spy = tool({
       ...echo,
@@ -195,7 +195,7 @@ describe('插件中间件', () => {
     expect(ran).toBe(false)
   })
 
-  it('中间件抛出的异常转为 isError 结果，agent 继续运行（I8）', async () => {
+  it('errors thrown by middleware become isError results and the agent keeps running (I8)', async () => {
     const boom = definePlugin({
       name: 'boom',
       tool: async () => {
@@ -217,7 +217,7 @@ describe('插件中间件', () => {
     expect(textOf(final)).toBe('recovered')
   })
 
-  it('system 按插件顺序依次修改', async () => {
+  it('system is transformed in plugin order', async () => {
     let prompt: string | undefined
     const model = fauxModel([
       ctx => {
@@ -232,7 +232,7 @@ describe('插件中间件', () => {
     expect(prompt).toBe('S+A+B')
   })
 
-  it('嵌套数组与拍平后的数组行为相同（承诺 1）', async () => {
+  it('nested arrays behave the same as flattened ones (guarantee 1)', async () => {
     const orders: string[][] = []
 
     for (const shape of ['left', 'right'] as const) {
@@ -248,11 +248,11 @@ describe('插件中间件', () => {
   })
 })
 
-describe('冲突检查', () => {
+describe('conflict checks', () => {
   const model = registerFauxProvider().getModel()
   const echo2 = tool({ ...echo })
 
-  it('重名一次报全（承诺 3）', () => {
+  it('reports all name conflicts at once (guarantee 3)', () => {
     const p1 = definePlugin({ name: 'dup', tools: [echo] })
     const p2 = definePlugin({ name: 'dup', tools: [echo2] })
 
@@ -264,7 +264,7 @@ describe('冲突检查', () => {
     }
   })
 
-  it('同一个对象登记多次不算冲突', () => {
+  it('registering the same object twice is not a conflict', () => {
     const p = definePlugin({ name: 'p', tools: [echo] })
     expect(() => createAgent({ model, tools: [echo], plugins: [p, p] })).not.toThrow()
   })
@@ -272,13 +272,13 @@ describe('冲突检查', () => {
 
 /* ── 插件状态 ───────────────────────────────────────── */
 
-describe('插件状态', () => {
+describe('plugin state', () => {
   const modelTurns = definePlugin({
     name: 'model-turns',
     state: { init: 0, reduce: (n, turn) => (turn.kind === 'model' ? n + 1 : n) },
   })
 
-  it('每一步都调用 reduce，包括最终回答；未写入时 select 返回 init', async () => {
+  it('calls reduce on every step including the final answer; select returns init before any write', async () => {
     const model = fauxModel([callEcho('a'), callEcho('b'), fauxAssistantMessage('ok')])
     const state = await createSession(createAgent({ model, tools: [echo], plugins: [modelTurns] })).send('go').state
 
@@ -286,7 +286,7 @@ describe('插件状态', () => {
     expect(modelTurns.select({ messages: [], plugins: {} })).toBe(0)
   })
 
-  it('热插拔：换插件列表后从同一个状态继续，新插件从 init 开始（承诺 4）', async () => {
+  it('hot swap: a new plugin list continues from the same state, new plugins start from init (guarantee 4)', async () => {
     const first = await createSession(
       createAgent({ model: fauxModel([callEcho('a'), fauxAssistantMessage('ok')]), tools: [echo] }),
     ).send('go').state
@@ -303,8 +303,8 @@ describe('插件状态', () => {
 
 /* ── 钩子（RFC-0004 §4） ────────────────────────────── */
 
-describe('钩子', () => {
-  it('input：agent 空闲时自动继续一次', async () => {
+describe('hooks', () => {
+  it('input: continues once automatically when the agent is idle', async () => {
     const keepGoing = definePlugin({
       name: 'keep-going',
       input: (messages, { state, idle }) => {
@@ -318,7 +318,7 @@ describe('钩子', () => {
     expect(state.messages.map(contentOf)).toEqual(['go', 're:go', 'continue', 're:continue'])
   })
 
-  it('context：只改这一次请求，不改历史', async () => {
+  it('context: changes only this request, not the history', async () => {
     const lastOnly = definePlugin({ name: 'last-only', context: messages => messages.slice(-1) })
     const model = fauxModel([
       callEcho('a'),
@@ -332,7 +332,7 @@ describe('钩子', () => {
     expect(state.messages).toHaveLength(4)
   })
 
-  it('request：before 改请求，after 改最终消息，增量照常转发', async () => {
+  it('request: before changes the request, after changes the final message, deltas pass through', async () => {
     const plugin = definePlugin({
       name: 'request',
       request: before(req => ({ ...req, systemPrompt: 'patched' })),
@@ -348,7 +348,7 @@ describe('钩子', () => {
     expect(textOf(await r.result)).toBe('replaced')
   })
 
-  it('tool：after 只改输出', async () => {
+  it('tool: after changes only the output', async () => {
     const redact = definePlugin({
       name: 'redact',
       tool: after(result => ({ ...result, content: [{ type: 'text', text: '***' }] })),
@@ -364,7 +364,7 @@ describe('钩子', () => {
     await createSession(createAgent({ model, tools: [echo], plugins: [redact] })).send('go').result
   })
 
-  it('update 看到所有 Turn', async () => {
+  it('update sees every Turn', async () => {
     const seen: Turn['kind'][] = []
     const spy = definePlugin({
       name: 'spy',
@@ -380,7 +380,7 @@ describe('钩子', () => {
   })
 })
 
-describe('思考档位（reasoning）', () => {
+describe('reasoning levels', () => {
   /** 和 DeepSeek 一样只支持 high、xhigh 的模型；记下每次请求实际带的 reasoning */
   function thinker(seen: unknown[], { reasoning = true, calls = 1 } = {}): Model<Api> {
     const faux = registerFauxProvider({ models: [{ id: 'thinker', reasoning }] })
@@ -397,7 +397,7 @@ describe('思考档位（reasoning）', () => {
     }
   }
 
-  it('支持的档位原样传入，不支持的取最近的可用档位，不设就不带', async () => {
+  it('passes supported levels through, maps unsupported ones to the nearest available, omits it when unset', async () => {
     const seen: unknown[] = []
     const model = thinker(seen, { calls: 3 })
 
@@ -407,7 +407,7 @@ describe('思考档位（reasoning）', () => {
     expect(seen).toEqual(['xhigh', 'high', undefined])
   })
 
-  it('模型不能思考时去掉 reasoning', async () => {
+  it('drops reasoning when the model cannot reason', async () => {
     const seen: unknown[] = []
     const model = thinker(seen, { reasoning: false })
 
@@ -415,7 +415,7 @@ describe('思考档位（reasoning）', () => {
     expect(seen).toEqual([undefined])
   })
 
-  it('request 插件按请求改档位，同样按模型校验', async () => {
+  it('a request plugin can change the level per request, still validated against the model', async () => {
     const seen: unknown[] = []
     const think = definePlugin({
       name: 'think',
@@ -428,7 +428,7 @@ describe('思考档位（reasoning）', () => {
 })
 
 describe('rewriteHistory', () => {
-  it('policy 返回 rewriteHistory：历史被替换；env 不经过，update 和 state 看到 rewrite', async () => {
+  it('policy returning rewriteHistory replaces the history; env is skipped, update and state see the rewrite', async () => {
     let envCalls = 0
     const seen: Turn['kind'][] = []
     const compact = definePlugin({
@@ -468,7 +468,7 @@ describe('rewriteHistory', () => {
 
 /* ── Run：记录与统计（RFC-0004 §6） ─────────────────── */
 
-describe('记录与统计（Run）', () => {
+describe('run records and stats', () => {
   const failing = tool({
     ...echo,
     name: 'fail',
@@ -477,7 +477,7 @@ describe('记录与统计（Run）', () => {
     },
   })
 
-  it('summary 统计模型回合、用量、工具调用与出错、插入的消息', async () => {
+  it('summary counts model turns, usage, tool calls and errors, and inserted messages', async () => {
     const model = fauxModel([
       fauxAssistantMessage([fauxToolCall('echo', { x: 'a' }), fauxToolCall('fail', { x: 'b' })], {
         stopReason: 'toolUse',
@@ -496,7 +496,7 @@ describe('记录与统计（Run）', () => {
     expect(summary.usage).toEqual(usageOf(await r.state))
   })
 
-  it('turns 无论何时读都从第一步开始；最后一条的 summary 等于 r.summary（承诺 5）', async () => {
+  it('turns always starts from the first step; the last summary equals r.summary (guarantee 5)', async () => {
     const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
     const r = createSession(createAgent({ model, tools: [echo] })).send('go')
 
@@ -508,7 +508,7 @@ describe('记录与统计（Run）', () => {
     expect(turns.at(-1)?.summary).toEqual(await r.summary)
   })
 
-  it('模型回合带耗时：首 token、模型、每个工具', async () => {
+  it('model turns record timing: first token, model, and each tool', async () => {
     const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
     const turns = await collect(createSession(createAgent({ model, tools: [echo] })).send('go').turns)
     const [, withTool, final] = turns
@@ -522,7 +522,7 @@ describe('记录与统计（Run）', () => {
 
 /* ── 会话与插话（RFC-0004 §7） ──────────────────────── */
 
-describe('会话与插话', () => {
+describe('sessions and interjections', () => {
   const blocked = (g: ReturnType<typeof gate>): AgentTool =>
     tool({
       name: 'wait',
@@ -535,7 +535,7 @@ describe('会话与插话', () => {
     })
   const callWait = fauxAssistantMessage([fauxToolCall('wait', {})], { stopReason: 'toolUse' })
 
-  it('运行中 send 返回同一个 Run；结束后 send 开始新的 Run', async () => {
+  it('send during a run returns the same Run; send after it ends starts a new Run', async () => {
     const g = gate()
     const chat = createSession(
       createAgent({
@@ -555,7 +555,7 @@ describe('会话与插话', () => {
     expect(textOf(await second.result)).toBe('re:next')
   })
 
-  it('steer 在下一个步边界插入；follow-up 等 agent 空闲后插入', async () => {
+  it('steer is inserted at the next step boundary; follow-up waits until the agent is idle', async () => {
     const g = gate()
     const model = fauxModel([
       callWait,
@@ -586,7 +586,7 @@ describe('会话与插话', () => {
     expect((await r.state).messages.map(contentOf).slice(-4)).toEqual(['steer', 're:steer', 'follow', 're:follow'])
   })
 
-  it('排队的 follow-up 等于依次发送（承诺 7，S1）', async () => {
+  it('queued follow-ups equal sending them one by one (guarantee 7, S1)', async () => {
     const script = (): FauxResponseStep[] => [
       callEcho('a'),
       ...Array.from<FauxResponseStep>({ length: 6 }).fill(replyToLastUser),
@@ -606,7 +606,7 @@ describe('会话与插话', () => {
     expect(together.messages.map(contentOf)).toEqual(sequential.state.messages.map(contentOf))
   })
 
-  it('interrupt：取消正在输出的模型回合，不留痕迹（承诺 9，S4）', async () => {
+  it('interrupt: cancels a streaming model turn without a trace (guarantee 9, S4)', async () => {
     const model = fauxModel(
       [fauxAssistantMessage('a very long answer that will be cut off before it finishes streaming'), replyToLastUser],
       { tokensPerSecond: 20 },
@@ -626,7 +626,7 @@ describe('会话与插话', () => {
     expect(turns.map(e => (e.turn.kind === 'input' ? e.turn.interrupted : null))).toEqual([false, true, null])
   })
 
-  it('interrupt：取消正在执行的工具，这个模型回合被丢弃', async () => {
+  it('interrupt: cancels running tools and discards that model turn', async () => {
     const started = Promise.withResolvers<void>()
     const hang = tool({
       name: 'hang',
@@ -651,7 +651,7 @@ describe('会话与插话', () => {
     expect((await r.state).messages.map(contentOf)).toEqual(['go', 'stop', 're:stop'])
   })
 
-  it('abort：尚未送达的消息留在会话里，下一次运行处理', async () => {
+  it('abort: undelivered messages stay in the session for the next run', async () => {
     const model = fauxModel(
       [
         fauxAssistantMessage('a very long answer that will be aborted'),
@@ -677,7 +677,7 @@ describe('会话与插话', () => {
     expect(chat.pending).toEqual([])
   })
 
-  it('自定义条件不成立的消息继续等待，运行照常结束', async () => {
+  it('messages whose custom condition fails keep waiting and the run ends normally', async () => {
     const chat = createSession(createAgent({ model: fauxModel([replyToLastUser]) }))
     const r = chat.send('go')
     chat.send('never', { when: () => false })

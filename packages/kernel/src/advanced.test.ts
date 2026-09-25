@@ -49,7 +49,7 @@ async function trace<T>(agent: Agent<T, any, any, any, any>, s0: T): Promise<unk
   return events
 }
 
-describe('widen：增加动作种类', () => {
+describe('widen: adds action kinds', () => {
   interface Compact {
     compact: true
   }
@@ -77,14 +77,14 @@ describe('widen：增加动作种类', () => {
     )
   })
 
-  it('liftWiden 在类型上拒绝 policy 中间件', () => {
+  it('liftWiden rejects policy middleware at the type level', () => {
     const policyExt: Ext = { policy: (s, next) => next(s) }
     // @ts-expect-error policy 中间件的输出含动作类型，没有通用提升
     expect(() => liftWiden(policyExt, isCompact)).not.toThrow()
   })
 })
 
-describe('withState：扩大状态', () => {
+describe('withState: extends state', () => {
   interface T {
     messages: S
     count: number
