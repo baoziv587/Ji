@@ -14,8 +14,10 @@ const fetchPage = tool({
 })
 
 const model = pickModel([
-  fauxAssistantMessage([fauxText('抓一下这个页面。'), fauxToolCall('fetch_page', { url: 'https://example.com' })], { stopReason: 'toolUse' }),
-  (ctx) => {
+  fauxAssistantMessage([fauxText('抓一下这个页面。'), fauxToolCall('fetch_page', { url: 'https://example.com' })], {
+    stopReason: 'toolUse',
+  }),
+  ctx => {
     const result = ctx.messages.at(-1)
     const size = result?.role === 'toolResult' ? JSON.stringify(result.content).length : 0
     return fauxAssistantMessage(`我收到的页面内容约 ${size} 个字符。`)

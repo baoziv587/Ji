@@ -18,11 +18,11 @@
 
 ## 三层结构
 
-| 层 | 职责 | 类型 |
-| --- | --- | --- |
-| `@gaoxiang.ai/kernel` | `(π, ε, δ)` 代数、`unfold`、`extend`。与 LLM 和 IO 无关 | 泛型 `S, A, O, R, D` |
-| `@gaoxiang.ai/llm` agent | 用 pi-ai 实现 `(π, ε, δ)`，把插件编译成内核中间件 | `S = AgentState`、`O = ToolResultMessage[]`、`D = AssistantMessageEvent` |
-| `@gaoxiang.ai/llm` session | 驱动 `unfold`，排队外部消息，遇到中断时把一次运行分段 | `Session`、`Run` |
+| 层                         | 职责                                                    | 类型                                                                     |
+| -------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `@gaoxiang.ai/kernel`      | `(π, ε, δ)` 代数、`unfold`、`extend`。与 LLM 和 IO 无关 | 泛型 `S, A, O, R, D`                                                     |
+| `@gaoxiang.ai/llm` agent   | 用 pi-ai 实现 `(π, ε, δ)`，把插件编译成内核中间件       | `S = AgentState`、`O = ToolResultMessage[]`、`D = AssistantMessageEvent` |
+| `@gaoxiang.ai/llm` session | 驱动 `unfold`，排队外部消息，遇到中断时把一次运行分段   | `Session`、`Run`                                                         |
 
 ## 一步里发生了什么
 
@@ -41,11 +41,11 @@ agent **空闲**是指：历史为空，或者最后一条是没有工具调用�
 
 每一步恰好产生一条 **Turn**，`update`、`state.reduce`、`Run.turns` 看到的是同一个序列：
 
-| `turn.kind` | 来源 | 对历史的影响 |
-| --- | --- | --- |
-| `model` | 模型回复及其工具结果；最终回答的 `results: []` | 追加消息和结果 |
-| `input` | 在步边界插入的外部消息（用户、steer、follow-up、插件） | 追加消息 |
-| `rewrite` | `policy` 中间件返回的 `rewriteHistory(messages)` | 替换整个历史 |
+| `turn.kind` | 来源                                                   | 对历史的影响   |
+| ----------- | ------------------------------------------------------ | -------------- |
+| `model`     | 模型回复及其工具结果；最终回答的 `results: []`         | 追加消息和结果 |
+| `input`     | 在步边界插入的外部消息（用户、steer、follow-up、插件） | 追加消息       |
+| `rewrite`   | `policy` 中间件返回的 `rewriteHistory(messages)`       | 替换整个历史   |
 
 最终回答在运行结束前就已经写入，所以它同样经过 `update`。
 

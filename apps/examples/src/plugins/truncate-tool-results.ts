@@ -16,7 +16,7 @@ export function truncateToolResults({ maxChars = 8_000 }: TruncateOptions = {}):
   return definePlugin({
     name: 'truncate-tool-results',
 
-    tool: after((result) => {
+    tool: after(result => {
       const originalChars = result.content.reduce((n, c) => n + (c.type === 'text' ? c.text.length : 0), 0)
       if (originalChars <= maxChars) {
         return result

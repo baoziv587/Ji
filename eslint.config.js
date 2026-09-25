@@ -2,7 +2,12 @@ import antfu from '@antfu/eslint-config'
 import { createSlopConfig } from 'eslint-plugin-slop'
 
 export default antfu(
-  { type: 'lib', typescript: true },
+  {
+    type: 'lib',
+    typescript: true,
+    // 格式化交给 oxfmt，ESLint 只管代码质量
+    stylistic: false,
+  },
   ...createSlopConfig({
     cwd: import.meta.dirname,
   }),

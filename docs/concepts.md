@@ -14,15 +14,15 @@ The kernel describes any agent as three functions:
 δ  update  : S × A × O → S      record: compute the next state (sync, pure)
 ```
 
-`unfold` repeats *decide → act → record* until the policy returns a result. The output is a lazy stream of events. `extend` wraps any of the three functions in middleware, and that is the only way to extend an agent.
+`unfold` repeats _decide → act → record_ until the policy returns a result. The output is a lazy stream of events. `extend` wraps any of the three functions in middleware, and that is the only way to extend an agent.
 
 ## Three layers
 
-| Layer | Responsibility | Types |
-| --- | --- | --- |
-| `@gaoxiang.ai/kernel` | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO. | Generic `S, A, O, R, D` |
-| `@gaoxiang.ai/llm` agent | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware. | `S = AgentState`, `O = ToolResultMessage[]`, `D = AssistantMessageEvent` |
-| `@gaoxiang.ai/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run` |
+| Layer                      | Responsibility                                                                     | Types                                                                    |
+| -------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `@gaoxiang.ai/kernel`      | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO.       | Generic `S, A, O, R, D`                                                  |
+| `@gaoxiang.ai/llm` agent   | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware.        | `S = AgentState`, `O = ToolResultMessage[]`, `D = AssistantMessageEvent` |
+| `@gaoxiang.ai/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run`                                                         |
 
 ## What happens in one step
 
@@ -41,11 +41,11 @@ The agent is **idle** when the history is empty, or the last message is an assis
 
 Every step produces exactly one **Turn**, and `update`, `state.reduce` and `Run.turns` all see the same sequence:
 
-| `turn.kind` | Produced by | Effect on history |
-| --- | --- | --- |
-| `model` | A model reply plus its tool results. The final answer has `results: []`. | Appends message + results |
-| `input` | External messages inserted at a boundary (user, steer, follow-up, plugin) | Appends messages |
-| `rewrite` | `rewriteHistory(messages)` returned from a `policy` middleware | Replaces history |
+| `turn.kind` | Produced by                                                               | Effect on history         |
+| ----------- | ------------------------------------------------------------------------- | ------------------------- |
+| `model`     | A model reply plus its tool results. The final answer has `results: []`.  | Appends message + results |
+| `input`     | External messages inserted at a boundary (user, steer, follow-up, plugin) | Appends messages          |
+| `rewrite`   | `rewriteHistory(messages)` returned from a `policy` middleware            | Replaces history          |
 
 The final answer is recorded before the run ends, so it also goes through `update`.
 

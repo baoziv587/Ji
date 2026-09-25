@@ -27,12 +27,17 @@ function reply(ctx: Context): ReturnType<typeof fauxAssistantMessage> {
   return fauxAssistantMessage(`好的：${last?.content}。`)
 }
 
-const model = pickModel([
-  fauxAssistantMessage([fauxText('先跑一遍测试。'), fauxToolCall('run_tests', { runner: 'jest' })], { stopReason: 'toolUse' }),
-  reply, // 看到 steer「改用 vitest」
-  fauxAssistantMessage(`## Changelog\n${Array.from({ length: 40 }, (_, i) => `- 第 ${i + 1} 条修改`).join('\n')}`), // 处理 follow-up「然后更新 changelog」，写到一半被 interrupt
-  reply, // 看到 interrupt「停，先列大纲」
-], 60)
+const model = pickModel(
+  [
+    fauxAssistantMessage([fauxText('先跑一遍测试。'), fauxToolCall('run_tests', { runner: 'jest' })], {
+      stopReason: 'toolUse',
+    }),
+    reply, // 看到 steer「改用 vitest」
+    fauxAssistantMessage(`## Changelog\n${Array.from({ length: 40 }, (_, i) => `- 第 ${i + 1} 条修改`).join('\n')}`), // 处理 follow-up「然后更新 changelog」，写到一半被 interrupt
+    reply, // 看到 interrupt「停，先列大纲」
+  ],
+  60,
+)
 
 const chat = createSession(createAgent({ model, tools: [runTests] }))
 const r = chat.send('修复失败的测试')
@@ -54,4 +59,10 @@ const interrupt = setInterval(() => {
 
 await show(r)
 clearInterval(interrupt)
-console.log('\nfinal history:', chat.state.messages.map(m => `${m.role}: ${typeof m.content === 'string' ? m.content : m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')}`))
+console.log(
+  '\nfinal history:',
+  chat.state.messages.map(
+    m =>
+      `${m.role}: ${typeof m.content === 'string' ? m.content : m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')}`,
+  ),
+)

@@ -89,21 +89,21 @@ DEEPSEEK_API_KEY=sk-... DEEPSEEK_THINKING=high pnpm repl   # 一开始就打开�
 
 ## 包
 
-| 包 | 是什么 | 什么时候用 |
-| --- | --- | --- |
-| [`@gaoxiang.ai/llm`](packages/llm) | LLM agent：`createAgent`、`createSession`、`definePlugin`、`tool` | 几乎总是 |
-| [`@gaoxiang.ai/kernel`](packages/kernel) | 不绑定任何模型的内核：`unfold`、`extend` 等工具函数。零依赖 | 写非 LLM 的 agent，或者搭新的一层时 |
-| [`apps/demo`](apps/demo) | 最小的端到端例子 | 入门 |
-| [`apps/examples`](apps/examples) | 场景示例和可以直接复制的插件 | 写自己的插件时 |
+| 包                                       | 是什么                                                            | 什么时候用                          |
+| ---------------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
+| [`@gaoxiang.ai/llm`](packages/llm)       | LLM agent：`createAgent`、`createSession`、`definePlugin`、`tool` | 几乎总是                            |
+| [`@gaoxiang.ai/kernel`](packages/kernel) | 不绑定任何模型的内核：`unfold`、`extend` 等工具函数。零依赖       | 写非 LLM 的 agent，或者搭新的一层时 |
+| [`apps/demo`](apps/demo)                 | 最小的端到端例子                                                  | 入门                                |
+| [`apps/examples`](apps/examples)         | 场景示例和可以直接复制的插件                                      | 写自己的插件时                      |
 
 ## 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [核心概念](docs/zh-CN/concepts.md) | 一步是怎么运行的、分层结构，以及设计遵守的几条规则 |
-| [会话与运行](docs/zh-CN/sessions-and-runs.md) | 流式输出、插话、停止、保存与加载、统计 |
-| [编写插件](docs/zh-CN/plugins.md) | 所有钩子、执行顺序，以及每种需求该用哪个钩子 |
-| [内核 API](docs/zh-CN/kernel.md) | `unfold`、`extend` 和其他内核工具函数 |
+| 文档                                          | 内容                                               |
+| --------------------------------------------- | -------------------------------------------------- |
+| [核心概念](docs/zh-CN/concepts.md)            | 一步是怎么运行的、分层结构，以及设计遵守的几条规则 |
+| [会话与运行](docs/zh-CN/sessions-and-runs.md) | 流式输出、插话、停止、保存与加载、统计             |
+| [编写插件](docs/zh-CN/plugins.md)             | 所有钩子、执行顺序，以及每种需求该用哪个钩子       |
+| [内核 API](docs/zh-CN/kernel.md)              | `unfold`、`extend` 和其他内核工具函数              |
 
 ## 开发
 

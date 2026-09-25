@@ -84,14 +84,18 @@ interface Parts {
  */
 function baseAgent(parts: Parts, ctx: RunContext): LLMAgent {
   const { model, systemPrompt, plugins, streamOptions } = parts
-  const specs = parts.tools.map(({ name, description, parameters }) => ({ name, description, parameters }))
+  const specs = parts.tools.map(({ name, description, parameters }) => ({
+    name,
+    description,
+    parameters,
+  }))
 
   const inputs = plugins.flatMap(p => (p.input ? [p.input] : []))
   const contexts = plugins.flatMap(p => (p.context ? [p.context] : []))
   const request = plugins.reduce(wrapRequest, callModel(ctx.signal))
 
   return {
-    async* policy(state) {
+    async *policy(state) {
       const boundary = { state, idle: isIdle(state) }
       const messages = await applyTransforms(inputs, ctx.offer(boundary), boundary)
 
@@ -103,7 +107,14 @@ function baseAgent(parts: Parts, ctx: RunContext): LLMAgent {
       }
 
       const view = await applyTransforms(contexts, state.messages, state)
-      const msg = yield* request({ model, systemPrompt, messages: view, tools: specs, options: streamOptions, state })
+      const msg = yield* request({
+        model,
+        systemPrompt,
+        messages: view,
+        tools: specs,
+        options: streamOptions,
+        state,
+      })
       return act(msg)
     },
 
@@ -118,15 +129,21 @@ function callModel(signal: AbortSignal): ModelCall {
   return async function* ({ model, systemPrompt, messages, tools, options }) {
     const ctl = new AbortController()
     const requestSignal = AbortSignal.any([signal, ctl.signal])
-    const context = { systemPrompt: systemPrompt === '' ? undefined : systemPrompt, messages, tools }
-    const events = streamSimple(model, context, { ...supportedReasoning(model, options), signal: requestSignal })
+    const context = {
+      systemPrompt: systemPrompt === '' ? undefined : systemPrompt,
+      messages,
+      tools,
+    }
+    const events = streamSimple(model, context, {
+      ...supportedReasoning(model, options),
+      signal: requestSignal,
+    })
 
     let finished = false
     try {
       yield* events
       finished = true
-    }
-    finally {
+    } finally {
       if (!finished) {
         ctl.abort()
       }
@@ -155,21 +172,25 @@ function supportedReasoning(model: Model<Api>, options: SimpleStreamOptions): Si
 
 /** 并行执行；中间件或工具抛出的异常都转为 isError 结果交还模型（I8） */
 function runTools(runTool: ToolRunner, msg: AssistantMessage, ctx: RunContext): Promise<ToolResultMessage[]> {
-  return Promise.all(callsOf(msg).map(async (call) => {
-    const start = performance.now()
-    try {
-      return await runTool({ call, signal: ctx.signal })
-    }
-    catch (e) {
-      return toolError(call, e)
-    }
-    finally {
-      ctx.toolTime(call.id, performance.now() - start)
-    }
-  }))
+  return Promise.all(
+    callsOf(msg).map(async call => {
+      const start = performance.now()
+      try {
+        return await runTool({ call, signal: ctx.signal })
+      } catch (e) {
+        return toolError(call, e)
+      } finally {
+        ctx.toolTime(call.id, performance.now() - start)
+      }
+    }),
+  )
 }
 
-async function applyTransforms<T, C>(fns: Array<(value: T, context: C) => T | Promise<T>>, value: T, context: C): Promise<T> {
+async function applyTransforms<T, C>(
+  fns: Array<(value: T, context: C) => T | Promise<T>>,
+  value: T,
+  context: C,
+): Promise<T> {
   let result = value
   for (const f of fns) {
     result = await f(result, context)

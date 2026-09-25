@@ -18,7 +18,14 @@ const search = tool({
 })
 
 const model = pickModel([
-  fauxAssistantMessage([fauxText('查两个关键词。'), fauxToolCall('search', { query: 'pi-ai' }), fauxToolCall('search', { query: 'agent kernel' })], { stopReason: 'toolUse' }),
+  fauxAssistantMessage(
+    [
+      fauxText('查两个关键词。'),
+      fauxToolCall('search', { query: 'pi-ai' }),
+      fauxToolCall('search', { query: 'agent kernel' }),
+    ],
+    { stopReason: 'toolUse' },
+  ),
   fauxAssistantMessage('两个关键词各有 3 条结果。'),
 ])
 
@@ -31,9 +38,13 @@ for await (const { t, turn, timing, summary } of r.turns) {
     continue
   }
 
-  const tools = Object.values(timing.toolMs ?? {}).map(ms).join(', ')
+  const tools = Object.values(timing.toolMs ?? {})
+    .map(ms)
+    .join(', ')
   process.stdout.write(`[t=${t}] first token ${ms(timing.firstTokenMs)}, model ${ms(timing.modelMs)}`)
-  console.log(`${tools ? `, tools ${tools}` : ''} · so far $${summary.usage.cost.toFixed(4)}, ${summary.usage.output} output tokens`)
+  console.log(
+    `${tools ? `, tools ${tools}` : ''} · so far $${summary.usage.cost.toFixed(4)}, ${summary.usage.output} output tokens`,
+  )
 }
 
 // 整次运行

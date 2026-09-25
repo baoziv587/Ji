@@ -15,14 +15,21 @@ const readFile = tool({
 })
 
 const model = pickModel([
-  fauxAssistantMessage([fauxText('先看 a.ts。'), fauxToolCall('read_file', { path: 'a.ts' })], { stopReason: 'toolUse' }),
-  fauxAssistantMessage([fauxText('再看 b.ts。'), fauxToolCall('read_file', { path: 'b.ts' })], { stopReason: 'toolUse' }),
+  fauxAssistantMessage([fauxText('先看 a.ts。'), fauxToolCall('read_file', { path: 'a.ts' })], {
+    stopReason: 'toolUse',
+  }),
+  fauxAssistantMessage([fauxText('再看 b.ts。'), fauxToolCall('read_file', { path: 'b.ts' })], {
+    stopReason: 'toolUse',
+  }),
   // ↓ 这一条被 compaction 插件用来写摘要
   fauxAssistantMessage('用户想知道 a.ts 和 b.ts 导出了什么；已读 a.ts，两者都导出 value = 42。'),
-  (ctx) => {
+  ctx => {
     const first = ctx.messages[0]
-    const compacted = first.role === 'user' && typeof first.content === 'string' && first.content.startsWith(SUMMARY_PREFIX)
-    return fauxAssistantMessage(compacted ? '（在压缩后的上下文中继续）两个文件都导出 value = 42。' : '两个文件都导出 value = 42。')
+    const compacted =
+      first.role === 'user' && typeof first.content === 'string' && first.content.startsWith(SUMMARY_PREFIX)
+    return fauxAssistantMessage(
+      compacted ? '（在压缩后的上下文中继续）两个文件都导出 value = 42。' : '两个文件都导出 value = 42。',
+    )
   },
 ])
 

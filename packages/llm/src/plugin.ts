@@ -1,6 +1,16 @@
 import type { Extension, Step, Stream } from '@gaoxiang.ai/kernel'
 import type { AssistantMessage, AssistantMessageEvent, Message, ToolResultMessage } from '@mariozechner/pi-ai'
-import type { AgentAction, AgentState, AgentTool, Boundary, ModelCall, ModelRequest, ToolContext, ToolRunner, Turn } from './types.ts'
+import type {
+  AgentAction,
+  AgentState,
+  AgentTool,
+  Boundary,
+  ModelCall,
+  ModelRequest,
+  ToolContext,
+  ToolRunner,
+  Turn,
+} from './types.ts'
 import { callsOf } from './message.ts'
 import { actionOf, isModelAction, turnOf } from './turn.ts'
 
@@ -29,7 +39,10 @@ export interface PluginSpec<State = undefined> {
   /** 中间件：一次模型调用 */
   request?: (req: ModelRequest, next: ModelCall) => Stream<AssistantMessageEvent, AssistantMessage>
   /** 中间件：一个模型回合的全部工具调用。没有工具调用的回合不经过它 */
-  env?: (msg: AssistantMessage, next: (msg: AssistantMessage) => Promise<ToolResultMessage[]>) => Promise<ToolResultMessage[]>
+  env?: (
+    msg: AssistantMessage,
+    next: (msg: AssistantMessage) => Promise<ToolResultMessage[]>,
+  ) => Promise<ToolResultMessage[]>
   /** 中间件：一次工具调用 */
   tool?: (ctx: ToolContext, next: ToolRunner) => Promise<ToolResultMessage>
   /** 中间件：写入状态。必须同步、纯；看到所有 Turn */
@@ -62,9 +75,9 @@ export function definePlugin<State = undefined>(spec: PluginSpec<State>): Plugin
 
 /** 工具或插件重名。createAgent 一次报出全部冲突 */
 export class PluginConflictError extends Error {
-  readonly conflicts: { tools: string[], plugins: string[] }
+  readonly conflicts: { tools: string[]; plugins: string[] }
 
-  constructor(conflicts: { tools: string[], plugins: string[] }) {
+  constructor(conflicts: { tools: string[]; plugins: string[] }) {
     const names = [
       ...conflicts.tools.map(name => `tool "${name}"`),
       ...conflicts.plugins.map(name => `plugin "${name}"`),
@@ -113,7 +126,10 @@ export function extensionOf(plugin: AnyPlugin): LLMExtension {
       if (!state) {
         return updated
       }
-      return { ...updated, plugins: { ...updated.plugins, [name]: state.reduce(select(updated), turn) } }
+      return {
+        ...updated,
+        plugins: { ...updated.plugins, [name]: state.reduce(select(updated), turn) },
+      }
     }
   }
 

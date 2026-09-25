@@ -4,11 +4,11 @@
 
 `@gaoxiang.ai/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@gaoxiang.ai/llm`](sessions-and-runs.md) wraps it for you.
 
-| Entry | Contents |
-| --- | --- |
-| `@gaoxiang.ai/kernel` | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `act`, `done` |
-| `@gaoxiang.ai/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden` |
-| `@gaoxiang.ai/kernel/reduce` | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan` |
+| Entry                          | Contents                                                                                 |
+| ------------------------------ | ---------------------------------------------------------------------------------------- |
+| `@gaoxiang.ai/kernel`          | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `act`, `done`   |
+| `@gaoxiang.ai/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden`                   |
+| `@gaoxiang.ai/kernel/reduce`   | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan` |
 
 ## Core
 
@@ -22,13 +22,13 @@ interface Agent<S, A, O, R, D = never> {
 
 A policy yields any number of deltas `D`, then returns `act(action)` to continue or `done(result)` to stop.
 
-| Function | Does |
-| --- | --- |
+| Function                          | Does                                                                                                                              |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `unfold(agent, s, maxSteps = 32)` | Lazy stream of events: `delta`, `act` (with `obs` and new `state`) and `done`. Calling `return()` on it cancels all the way down. |
-| `run(agent, s, maxSteps?)` | Folds `unfold` to the final result |
-| `extend(agent, ...exts)` | Applies middleware. **Earlier is inner, later is outer.** |
-| `mapState(agent, f)` | Shorthand for an `update` middleware that post-processes state |
-| `mapYield(stream, f)` | `yield*` with a map applied to each delta. Keeps the return value and propagates cancellation. |
+| `run(agent, s, maxSteps?)`        | Folds `unfold` to the final result                                                                                                |
+| `extend(agent, ...exts)`          | Applies middleware. **Earlier is inner, later is outer.**                                                                         |
+| `mapState(agent, f)`              | Shorthand for an `update` middleware that post-processes state                                                                    |
+| `mapYield(stream, f)`             | `yield*` with a map applied to each delta. Keeps the return value and propagates cancellation.                                    |
 
 An `Extension` has up to three middlewares with the same `(input, next)` shape as [LLM plugins](plugins.md#two-shapes).
 
@@ -43,7 +43,7 @@ const logged = extend(agent, {
 
 ## Changing type parameters (`/advanced`)
 
-Each transform comes with a *lift* that moves existing middleware onto the new type, so that
+Each transform comes with a _lift_ that moves existing middleware onto the new type, so that
 
 ```
 transform(extend(a, x)) ≃ extend(transform(a), lift(x))
@@ -51,10 +51,10 @@ transform(extend(a, x)) ≃ extend(transform(a), lift(x))
 
 That means code can always be written as `extend(transform(base), ...extensions)`.
 
-| Transform | Lift | Use |
-| --- | --- | --- |
-| `withState(agent, lens)`: `S → T` | `focus(ext, lens)` | Embed an agent in a larger state. The middleware only sees its own slice. |
-| `widen(agent, isNew, handlers)`: `A → A \| N` | `liftWiden(ext, isNew)` | Add a new kind of action, emitted by an outer middleware |
+| Transform                                     | Lift                    | Use                                                                       |
+| --------------------------------------------- | ----------------------- | ------------------------------------------------------------------------- |
+| `withState(agent, lens)`: `S → T`             | `focus(ext, lens)`      | Embed an agent in a larger state. The middleware only sees its own slice. |
+| `widen(agent, isNew, handlers)`: `A → A \| N` | `liftWiden(ext, isNew)` | Add a new kind of action, emitted by an outer middleware                  |
 
 A `Lens<T, S>` must satisfy the three lens laws: get-set, set-get and set-set. `liftWiden` only accepts `env`/`update` middleware. A policy middleware's output mentions `A`, so there is no general lift for it, and the types reject it.
 

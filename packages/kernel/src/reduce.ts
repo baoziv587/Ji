@@ -22,9 +22,15 @@ export function combine<In, Rs extends Record<string, AnyReducer<In>>>(
   const entries = Object.entries(reducers)
 
   return {
-    init: Object.fromEntries(entries.map(([key, r]) => [key, r.init])) as { [K in keyof Rs]: AccOf<Rs[K]> },
-    reduce: (acc, input) => Object.fromEntries(entries.map(([key, r]) => [key, r.reduce(acc[key], input)])) as typeof acc,
-    result: acc => Object.fromEntries(entries.map(([key, r]) => [key, resultOf(r, acc[key])])) as { [K in keyof Rs]: OutOf<Rs[K]> },
+    init: Object.fromEntries(entries.map(([key, r]) => [key, r.init])) as {
+      [K in keyof Rs]: AccOf<Rs[K]>
+    },
+    reduce: (acc, input) =>
+      Object.fromEntries(entries.map(([key, r]) => [key, r.reduce(acc[key], input)])) as typeof acc,
+    result: acc =>
+      Object.fromEntries(entries.map(([key, r]) => [key, resultOf(r, acc[key])])) as {
+        [K in keyof Rs]: OutOf<Rs[K]>
+      },
   }
 }
 
@@ -32,7 +38,10 @@ export function mapInput<A, B, Acc, Out>(r: Reducer<B, Acc, Out>, f: (input: A) 
   return { ...r, reduce: (acc, input) => r.reduce(acc, f(input)) }
 }
 
-export function filterInput<A, B extends A, Acc, Out>(r: Reducer<B, Acc, Out>, pred: (input: A) => input is B): Reducer<A, Acc, Out>
+export function filterInput<A, B extends A, Acc, Out>(
+  r: Reducer<B, Acc, Out>,
+  pred: (input: A) => input is B,
+): Reducer<A, Acc, Out>
 export function filterInput<A, Acc, Out>(r: Reducer<A, Acc, Out>, pred: (input: A) => boolean): Reducer<A, Acc, Out>
 export function filterInput<A, Acc, Out>(r: Reducer<A, Acc, Out>, pred: (input: A) => boolean): Reducer<A, Acc, Out> {
   return { ...r, reduce: (acc, input) => (pred(input) ? r.reduce(acc, input) : acc) }
@@ -47,7 +56,10 @@ export function resultOf<Acc, Out>(r: Reducer<any, Acc, Out>, acc: Acc): Out {
   return r.result ? r.result(acc) : passThrough<Out>(acc)
 }
 
-export async function reduce<In, Acc, Out>(source: AsyncIterable<In> | Iterable<In>, r: Reducer<In, Acc, Out>): Promise<Out> {
+export async function reduce<In, Acc, Out>(
+  source: AsyncIterable<In> | Iterable<In>,
+  r: Reducer<In, Acc, Out>,
+): Promise<Out> {
   let acc = r.init
   for await (const input of source) {
     acc = r.reduce(acc, input)
@@ -60,7 +72,10 @@ function passThrough<T>(value: unknown): T {
 }
 
 /** 每个输入之后输出一次中间结果（R4） */
-export async function* scan<In, Acc, Out>(source: AsyncIterable<In> | Iterable<In>, r: Reducer<In, Acc, Out>): AsyncGenerator<Out, void> {
+export async function* scan<In, Acc, Out>(
+  source: AsyncIterable<In> | Iterable<In>,
+  r: Reducer<In, Acc, Out>,
+): AsyncGenerator<Out, void> {
   let acc = r.init
   for await (const input of source) {
     acc = r.reduce(acc, input)

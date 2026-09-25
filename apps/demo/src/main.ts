@@ -18,7 +18,8 @@ const calc = tool({
   name: 'calc',
   description: 'Evaluate an arithmetic expression, e.g. "2*(3+4)".',
   parameters: Type.Object({ expr: Type.String() }),
-  run: ({ expr }) => { // expr 的类型 string 从 schema 推断
+  run: ({ expr }) => {
+    // expr 的类型 string 从 schema 推断
     if (!/^[\d\s+\-*/().]+$/.test(expr)) {
       throw new Error(`bad expr: ${expr}`)
     }
@@ -61,14 +62,18 @@ const printing = (async () => {
 
 for await (const { t, turn } of r.turns) {
   if (turn.kind === 'model' && turn.results.length > 0) {
-    const results = turn.results.map(res => (res.isError ? '✗ ' : '') + res.content.map(c => (c.type === 'text' ? c.text : '')).join(''))
+    const results = turn.results.map(
+      res => (res.isError ? '✗ ' : '') + res.content.map(c => (c.type === 'text' ? c.text : '')).join(''),
+    )
     console.log(`\n  [t=${t}] tools →`, JSON.stringify(results))
   }
 }
 await printing
 
 const [final, state, summary] = await Promise.all([r.result, r.state, r.summary])
-console.log(`\n  done: "${textOf(final)}"  (|S| = ${state.messages.length}, ${summary.turns} model turns, ${summary.usage.input + summary.usage.output} tokens)`)
+console.log(
+  `\n  done: "${textOf(final)}"  (|S| = ${state.messages.length}, ${summary.turns} model turns, ${summary.usage.input + summary.usage.output} tokens)`,
+)
 
 function pickModel(): Model<Api> {
   const spec = process.env.MODEL
@@ -84,9 +89,15 @@ function pickModel(): Model<Api> {
 
   const faux = registerFauxProvider({ tokensPerSecond: 80 })
   faux.setResponses([
-    fauxAssistantMessage([fauxText('先算乘法。'), fauxToolCall('calc', { expr: '17*23' })], { stopReason: 'toolUse' }),
-    fauxAssistantMessage([fauxText('故意漏掉参数。'), fauxToolCall('calc', {})], { stopReason: 'toolUse' }),
-    fauxAssistantMessage([fauxText('再加 9。'), fauxToolCall('calc', { expr: '391+9' })], { stopReason: 'toolUse' }),
+    fauxAssistantMessage([fauxText('先算乘法。'), fauxToolCall('calc', { expr: '17*23' })], {
+      stopReason: 'toolUse',
+    }),
+    fauxAssistantMessage([fauxText('故意漏掉参数。'), fauxToolCall('calc', {})], {
+      stopReason: 'toolUse',
+    }),
+    fauxAssistantMessage([fauxText('再加 9。'), fauxToolCall('calc', { expr: '391+9' })], {
+      stopReason: 'toolUse',
+    }),
     fauxAssistantMessage('17×23 = 391，再加 9 得 400。'),
   ])
   return faux.getModel()

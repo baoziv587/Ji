@@ -15,7 +15,9 @@ export function before<I, O>(f: (input: I) => I): Middleware<I, O> {
 export function after<I, T>(g: (output: T, input: I) => T): Middleware<I, Promise<T>> & Middleware<I, Stream<any, T>> {
   return ((input: I, next: (input: I) => Promise<T> | Stream<unknown, T>) => {
     const output = next(input)
-    return output instanceof Promise ? output.then(value => g(value, input)) : mapReturn(output, value => g(value, input))
+    return output instanceof Promise
+      ? output.then(value => g(value, input))
+      : mapReturn(output, value => g(value, input))
   }) as Middleware<I, Promise<T>> & Middleware<I, Stream<any, T>>
 }
 

@@ -1,5 +1,17 @@
 import type { Event, Agent as KernelAgent, Stream } from '@gaoxiang.ai/kernel'
-import type { Api, AssistantMessage, AssistantMessageEvent, Message, Model, SimpleStreamOptions, Static, Tool, ToolCall, ToolResultMessage, TSchema } from '@mariozechner/pi-ai'
+import type {
+  Api,
+  AssistantMessage,
+  AssistantMessageEvent,
+  Message,
+  Model,
+  SimpleStreamOptions,
+  Static,
+  Tool,
+  ToolCall,
+  ToolResultMessage,
+  TSchema,
+} from '@mariozechner/pi-ai'
 
 /** agent 状态：消息历史 + 各插件的状态（以插件名为键） */
 export interface AgentState {
@@ -13,10 +25,10 @@ export interface AgentState {
  * - input：在步边界插入的外部消息
  * - rewrite：rewriteHistory 替换了整个历史
  */
-export type Turn
-  = | { kind: 'model', message: AssistantMessage, results: ToolResultMessage[] }
-    | InputAction
-    | RewriteAction
+export type Turn =
+  | { kind: 'model'; message: AssistantMessage; results: ToolResultMessage[] }
+  | InputAction
+  | RewriteAction
 
 export interface InputAction {
   kind: 'input'
@@ -58,12 +70,20 @@ export interface ModelRequest {
 export type ModelCall = (req: ModelRequest) => Stream<AssistantMessageEvent, AssistantMessage>
 
 /** 内核层的 LLM agent。每次运行由 createAgent 的结果实例化一次 */
-export type LLMAgent = KernelAgent<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
+export type LLMAgent = KernelAgent<
+  AgentState,
+  AgentAction,
+  ToolResultMessage[],
+  AssistantMessage,
+  AssistantMessageEvent
+>
 export type AgentEvent = Event<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
 
 /** pi-ai 的 Tool（TypeBox schema）+ run。run 用方法签名是有意的：参数双变，AgentTool<具体 schema> 才能放进 AgentTool[] */
-// eslint-disable-next-line ts/method-signature-style
-export type AgentTool<T extends TSchema = TSchema> = Tool<T> & { run(args: Static<T>, signal: AbortSignal): string | Promise<string> }
+export type AgentTool<T extends TSchema = TSchema> = Tool<T> & {
+  // eslint-disable-next-line ts/method-signature-style
+  run(args: Static<T>, signal: AbortSignal): string | Promise<string>
+}
 
 export interface ToolContext {
   call: ToolCall
@@ -101,7 +121,7 @@ export interface RunSummary {
   /** 各次工具调用耗时之和；并行调用会重叠，所以可能大于实际经过的时间 */
   toolMs: number
   /** 以工具名为键 */
-  tools: Record<string, { calls: number, errors: number, ms: number }>
+  tools: Record<string, { calls: number; errors: number; ms: number }>
   /** 插入的外部消息数 */
   inputs: number
   /** 历史被替换的次数 */

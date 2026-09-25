@@ -36,15 +36,15 @@ Before each model call, the level is checked against the model that request actu
 
 All members share one execution, so you can read several at once.
 
-| Member | Type | Notes |
-| --- | --- | --- |
-| `r.text` | `AsyncIterable<string>` | Text deltas from the moment you start reading |
-| `r.turns` | `AsyncIterable<TurnEvent>` | One record per step: `turn`, `state`, `timing`, running `summary`. **Always replays from step 0.** |
-| `r` itself | `AsyncIterable<AgentEvent>` | Raw kernel events, including every model delta (thinking, tool args) |
-| `r.result` | `Promise<AssistantMessage>` | Final answer |
-| `r.state` | `Promise<AgentState>` | Final state |
-| `r.summary` | `Promise<RunSummary>` | Model turns, tokens, cost, model/tool time, per-tool calls/errors/ms |
-| `r.abort(reason?)` | | Cancels the run. Undelivered messages stay in the session. |
+| Member             | Type                        | Notes                                                                                              |
+| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------- |
+| `r.text`           | `AsyncIterable<string>`     | Text deltas from the moment you start reading                                                      |
+| `r.turns`          | `AsyncIterable<TurnEvent>`  | One record per step: `turn`, `state`, `timing`, running `summary`. **Always replays from step 0.** |
+| `r` itself         | `AsyncIterable<AgentEvent>` | Raw kernel events, including every model delta (thinking, tool args)                               |
+| `r.result`         | `Promise<AssistantMessage>` | Final answer                                                                                       |
+| `r.state`          | `Promise<AgentState>`       | Final state                                                                                        |
+| `r.summary`        | `Promise<RunSummary>`       | Model turns, tokens, cost, model/tool time, per-tool calls/errors/ms                               |
+| `r.abort(reason?)` |                             | Cancels the run. Undelivered messages stay in the session.                                         |
 
 `result`, `state` and `summary` reject if the run is aborted or fails.
 
@@ -71,12 +71,12 @@ await printing
 
 `send` while a run is active merges the message into **that same run** and returns the same `Run`. `when` picks the step boundary where the message is inserted:
 
-| `when` | Name | Delivered |
-| --- | --- | --- |
-| `'idle'` (default) | follow-up | When the agent has finished answering |
-| `'step'` | steer | At the next step boundary, e.g. right after the current tools finish |
-| `'now'` | interrupt | Cancels the current step now. Its partial output is discarded. |
-| `(boundary) => boolean` | custom | Whenever your predicate is true |
+| `when`                  | Name      | Delivered                                                            |
+| ----------------------- | --------- | -------------------------------------------------------------------- |
+| `'idle'` (default)      | follow-up | When the agent has finished answering                                |
+| `'step'`                | steer     | At the next step boundary, e.g. right after the current tools finish |
+| `'now'`                 | interrupt | Cancels the current step now. Its partial output is discarded.       |
+| `(boundary) => boolean` | custom    | Whenever your predicate is true                                      |
 
 ```ts
 chat.send('use vitest instead', { when: 'step' })

@@ -9,7 +9,7 @@ type Ext = Extension<S, number, number, string, string>
 type TestAgent = Agent<S, number, number, string, string>
 
 const base: TestAgent = {
-  async* policy(s) {
+  async *policy(s) {
     yield `d${s.length}`
     return s.length >= 3 ? done(String(s.reduce((a, b) => a + b, 0))) : act(s.length + 1)
   },
@@ -18,32 +18,51 @@ const base: TestAgent = {
 }
 
 /** 每个字段各有 pre / post / around，覆盖三种形态 */
-interface Sample { field: 'policy' | 'env' | 'update', kind: 'pre' | 'post' | 'around', ext: Ext }
+interface Sample {
+  field: 'policy' | 'env' | 'update'
+  kind: 'pre' | 'post' | 'around'
+  ext: Ext
+}
 
 const samples: Sample[] = [
   { field: 'policy', kind: 'pre', ext: { policy: (s, next) => next([...s, 100]) } },
-  { field: 'policy', kind: 'post', ext: {
-    async* policy(s, next) {
-      const step = yield* next(s)
-      return step.tag === 'act' ? act(step.action + 1) : step
+  {
+    field: 'policy',
+    kind: 'post',
+    ext: {
+      async *policy(s, next) {
+        const step = yield* next(s)
+        return step.tag === 'act' ? act(step.action + 1) : step
+      },
     },
-  } },
-  { field: 'policy', kind: 'around', ext: {
-    async* policy(s, next) {
-      yield 'x'
-      return yield* next(s)
+  },
+  {
+    field: 'policy',
+    kind: 'around',
+    ext: {
+      async *policy(s, next) {
+        yield 'x'
+        return yield* next(s)
+      },
     },
-  } },
+  },
   { field: 'env', kind: 'pre', ext: { env: (a, next) => next(a * 2) } },
   { field: 'env', kind: 'post', ext: { env: async (a, next) => (await next(a)) + 1 } },
   { field: 'env', kind: 'around', ext: { env: async (a, next) => (a > 2 ? -a : next(a)) } },
   { field: 'update', kind: 'pre', ext: { update: (s, a, o, next) => next(s, a, o * 3) } },
   { field: 'update', kind: 'post', ext: { update: (s, a, o, next) => next(s, a, o).slice(-2) } },
-  { field: 'update', kind: 'around', ext: { update: (s, a, o, next) => (s.length > 1 ? next(next(s, a, o), a, o) : next(s, a, o)) } },
+  {
+    field: 'update',
+    kind: 'around',
+    ext: { update: (s, a, o, next) => (s.length > 1 ? next(next(s, a, o), a, o) : next(s, a, o)) },
+  },
 ]
 
 const sample = fc.constantFrom(...samples)
-const exts = fc.array(sample.map(x => x.ext), { maxLength: 4 })
+const exts = fc.array(
+  sample.map(x => x.ext),
+  { maxLength: 4 },
+)
 
 /** 事件序列即可观测行为；超步数的异常也记为一个事件 */
 async function trace(agent: TestAgent): Promise<unknown[]> {
@@ -52,8 +71,7 @@ async function trace(agent: TestAgent): Promise<unknown[]> {
     for await (const e of unfold(agent, [], 8)) {
       events.push(e)
     }
-  }
-  catch (e) {
+  } catch (e) {
     events.push(String(e))
   }
   return events
@@ -81,16 +99,22 @@ describe('extend：附录 A.1 的定律', () => {
   })
 
   it('分批应用 = 一次应用（承诺 1）', async () => {
-    await fc.assert(fc.asyncProperty(exts, exts, async (xs, ys) => {
-      await expectSame(extend(extend(base, ...xs), ...ys), extend(base, ...xs, ...ys))
-    }), { numRuns: 300 })
+    await fc.assert(
+      fc.asyncProperty(exts, exts, async (xs, ys) => {
+        await expectSame(extend(extend(base, ...xs), ...ys), extend(base, ...xs, ...ys))
+      }),
+      { numRuns: 300 },
+    )
   })
 
   it('不同字段上的中间件可交换（承诺 2）', async () => {
-    await fc.assert(fc.asyncProperty(sample, sample, async (x, y) => {
-      fc.pre(x.field !== y.field)
-      await expectSame(extend(base, x.ext, y.ext), extend(base, y.ext, x.ext))
-    }), { numRuns: 300 })
+    await fc.assert(
+      fc.asyncProperty(sample, sample, async (x, y) => {
+        fc.pre(x.field !== y.field)
+        await expectSame(extend(base, x.ext, y.ext), extend(base, y.ext, x.ext))
+      }),
+      { numRuns: 300 },
+    )
   })
 
   it('同一字段上的 pre 与 post 可交换（承诺 2）', async () => {

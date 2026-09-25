@@ -41,14 +41,14 @@ const { usage, tools, modelMs } = await r.summary
 
 `Run` 的成员：
 
-| 成员 | 内容 |
-| --- | --- |
-| `r.text` | 模型输出的文字增量，只包含开始读取之后的部分 |
-| `r.turns` | 每一步一条记录：`turn`（这一步做了什么）、`state`、`timing`、`summary`（到这一步为止的统计）。无论何时开始读，都从第一步开始 |
-| `r.summary` | 这次运行的统计：模型回合数、token、费用、模型耗时、每个工具的调用次数 / 出错次数 / 耗时 |
-| `r.result` | 最终回答 |
-| `r.state` | 最终状态，可保存 |
-| `r.abort()` | 取消 |
+| 成员        | 内容                                                                                                                         |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `r.text`    | 模型输出的文字增量，只包含开始读取之后的部分                                                                                 |
+| `r.turns`   | 每一步一条记录：`turn`（这一步做了什么）、`state`、`timing`、`summary`（到这一步为止的统计）。无论何时开始读，都从第一步开始 |
+| `r.summary` | 这次运行的统计：模型回合数、token、费用、模型耗时、每个工具的调用次数 / 出错次数 / 耗时                                      |
+| `r.result`  | 最终回答                                                                                                                     |
+| `r.state`   | 最终状态，可保存                                                                                                             |
+| `r.abort()` | 取消                                                                                                                         |
 
 提前退出任何 `for await` 都会取消这次运行。
 
@@ -99,19 +99,19 @@ export const myPlugin = definePlugin({
 
 ## 4. 该写在哪里
 
-| 我想…… | 写在 | 例子 |
-| --- | --- | --- |
-| 修改工具参数、结果 | `tool: before(...)` / `tool: after(...)` | `truncateToolResults` |
-| 审批、拦截、超时、重试 | `tool` | 不调用 `next` 即拦截 |
-| 换模型、改 temperature / thinking | `request: before(...)` | `hooks.ts` 的 `lowTemperature` |
-| 模型出错时换兜底模型 | `request` | `hooks.ts` 的 `fallbackTo` |
-| 给这一次请求加检索结果、只发最近 N 条 | `context` | `hooks.ts` 的 `retrieval` |
-| 自动继续、定时提醒 | `input` | `keepGoing` |
-| 替换历史（压缩） | `policy` 返回 `rewriteHistory(messages)` | `compaction` |
-| 预算、步数上限 | `policy` 返回 `stop(state)` | `budget` |
-| 截断历史（不需要调用模型） | `update` | demo 里的 `keepLast` |
-| 保存一份插件自己的数据 | `state: { init, reduce }` | `keepGoing` 记录自动继续的次数 |
-| 耗时、token、费用 | 不写插件：`r.summary`、`r.turns`、`usageOf(state)` | `metrics.ts` |
+| 我想……                                | 写在                                               | 例子                           |
+| ------------------------------------- | -------------------------------------------------- | ------------------------------ |
+| 修改工具参数、结果                    | `tool: before(...)` / `tool: after(...)`           | `truncateToolResults`          |
+| 审批、拦截、超时、重试                | `tool`                                             | 不调用 `next` 即拦截           |
+| 换模型、改 temperature / thinking     | `request: before(...)`                             | `hooks.ts` 的 `lowTemperature` |
+| 模型出错时换兜底模型                  | `request`                                          | `hooks.ts` 的 `fallbackTo`     |
+| 给这一次请求加检索结果、只发最近 N 条 | `context`                                          | `hooks.ts` 的 `retrieval`      |
+| 自动继续、定时提醒                    | `input`                                            | `keepGoing`                    |
+| 替换历史（压缩）                      | `policy` 返回 `rewriteHistory(messages)`           | `compaction`                   |
+| 预算、步数上限                        | `policy` 返回 `stop(state)`                        | `budget`                       |
+| 截断历史（不需要调用模型）            | `update`                                           | demo 里的 `keepLast`           |
+| 保存一份插件自己的数据                | `state: { init, reduce }`                          | `keepGoing` 记录自动继续的次数 |
+| 耗时、token、费用                     | 不写插件：`r.summary`、`r.turns`、`usageOf(state)` | `metrics.ts`                   |
 
 ## 5. 例子
 

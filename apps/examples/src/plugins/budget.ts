@@ -18,7 +18,7 @@ export function budget({ maxCost = Infinity, maxTokens = Infinity }: BudgetOptio
   return definePlugin({
     name: 'budget',
 
-    async* policy(state, next) {
+    async *policy(state, next) {
       const { input, output, cost } = usageOf(state)
       if (cost >= maxCost || input + output >= maxTokens) {
         return stop(state)

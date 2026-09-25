@@ -1,9 +1,31 @@
 // 用 pi-ai 的 faux provider 验证 RFC-0003 / RFC-0004：钩子、插件状态、Run、会话与插话
-import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, SimpleStreamOptions, ToolResultMessage } from '@mariozechner/pi-ai'
+import type {
+  Api,
+  AssistantMessage,
+  Context,
+  FauxResponseStep,
+  Message,
+  Model,
+  SimpleStreamOptions,
+  ToolResultMessage,
+} from '@mariozechner/pi-ai'
 import type { AgentTool, PluginSpec, Turn, TurnEvent } from './index.ts'
 import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
-import { after, before, createAgent, createSession, definePlugin, PluginConflictError, rewriteHistory, textOf, tool, toolError, usageOf, user } from './index.ts'
+import {
+  after,
+  before,
+  createAgent,
+  createSession,
+  definePlugin,
+  PluginConflictError,
+  rewriteHistory,
+  textOf,
+  tool,
+  toolError,
+  usageOf,
+  user,
+} from './index.ts'
 
 /* ── 测试工具 ───────────────────────────────────────── */
 
@@ -14,7 +36,8 @@ const echo = tool({
   run: ({ x }) => x.toUpperCase(),
 })
 
-const callEcho = (x: string): AssistantMessage => fauxAssistantMessage([fauxToolCall('echo', { x })], { stopReason: 'toolUse' })
+const callEcho = (x: string): AssistantMessage =>
+  fauxAssistantMessage([fauxToolCall('echo', { x })], { stopReason: 'toolUse' })
 
 function fauxModel(responses: FauxResponseStep[], options?: { tokensPerSecond: number }): Model<Api> {
   const faux = registerFauxProvider(options)
@@ -47,7 +70,7 @@ function contentOf(m: Message): string {
 const kinds = (turns: TurnEvent[]): Turn['kind'][] => turns.map(e => e.turn.kind)
 
 /** 手动控制的闸门：工具在 wait() 上等待，测试在合适的时刻 open() */
-function gate(): { wait: () => Promise<void>, open: () => void, started: Promise<void> } {
+function gate(): { wait: () => Promise<void>; open: () => void; started: Promise<void> } {
   const opened = Promise.withResolvers<void>()
   const started = Promise.withResolvers<void>()
   return {
@@ -78,8 +101,10 @@ function tracer(name: string, log: string[]): PluginSpec {
 describe('基本运行', () => {
   it('工具并行执行，schema 校验失败作为 isError 结果交还模型', async () => {
     const model = fauxModel([
-      fauxAssistantMessage([fauxToolCall('echo', { x: 'hi' }), fauxToolCall('echo', { y: 1 })], { stopReason: 'toolUse' }),
-      (ctx) => {
+      fauxAssistantMessage([fauxToolCall('echo', { x: 'hi' }), fauxToolCall('echo', { y: 1 })], {
+        stopReason: 'toolUse',
+      }),
+      ctx => {
         const results = ctx.messages.filter((m): m is ToolResultMessage => m.role === 'toolResult')
         expect(results.map(r => r.isError)).toEqual([false, true])
         return fauxAssistantMessage(`got ${contentOf(results[0])}`)
@@ -95,7 +120,9 @@ describe('基本运行', () => {
   })
 
   it('stopReason=error 时 result 和 summary reject，turns 抛出', async () => {
-    const model = fauxModel([fauxAssistantMessage([fauxText('partial')], { stopReason: 'error', errorMessage: 'boom' })])
+    const model = fauxModel([
+      fauxAssistantMessage([fauxText('partial')], { stopReason: 'error', errorMessage: 'boom' }),
+    ])
     const r = createSession(createAgent({ model })).send('go')
 
     await expect(r.result).rejects.toThrow(/boom/)
@@ -105,10 +132,15 @@ describe('基本运行', () => {
 
   it('提前退出 r.text 会取消运行，底层请求被 abort', async () => {
     let seen: AbortSignal | undefined
-    const model = fauxModel([(_ctx, opts) => {
-      seen = opts?.signal
-      return fauxAssistantMessage('a long long long long answer')
-    }], { tokensPerSecond: 20 })
+    const model = fauxModel(
+      [
+        (_ctx, opts) => {
+          seen = opts?.signal
+          return fauxAssistantMessage('a long long long long answer')
+        },
+      ],
+      { tokensPerSecond: 20 },
+    )
     const r = createSession(createAgent({ model })).send('go')
 
     let n = 0
@@ -151,10 +183,13 @@ describe('插件中间件', () => {
       },
     })
     const deny = definePlugin({ name: 'deny', tool: async ({ call }) => toolError(call, 'denied') })
-    const model = fauxModel([callEcho('a'), (ctx) => {
-      expect(ctx.messages.at(-1)).toMatchObject({ role: 'toolResult', isError: true })
-      return fauxAssistantMessage('ok')
-    }])
+    const model = fauxModel([
+      callEcho('a'),
+      ctx => {
+        expect(ctx.messages.at(-1)).toMatchObject({ role: 'toolResult', isError: true })
+        return fauxAssistantMessage('ok')
+      },
+    ])
 
     await createSession(createAgent({ model, tools: [spy], plugins: [deny] })).send('go').result
     expect(ran).toBe(false)
@@ -167,10 +202,16 @@ describe('插件中间件', () => {
         throw new Error('middleware failed')
       },
     })
-    const model = fauxModel([callEcho('a'), (ctx) => {
-      expect(ctx.messages.at(-1)).toMatchObject({ isError: true, content: [{ text: 'middleware failed' }] })
-      return fauxAssistantMessage('recovered')
-    }])
+    const model = fauxModel([
+      callEcho('a'),
+      ctx => {
+        expect(ctx.messages.at(-1)).toMatchObject({
+          isError: true,
+          content: [{ text: 'middleware failed' }],
+        })
+        return fauxAssistantMessage('recovered')
+      },
+    ])
 
     const final = await createSession(createAgent({ model, plugins: [boom] })).send('go').result
     expect(textOf(final)).toBe('recovered')
@@ -178,10 +219,12 @@ describe('插件中间件', () => {
 
   it('system 按插件顺序依次修改', async () => {
     let prompt: string | undefined
-    const model = fauxModel([(ctx) => {
-      prompt = ctx.systemPrompt
-      return fauxAssistantMessage('ok')
-    }])
+    const model = fauxModel([
+      ctx => {
+        prompt = ctx.systemPrompt
+        return fauxAssistantMessage('ok')
+      },
+    ])
     const a = definePlugin({ name: 'a', system: s => `${s}+A` })
     const b = definePlugin({ name: 'b', system: s => `${s}+B` })
 
@@ -216,8 +259,7 @@ describe('冲突检查', () => {
     expect(() => createAgent({ model, plugins: [p1, p2] })).toThrow(PluginConflictError)
     try {
       createAgent({ model, plugins: [p1, p2] })
-    }
-    catch (e) {
+    } catch (e) {
       expect((e as PluginConflictError).conflicts).toEqual({ tools: ['echo'], plugins: ['dup'] })
     }
   })
@@ -245,10 +287,14 @@ describe('插件状态', () => {
   })
 
   it('热插拔：换插件列表后从同一个状态继续，新插件从 init 开始（承诺 4）', async () => {
-    const first = await createSession(createAgent({ model: fauxModel([callEcho('a'), fauxAssistantMessage('ok')]), tools: [echo] })).send('go').state
+    const first = await createSession(
+      createAgent({ model: fauxModel([callEcho('a'), fauxAssistantMessage('ok')]), tools: [echo] }),
+    ).send('go').state
 
     const model = fauxModel([fauxAssistantMessage('again')])
-    const second = await createSession(createAgent({ model, plugins: [modelTurns] }), { state: first }).send('again').state
+    const second = await createSession(createAgent({ model, plugins: [modelTurns] }), {
+      state: first,
+    }).send('again').state
 
     expect(second.messages.slice(0, first.messages.length)).toEqual(first.messages)
     expect(modelTurns.select(second)).toBe(1)
@@ -274,10 +320,13 @@ describe('钩子', () => {
 
   it('context：只改这一次请求，不改历史', async () => {
     const lastOnly = definePlugin({ name: 'last-only', context: messages => messages.slice(-1) })
-    const model = fauxModel([callEcho('a'), (ctx) => {
-      expect(ctx.messages.map(m => m.role)).toEqual(['toolResult'])
-      return fauxAssistantMessage('ok')
-    }])
+    const model = fauxModel([
+      callEcho('a'),
+      ctx => {
+        expect(ctx.messages.map(m => m.role)).toEqual(['toolResult'])
+        return fauxAssistantMessage('ok')
+      },
+    ])
 
     const state = await createSession(createAgent({ model, tools: [echo], plugins: [lastOnly] })).send('go').state
     expect(state.messages).toHaveLength(4)
@@ -300,11 +349,17 @@ describe('钩子', () => {
   })
 
   it('tool：after 只改输出', async () => {
-    const redact = definePlugin({ name: 'redact', tool: after(result => ({ ...result, content: [{ type: 'text', text: '***' }] })) })
-    const model = fauxModel([callEcho('secret'), (ctx) => {
-      expect(contentOf(ctx.messages.at(-1)!)).toBe('***')
-      return fauxAssistantMessage('ok')
-    }])
+    const redact = definePlugin({
+      name: 'redact',
+      tool: after(result => ({ ...result, content: [{ type: 'text', text: '***' }] })),
+    })
+    const model = fauxModel([
+      callEcho('secret'),
+      ctx => {
+        expect(contentOf(ctx.messages.at(-1)!)).toBe('***')
+        return fauxAssistantMessage('ok')
+      },
+    ])
 
     await createSession(createAgent({ model, tools: [echo], plugins: [redact] })).send('go').result
   })
@@ -329,12 +384,17 @@ describe('思考档位（reasoning）', () => {
   /** 和 DeepSeek 一样只支持 high、xhigh 的模型；记下每次请求实际带的 reasoning */
   function thinker(seen: unknown[], { reasoning = true, calls = 1 } = {}): Model<Api> {
     const faux = registerFauxProvider({ models: [{ id: 'thinker', reasoning }] })
-    faux.setResponses(Array.from({ length: calls }, () => (_ctx: Context, options: SimpleStreamOptions | undefined) => {
-      seen.push(options?.reasoning)
-      return fauxAssistantMessage('ok')
-    }))
+    faux.setResponses(
+      Array.from({ length: calls }, () => (_ctx: Context, options: SimpleStreamOptions | undefined) => {
+        seen.push(options?.reasoning)
+        return fauxAssistantMessage('ok')
+      }),
+    )
     onTestFinished(() => faux.unregister())
-    return { ...faux.getModel(), thinkingLevelMap: { minimal: null, low: null, medium: null, high: 'high', xhigh: 'max' } }
+    return {
+      ...faux.getModel(),
+      thinkingLevelMap: { minimal: null, low: null, medium: null, high: 'high', xhigh: 'max' },
+    }
   }
 
   it('支持的档位原样传入，不支持的取最近的可用档位，不设就不带', async () => {
@@ -373,7 +433,7 @@ describe('rewriteHistory', () => {
     const seen: Turn['kind'][] = []
     const compact = definePlugin({
       name: 'compact',
-      async* policy(state, next) {
+      async *policy(state, next) {
         if (state.messages.length >= 3 && state.messages[0].content !== 'summary') {
           return rewriteHistory([user('summary')])
         }
@@ -389,10 +449,13 @@ describe('rewriteHistory', () => {
       },
       state: { init: 0, reduce: (n, turn) => (turn.kind === 'rewrite' ? n + 1 : n) },
     })
-    const model = fauxModel([callEcho('a'), (ctx) => {
-      expect(ctx.messages.map(contentOf)).toEqual(['summary'])
-      return fauxAssistantMessage('ok')
-    }])
+    const model = fauxModel([
+      callEcho('a'),
+      ctx => {
+        expect(ctx.messages.map(contentOf)).toEqual(['summary'])
+        return fauxAssistantMessage('ok')
+      },
+    ])
 
     const r = createSession(createAgent({ model, tools: [echo], plugins: [compact] })).send('go')
     const state = await r.state
@@ -416,14 +479,19 @@ describe('记录与统计（Run）', () => {
 
   it('summary 统计模型回合、用量、工具调用与出错、插入的消息', async () => {
     const model = fauxModel([
-      fauxAssistantMessage([fauxToolCall('echo', { x: 'a' }), fauxToolCall('fail', { x: 'b' })], { stopReason: 'toolUse' }),
+      fauxAssistantMessage([fauxToolCall('echo', { x: 'a' }), fauxToolCall('fail', { x: 'b' })], {
+        stopReason: 'toolUse',
+      }),
       fauxAssistantMessage('ok'),
     ])
     const r = createSession(createAgent({ model, tools: [echo, failing] })).send('go')
     const summary = await r.summary
 
     expect(summary).toMatchObject({ turns: 2, inputs: 1, rewrites: 0 })
-    expect(summary.tools).toMatchObject({ echo: { calls: 1, errors: 0 }, fail: { calls: 1, errors: 1 } })
+    expect(summary.tools).toMatchObject({
+      echo: { calls: 1, errors: 0 },
+      fail: { calls: 1, errors: 1 },
+    })
     expect(summary.usage.input).toBeGreaterThan(0)
     expect(summary.usage).toEqual(usageOf(await r.state))
   })
@@ -455,20 +523,26 @@ describe('记录与统计（Run）', () => {
 /* ── 会话与插话（RFC-0004 §7） ──────────────────────── */
 
 describe('会话与插话', () => {
-  const blocked = (g: ReturnType<typeof gate>): AgentTool => tool({
-    name: 'wait',
-    description: 'wait for the gate',
-    parameters: Type.Object({}),
-    run: async () => {
-      await g.wait()
-      return 'opened'
-    },
-  })
+  const blocked = (g: ReturnType<typeof gate>): AgentTool =>
+    tool({
+      name: 'wait',
+      description: 'wait for the gate',
+      parameters: Type.Object({}),
+      run: async () => {
+        await g.wait()
+        return 'opened'
+      },
+    })
   const callWait = fauxAssistantMessage([fauxToolCall('wait', {})], { stopReason: 'toolUse' })
 
   it('运行中 send 返回同一个 Run；结束后 send 开始新的 Run', async () => {
     const g = gate()
-    const chat = createSession(createAgent({ model: fauxModel([callWait, replyToLastUser, replyToLastUser, replyToLastUser]), tools: [blocked(g)] }))
+    const chat = createSession(
+      createAgent({
+        model: fauxModel([callWait, replyToLastUser, replyToLastUser, replyToLastUser]),
+        tools: [blocked(g)],
+      }),
+    )
 
     const first = chat.send('go')
     await g.started
@@ -485,7 +559,7 @@ describe('会话与插话', () => {
     const g = gate()
     const model = fauxModel([
       callWait,
-      (ctx) => {
+      ctx => {
         expect(ctx.messages.map(m => m.role)).toEqual(['user', 'assistant', 'toolResult', 'user'])
         return replyToLastUser(ctx)
       },
@@ -500,14 +574,23 @@ describe('会话与插话', () => {
     g.open()
 
     const turns = await collect(r.turns)
-    const inputs = turns.flatMap(e => (e.turn.kind === 'input' ? [{ text: contentOf(e.turn.messages[0]), idle: e.turn.idle }] : []))
+    const inputs = turns.flatMap(e =>
+      e.turn.kind === 'input' ? [{ text: contentOf(e.turn.messages[0]), idle: e.turn.idle }] : [],
+    )
 
-    expect(inputs).toEqual([{ text: 'go', idle: true }, { text: 'steer', idle: false }, { text: 'follow', idle: true }])
+    expect(inputs).toEqual([
+      { text: 'go', idle: true },
+      { text: 'steer', idle: false },
+      { text: 'follow', idle: true },
+    ])
     expect((await r.state).messages.map(contentOf).slice(-4)).toEqual(['steer', 're:steer', 'follow', 're:follow'])
   })
 
   it('排队的 follow-up 等于依次发送（承诺 7，S1）', async () => {
-    const script = (): FauxResponseStep[] => [callEcho('a'), ...Array.from<FauxResponseStep>({ length: 6 }).fill(replyToLastUser)]
+    const script = (): FauxResponseStep[] => [
+      callEcho('a'),
+      ...Array.from<FauxResponseStep>({ length: 6 }).fill(replyToLastUser),
+    ]
 
     const queued = createSession(createAgent({ model: fauxModel(script()), tools: [echo] }))
     const r = queued.send('a')
@@ -524,10 +607,10 @@ describe('会话与插话', () => {
   })
 
   it('interrupt：取消正在输出的模型回合，不留痕迹（承诺 9，S4）', async () => {
-    const model = fauxModel([
-      fauxAssistantMessage('a very long answer that will be cut off before it finishes streaming'),
-      replyToLastUser,
-    ], { tokensPerSecond: 20 })
+    const model = fauxModel(
+      [fauxAssistantMessage('a very long answer that will be cut off before it finishes streaming'), replyToLastUser],
+      { tokensPerSecond: 20 },
+    )
     const chat = createSession(createAgent({ model }))
 
     const r = chat.send('first')
@@ -549,12 +632,16 @@ describe('会话与插话', () => {
       name: 'hang',
       description: 'never finishes unless aborted',
       parameters: Type.Object({}),
-      run: (_args, signal) => new Promise<string>((_resolve, reject) => {
-        started.resolve()
-        signal.addEventListener('abort', () => reject(new Error('aborted')))
-      }),
+      run: (_args, signal) =>
+        new Promise<string>((_resolve, reject) => {
+          started.resolve()
+          signal.addEventListener('abort', () => reject(new Error('aborted')))
+        }),
     })
-    const model = fauxModel([fauxAssistantMessage([fauxToolCall('hang', {})], { stopReason: 'toolUse' }), replyToLastUser])
+    const model = fauxModel([
+      fauxAssistantMessage([fauxToolCall('hang', {})], { stopReason: 'toolUse' }),
+      replyToLastUser,
+    ])
     const chat = createSession(createAgent({ model, tools: [hang] }))
 
     const r = chat.send('go')
@@ -565,12 +652,15 @@ describe('会话与插话', () => {
   })
 
   it('abort：尚未送达的消息留在会话里，下一次运行处理', async () => {
-    const model = fauxModel([
-      fauxAssistantMessage('a very long answer that will be aborted'),
-      replyToLastUser,
-      replyToLastUser,
-      replyToLastUser,
-    ], { tokensPerSecond: 20 })
+    const model = fauxModel(
+      [
+        fauxAssistantMessage('a very long answer that will be aborted'),
+        replyToLastUser,
+        replyToLastUser,
+        replyToLastUser,
+      ],
+      { tokensPerSecond: 20 },
+    )
     const chat = createSession(createAgent({ model }))
 
     const r = chat.send('first')

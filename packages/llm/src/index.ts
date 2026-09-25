@@ -9,7 +9,14 @@
 export { type Agent, type AgentOptions, createAgent } from './agent.ts'
 export { callsOf, textOf, user } from './message.ts'
 export { after, before, type Middleware } from './middleware.ts'
-export { definePlugin, type Plugin, PluginConflictError, type PluginList, type PluginSpec, type PluginState } from './plugin.ts'
+export {
+  definePlugin,
+  type Plugin,
+  PluginConflictError,
+  type PluginList,
+  type PluginSpec,
+  type PluginState,
+} from './plugin.ts'
 export type { Run } from './run.ts'
 export { createSession, type Session, type SessionOptions } from './session.ts'
 export { usageOf } from './summary.ts'

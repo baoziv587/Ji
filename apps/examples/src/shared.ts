@@ -42,7 +42,9 @@ export async function show(r: Run): Promise<RunSummary> {
   await text
 
   const summary = await r.summary
-  console.log(`\n  summary: ${summary.turns} model turns, ${summary.usage.input} in / ${summary.usage.output} out tokens, $${summary.usage.cost.toFixed(4)}`)
+  console.log(
+    `\n  summary: ${summary.turns} model turns, ${summary.usage.input} in / ${summary.usage.output} out tokens, $${summary.usage.cost.toFixed(4)}`,
+  )
   return summary
 }
 
@@ -58,9 +60,11 @@ function describe(turn: Turn): string | undefined {
     return undefined
   }
 
-  return turn.results.map((r) => {
-    const text = r.content.map(c => (c.type === 'text' ? c.text : '')).join('')
-    const preview = text.length > 60 ? `${text.slice(0, 60)}… (${text.length} chars)` : text
-    return `${r.toolName}${r.isError ? ' ✗' : ''} → ${JSON.stringify(preview)}`
-  }).join('\n  ')
+  return turn.results
+    .map(r => {
+      const text = r.content.map(c => (c.type === 'text' ? c.text : '')).join('')
+      const preview = text.length > 60 ? `${text.slice(0, 60)}… (${text.length} chars)` : text
+      return `${r.toolName}${r.isError ? ' ✗' : ''} → ${JSON.stringify(preview)}`
+    })
+    .join('\n  ')
 }

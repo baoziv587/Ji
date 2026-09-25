@@ -15,7 +15,11 @@ export interface KeepGoingOptions {
  * 用 input 钩子：它在每个步边界拿到此刻可以送达的用户消息，返回要插入的消息。
  * 已经自动继续了几次记在插件状态里，随状态保存。
  */
-export function keepGoing({ isDone, maxTimes = 3, prompt = 'Keep going until the task is done.' }: KeepGoingOptions): Plugin<number> {
+export function keepGoing({
+  isDone,
+  maxTimes = 3,
+  prompt = 'Keep going until the task is done.',
+}: KeepGoingOptions): Plugin<number> {
   const plugin: Plugin<number> = definePlugin({
     name: 'keep-going',
 

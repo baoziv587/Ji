@@ -1,6 +1,15 @@
 import type { AssistantMessage, AssistantMessageEvent, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { Agent, RunContext } from './agent.ts'
-import type { AgentAction, AgentEvent, AgentState, Boundary, PendingMessage, RunSummary, TurnEvent, TurnTiming } from './types.ts'
+import type {
+  AgentAction,
+  AgentEvent,
+  AgentState,
+  Boundary,
+  PendingMessage,
+  RunSummary,
+  TurnEvent,
+  TurnTiming,
+} from './types.ts'
 import { performance } from 'node:perf_hooks'
 import { unfold } from '@gaoxiang.ai/kernel'
 import { resultOf } from '@gaoxiang.ai/kernel/reduce'
@@ -63,7 +72,7 @@ export class AgentRun implements Run {
   /** 当前这一步取出、写入后才从队列移除的消息 */
   private offered: PendingMessage[] = []
   private interruptedBoundary = false
-  private stopping: { kind: 'interrupt' } | { kind: 'abort', reason: unknown } | undefined
+  private stopping: { kind: 'interrupt' } | { kind: 'abort'; reason: unknown } | undefined
   private controller = new AbortController()
   private stopSegment: () => void = () => {}
 
@@ -144,8 +153,7 @@ export class AgentRun implements Run {
         this.finish(outcome.result)
         return
       }
-    }
-    catch (error) {
+    } catch (error) {
       this.fail(error)
     }
   }
@@ -156,7 +164,7 @@ export class AgentRun implements Run {
     }
 
     const controller = new AbortController()
-    const stopped = new Promise<'stopped'>((resolve) => {
+    const stopped = new Promise<'stopped'>(resolve => {
       this.stopSegment = () => resolve('stopped')
     })
     this.controller = controller
@@ -164,7 +172,7 @@ export class AgentRun implements Run {
     const isCurrent = (): boolean => this.controller === controller
     const ctx: RunContext = {
       signal: controller.signal,
-      offer: (boundary) => {
+      offer: boundary => {
         this.offered = this.host.offer(boundary)
         return this.offered.map(p => p.message)
       },
@@ -209,8 +217,7 @@ export class AgentRun implements Run {
         }
         this.commit(e.action, e.obs, e.state)
       }
-    }
-    finally {
+    } finally {
       // 被中断时 unfold 可能还停在工具或模型调用上；不等待它，让它在 signal 中止后自行结束
       events.return(undefined).catch(noop)
     }
@@ -222,7 +229,13 @@ export class AgentRun implements Run {
 
     this.host.state = state
     this.acc = summaryReducer.reduce(this.acc, { turn, timing })
-    this.log.push({ t: this.steps, turn, state, timing, summary: resultOf(summaryReducer, this.acc) })
+    this.log.push({
+      t: this.steps,
+      turn,
+      state,
+      timing,
+      summary: resultOf(summaryReducer, this.acc),
+    })
 
     this.steps++
     this.interruptedBoundary = false
@@ -261,7 +274,7 @@ export class AgentRun implements Run {
     changed.resolve()
   }
 
-  private async* readEvents(): AsyncGenerator<AgentEvent, void> {
+  private async *readEvents(): AsyncGenerator<AgentEvent, void> {
     const buffer: AgentEvent[] = []
     this.subscribers.add(buffer)
 
@@ -279,14 +292,13 @@ export class AgentRun implements Run {
 
         await this.changed.promise
       }
-    }
-    finally {
+    } finally {
       this.subscribers.delete(buffer)
       this.abortIfRunning()
     }
   }
 
-  private async* readText(): AsyncGenerator<string, void> {
+  private async *readText(): AsyncGenerator<string, void> {
     for await (const e of this.readEvents()) {
       if (e.tag === 'delta' && e.delta.type === 'text_delta') {
         yield e.delta.delta
@@ -294,7 +306,7 @@ export class AgentRun implements Run {
     }
   }
 
-  private async* readTurns(): AsyncGenerator<TurnEvent, void> {
+  private async *readTurns(): AsyncGenerator<TurnEvent, void> {
     let i = 0
 
     try {
@@ -310,8 +322,7 @@ export class AgentRun implements Run {
 
         await this.changed.promise
       }
-    }
-    finally {
+    } finally {
       this.abortIfRunning()
     }
   }

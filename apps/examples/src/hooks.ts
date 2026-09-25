@@ -22,11 +22,10 @@ const retrieval = definePlugin({
 function fallbackTo(fallback: Model<Api>): Plugin {
   return definePlugin({
     name: 'fallback',
-    async* request(req, next) {
+    async *request(req, next) {
       try {
         return yield* next(req)
-      }
-      catch (error) {
+      } catch (error) {
         console.log(`\n  [request] ${String(error)} → fallback`)
         return yield* next({ ...req, model: fallback })
       }
@@ -53,7 +52,9 @@ const agent = createAgent({
     retrieval,
     lowTemperature,
     fallbackTo(fallback),
-    keepGoing({ isDone: state => state.messages.some(m => m.role === 'assistant' && textOf(m).includes('DONE')) }),
+    keepGoing({
+      isDone: state => state.messages.some(m => m.role === 'assistant' && textOf(m).includes('DONE')),
+    }),
     budget({ maxTokens: 100_000 }),
   ],
 })

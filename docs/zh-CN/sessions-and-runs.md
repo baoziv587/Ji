@@ -36,15 +36,15 @@ const agent = createAgent({ model, reasoning: 'high' }) // 'minimal' | 'low' | '
 
 所有成员共享同一次执行，可以同时读取多个。
 
-| 成员 | 类型 | 说明 |
-| --- | --- | --- |
-| `r.text` | `AsyncIterable<string>` | 文字增量，从开始读取的那一刻算起 |
-| `r.turns` | `AsyncIterable<TurnEvent>` | 每步一条：`turn`、`state`、`timing`、到这一步为止的 `summary`。**无论何时开始读，都从第 0 步开始** |
-| `r` 本身 | `AsyncIterable<AgentEvent>` | 内核原始事件，包含所有模型增量（思考、工具参数） |
-| `r.result` | `Promise<AssistantMessage>` | 最终回答 |
-| `r.state` | `Promise<AgentState>` | 最终状态 |
-| `r.summary` | `Promise<RunSummary>` | 模型回合数、token、费用、模型和工具耗时，以及每个工具的调用 / 出错次数和耗时 |
-| `r.abort(reason?)` | | 取消运行。尚未送达的消息留在会话里 |
+| 成员               | 类型                        | 说明                                                                                               |
+| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------- |
+| `r.text`           | `AsyncIterable<string>`     | 文字增量，从开始读取的那一刻算起                                                                   |
+| `r.turns`          | `AsyncIterable<TurnEvent>`  | 每步一条：`turn`、`state`、`timing`、到这一步为止的 `summary`。**无论何时开始读，都从第 0 步开始** |
+| `r` 本身           | `AsyncIterable<AgentEvent>` | 内核原始事件，包含所有模型增量（思考、工具参数）                                                   |
+| `r.result`         | `Promise<AssistantMessage>` | 最终回答                                                                                           |
+| `r.state`          | `Promise<AgentState>`       | 最终状态                                                                                           |
+| `r.summary`        | `Promise<RunSummary>`       | 模型回合数、token、费用、模型和工具耗时，以及每个工具的调用 / 出错次数和耗时                       |
+| `r.abort(reason?)` |                             | 取消运行。尚未送达的消息留在会话里                                                                 |
 
 运行被取消或出错时，`result`、`state`、`summary` 会 reject。
 
@@ -71,12 +71,12 @@ await printing
 
 运行进行中调用 `send`，消息会并入**同一次运行**，返回同一个 `Run`。`when` 决定消息在哪个步边界插入：
 
-| `when` | 名称 | 送达时机 |
-| --- | --- | --- |
-| `'idle'`（默认） | follow-up | agent 回答完之后 |
-| `'step'` | steer | 下一个步边界，例如当前工具执行完之后 |
-| `'now'` | interrupt | 立即取消当前这一步，已输出的部分被丢弃 |
-| `(boundary) => boolean` | 自定义 | 条件为真的步边界 |
+| `when`                  | 名称      | 送达时机                               |
+| ----------------------- | --------- | -------------------------------------- |
+| `'idle'`（默认）        | follow-up | agent 回答完之后                       |
+| `'step'`                | steer     | 下一个步边界，例如当前工具执行完之后   |
+| `'now'`                 | interrupt | 立即取消当前这一步，已输出的部分被丢弃 |
+| `(boundary) => boolean` | 自定义    | 条件为真的步边界                       |
 
 ```ts
 chat.send('改用 vitest', { when: 'step' })

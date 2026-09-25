@@ -2,7 +2,7 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-> **JI** (*jí*, 极) means *limit*, as in 极限: the core is kept to the smallest set of pieces, and an agent repeats one step until it reaches its result.
+> **JI** (_jí_, 极) means _limit_, as in 极限: the core is kept to the smallest set of pieces, and an agent repeats one step until it reaches its result.
 
 > [!WARNING]
 > JI is still in development. The API may change, and the packages are not published to npm yet.
@@ -89,21 +89,21 @@ DEEPSEEK_API_KEY=sk-... DEEPSEEK_THINKING=high pnpm repl   # start with thinking
 
 ## Packages
 
-| Package | What it is | When you touch it |
-| --- | --- | --- |
-| [`@gaoxiang.ai/llm`](packages/llm) | The LLM agent: `createAgent`, `createSession`, `definePlugin`, `tool` | Almost always |
+| Package                                  | What it is                                                                            | When you touch it                              |
+| ---------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| [`@gaoxiang.ai/llm`](packages/llm)       | The LLM agent: `createAgent`, `createSession`, `definePlugin`, `tool`                 | Almost always                                  |
 | [`@gaoxiang.ai/kernel`](packages/kernel) | The core, not tied to any model: `unfold`, `extend` and helpers. Has no dependencies. | Only for non-LLM agents or building new layers |
-| [`apps/demo`](apps/demo) | Minimal end-to-end example | Starting point |
-| [`apps/examples`](apps/examples) | Scenarios and copy-pasteable plugins | When writing your own plugin |
+| [`apps/demo`](apps/demo)                 | Minimal end-to-end example                                                            | Starting point                                 |
+| [`apps/examples`](apps/examples)         | Scenarios and copy-pasteable plugins                                                  | When writing your own plugin                   |
 
 ## Documentation
 
-| Read this | To learn |
-| --- | --- |
-| [Concepts](docs/concepts.md) | How a step works, how the layers fit together, and the rules the design relies on |
-| [Sessions & Runs](docs/sessions-and-runs.md) | Streaming, sending messages mid-run, stopping, save/load, stats |
-| [Writing Plugins](docs/plugins.md) | Every hook, its execution order, and which hook fits your task |
-| [Kernel API](docs/kernel.md) | `unfold`, `extend` and the other core helpers |
+| Read this                                    | To learn                                                                          |
+| -------------------------------------------- | --------------------------------------------------------------------------------- |
+| [Concepts](docs/concepts.md)                 | How a step works, how the layers fit together, and the rules the design relies on |
+| [Sessions & Runs](docs/sessions-and-runs.md) | Streaming, sending messages mid-run, stopping, save/load, stats                   |
+| [Writing Plugins](docs/plugins.md)           | Every hook, its execution order, and which hook fits your task                    |
+| [Kernel API](docs/kernel.md)                 | `unfold`, `extend` and the other core helpers                                     |
 
 ## Development
 

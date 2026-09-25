@@ -25,18 +25,18 @@ export const myPlugin = definePlugin({
 
 ## 钩子，按执行顺序
 
-| 钩子 | 形状 | 执行时机 | 典型用途 |
-| --- | --- | --- | --- |
-| `tools` | 列表 | `createAgent` 时 | 注册工具 |
-| `system` | 变换 | `createAgent` 时执行一次 | 修改 system prompt |
-| `policy` | 中间件 | 包住整一步 | 压缩、预算、结束运行 |
-| `input` | 变换 | 每个步边界 | 自动继续、提醒 |
-| `context` | 变换 | 每次调用模型前 | 检索、窗口截取；不改历史 |
-| `request` | 中间件 | 每次模型调用（流） | 换模型、改 temperature、兜底 |
-| `env` | 中间件 | 一个回合的全部工具调用 | 批量审批；没有工具调用的回合不经过它 |
-| `tool` | 中间件 | 每次工具调用 | 截断、审批、超时、重试 |
-| `update` | 中间件 | 写入每一条 Turn | 裁剪历史；必须是纯函数 |
-| `state` | reducer | `update` 之后 | 插件自己的数据；必须是纯函数 |
+| 钩子      | 形状    | 执行时机                 | 典型用途                             |
+| --------- | ------- | ------------------------ | ------------------------------------ |
+| `tools`   | 列表    | `createAgent` 时         | 注册工具                             |
+| `system`  | 变换    | `createAgent` 时执行一次 | 修改 system prompt                   |
+| `policy`  | 中间件  | 包住整一步               | 压缩、预算、结束运行                 |
+| `input`   | 变换    | 每个步边界               | 自动继续、提醒                       |
+| `context` | 变换    | 每次调用模型前           | 检索、窗口截取；不改历史             |
+| `request` | 中间件  | 每次模型调用（流）       | 换模型、改 temperature、兜底         |
+| `env`     | 中间件  | 一个回合的全部工具调用   | 批量审批；没有工具调用的回合不经过它 |
+| `tool`    | 中间件  | 每次工具调用             | 截断、审批、超时、重试               |
+| `update`  | 中间件  | 写入每一条 Turn          | 裁剪历史；必须是纯函数               |
+| `state`   | reducer | `update` 之后            | 插件自己的数据；必须是纯函数         |
 
 用 `myPlugin.select(state)` 读取插件状态；插件还没写入时返回 `init`。
 
@@ -46,13 +46,13 @@ export const myPlugin = definePlugin({
 
 **中间件**：`(input, next) => output`。
 
-| 写法 | 效果 |
-| --- | --- |
-| 返回 `next(input)` | 什么都不改 |
-| 改参数后调用 `next` | 改输入 |
-| 改 `next` 的返回值 | 改输出 |
-| 不调用 `next` | 拦截 |
-| 多次调用 `next` | 重试 |
+| 写法                | 效果       |
+| ------------------- | ---------- |
+| 返回 `next(input)`  | 什么都不改 |
+| 改参数后调用 `next` | 改输入     |
+| 改 `next` 的返回值  | 改输出     |
+| 不调用 `next`       | 拦截       |
+| 多次调用 `next`     | 重试       |
 
 只改输入或只改输出时，用 `before(f)` / `after(g)` 简写。在流式钩子（`request`）上，`after` 原样转发增量，`g` 只作用于最终消息。
 
@@ -71,19 +71,19 @@ export const myPlugin = definePlugin({
 
 ## 该用哪个钩子
 
-| 我想…… | 用 | 例子 |
-| --- | --- | --- |
-| 修改工具参数或结果 | `tool: before(...)` / `tool: after(...)` | [`truncate-tool-results.ts`](../../apps/examples/src/plugins/truncate-tool-results.ts) |
-| 审批、拦截、超时、重试工具 | `tool` | 不调用 `next` 即拦截 |
-| 换模型、改 temperature / thinking | `request: before(...)` | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature` |
-| 模型出错时换兜底模型 | `request` | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo` |
-| 给请求加检索结果、只发最近 N 条 | `context` | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval` |
-| 任务没完成就自动继续、定时提醒 | `input` | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts) |
-| 写摘要并替换历史 | `policy` + `rewriteHistory` | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts) |
-| 预算、步数上限 | `policy` + `stop` | [`budget.ts`](../../apps/examples/src/plugins/budget.ts) |
-| 截断历史（不调用模型） | `update` | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast` |
-| 保存自己的计数 | `state: { init, reduce }` | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts) |
-| 统计耗时、token、费用 | 不写插件：`r.summary`、`r.turns`、`usageOf` | [`metrics.ts`](../../apps/examples/src/metrics.ts) |
+| 我想……                            | 用                                          | 例子                                                                                   |
+| --------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------- |
+| 修改工具参数或结果                | `tool: before(...)` / `tool: after(...)`    | [`truncate-tool-results.ts`](../../apps/examples/src/plugins/truncate-tool-results.ts) |
+| 审批、拦截、超时、重试工具        | `tool`                                      | 不调用 `next` 即拦截                                                                   |
+| 换模型、改 temperature / thinking | `request: before(...)`                      | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature`                     |
+| 模型出错时换兜底模型              | `request`                                   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`                         |
+| 给请求加检索结果、只发最近 N 条   | `context`                                   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
+| 任务没完成就自动继续、定时提醒    | `input`                                     | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
+| 写摘要并替换历史                  | `policy` + `rewriteHistory`                 | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
+| 预算、步数上限                    | `policy` + `stop`                           | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
+| 截断历史（不调用模型）            | `update`                                    | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast`                               |
+| 保存自己的计数                    | `state: { init, reduce }`                   | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
+| 统计耗时、token、费用             | 不写插件：`r.summary`、`r.turns`、`usageOf` | [`metrics.ts`](../../apps/examples/src/metrics.ts)                                     |
 
 [`apps/examples/src/plugins`](../../apps/examples/src/plugins) 里的插件可以直接复制过去改；每个示例的详细说明见 [示例 README](../../apps/examples/README.md)。
 

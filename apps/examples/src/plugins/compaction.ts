@@ -25,7 +25,7 @@ export function compaction({ model, maxTokens, keepRecent = 6 }: CompactionOptio
   return definePlugin({
     name: 'compaction',
 
-    async* policy(state, next) {
+    async *policy(state, next) {
       const { messages } = state
       const cut = cutIndex(messages, keepRecent)
 
@@ -60,8 +60,9 @@ export function cutIndex(messages: Message[], keepRecent: number): number {
 
 async function summarize(model: Model<Api>, messages: Message[]): Promise<string> {
   const reply = await completeSimple(model, {
-    systemPrompt: 'Summarize the conversation below for an assistant that will continue it. '
-      + 'Keep facts, decisions, open tasks, and the important results of tool calls. Be concise.',
+    systemPrompt:
+      'Summarize the conversation below for an assistant that will continue it. ' +
+      'Keep facts, decisions, open tasks, and the important results of tool calls. Be concise.',
     messages: [user(transcript(messages))],
   })
 
@@ -73,17 +74,24 @@ async function summarize(model: Model<Api>, messages: Message[]): Promise<string
 
 /** 把消息渲染成纯文本，交给摘要模型 */
 function transcript(messages: Message[]): string {
-  return messages.map((m) => {
-    if (m.role === 'user') {
-      const text = typeof m.content === 'string' ? m.content : m.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('')
-      return `User: ${text}`
-    }
-    if (m.role === 'assistant') {
-      const calls = m.content.flatMap(c => (c.type === 'toolCall' ? [`-> ${c.name}(${JSON.stringify(c.arguments)})`] : []))
-      return [`Assistant: ${textOf(m)}`, ...calls].join('\n')
-    }
+  return messages
+    .map(m => {
+      if (m.role === 'user') {
+        const text =
+          typeof m.content === 'string'
+            ? m.content
+            : m.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('')
+        return `User: ${text}`
+      }
+      if (m.role === 'assistant') {
+        const calls = m.content.flatMap(c =>
+          c.type === 'toolCall' ? [`-> ${c.name}(${JSON.stringify(c.arguments)})`] : [],
+        )
+        return [`Assistant: ${textOf(m)}`, ...calls].join('\n')
+      }
 
-    const text = m.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('')
-    return `Tool ${m.toolName}${m.isError ? ' (error)' : ''}: ${text.slice(0, 2_000)}`
-  }).join('\n\n')
+      const text = m.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('')
+      return `Tool ${m.toolName}${m.isError ? ' (error)' : ''}: ${text.slice(0, 2_000)}`
+    })
+    .join('\n\n')
 }

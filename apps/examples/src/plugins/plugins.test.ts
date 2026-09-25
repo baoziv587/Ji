@@ -31,33 +31,57 @@ const echo = tool({
   parameters: Type.Object({ text: Type.String() }),
   run: ({ text }) => text,
 })
-const callEcho = (text: string): AssistantMessage => fauxAssistantMessage([fauxToolCall('echo', { text })], { stopReason: 'toolUse' })
-const replyToLastUser = (ctx: Context): AssistantMessage => fauxAssistantMessage(`re:${ctx.messages.findLast(m => m.role === 'user')?.content}`)
+const callEcho = (text: string): AssistantMessage =>
+  fauxAssistantMessage([fauxToolCall('echo', { text })], { stopReason: 'toolUse' })
+const replyToLastUser = (ctx: Context): AssistantMessage =>
+  fauxAssistantMessage(`re:${ctx.messages.findLast(m => m.role === 'user')?.content}`)
 
 describe('compaction', () => {
   it('切点不会落在工具结果上', () => {
     const call: ToolCall = { type: 'toolCall', id: 't1', name: 'echo', arguments: {} }
-    const messages: Message[] = [user('q'), callEcho('a'), toolResult(call, 'a'), toolResult(call, 'b'), fauxAssistantMessage('done')]
+    const messages: Message[] = [
+      user('q'),
+      callEcho('a'),
+      toolResult(call, 'a'),
+      toolResult(call, 'b'),
+      fauxAssistantMessage('done'),
+    ]
     expect(cutIndex(messages, 2)).toBe(1)
   })
 
   it('超过上限时用「摘要 + 最近消息」替换历史，然后继续', async () => {
     const big = 'x'.repeat(2_000)
     // 第一轮后只有 3 条消息，切点为 1，太少不压缩；第二轮后才压缩
-    const model = fauxModel([callEcho(big), callEcho('b'), fauxAssistantMessage('the summary'), fauxAssistantMessage('answer')])
-    const agent = createAgent({ model, tools: [echo], plugins: [compaction({ model, maxTokens: 400, keepRecent: 2 })] })
+    const model = fauxModel([
+      callEcho(big),
+      callEcho('b'),
+      fauxAssistantMessage('the summary'),
+      fauxAssistantMessage('answer'),
+    ])
+    const agent = createAgent({
+      model,
+      tools: [echo],
+      plugins: [compaction({ model, maxTokens: 400, keepRecent: 2 })],
+    })
 
     const r = createSession(agent).send('go')
     const [turns, state] = await Promise.all([collect(r.turns), r.state])
 
     expect(kinds(turns).filter(k => k === 'rewrite')).toHaveLength(1)
-    expect(state.messages[0]).toMatchObject({ role: 'user', content: `${SUMMARY_PREFIX}\nthe summary` })
+    expect(state.messages[0]).toMatchObject({
+      role: 'user',
+      content: `${SUMMARY_PREFIX}\nthe summary`,
+    })
     expect(state.messages[1].role).toBe('assistant')
   })
 
   it('没超限时不压缩', async () => {
     const model = fauxModel([callEcho('small'), fauxAssistantMessage('answer')])
-    const agent = createAgent({ model, tools: [echo], plugins: [compaction({ model, maxTokens: 10_000 })] })
+    const agent = createAgent({
+      model,
+      tools: [echo],
+      plugins: [compaction({ model, maxTokens: 10_000 })],
+    })
 
     expect((await createSession(agent).send('go').summary).rewrites).toBe(0)
   })
@@ -76,7 +100,11 @@ describe('truncateToolResults', () => {
 
   it('超过上限的工具结果被截短，原始长度记在 details', async () => {
     const model = fauxModel([callEcho('y'.repeat(5_000)), callEcho('ok'), fauxAssistantMessage('answer')])
-    const agent = createAgent({ model, tools: [echo], plugins: [truncateToolResults({ maxChars: 500 })] })
+    const agent = createAgent({
+      model,
+      tools: [echo],
+      plugins: [truncateToolResults({ maxChars: 500 })],
+    })
 
     const results = (await createSession(agent).send('go').state).messages.filter(m => m.role === 'toolResult')
     expect(JSON.stringify(results[0].content).length).toBeLessThan(700)
@@ -88,10 +116,18 @@ describe('truncateToolResults', () => {
 describe('keepGoing', () => {
   it('agent 空闲但任务没完成时插入「继续」，完成后停止', async () => {
     const model = fauxModel([fauxAssistantMessage('step 1'), fauxAssistantMessage('step 2 DONE')])
-    const plugin = keepGoing({ isDone: s => s.messages.some(m => m.role === 'assistant' && textOf(m).includes('DONE')), prompt: 'continue' })
+    const plugin = keepGoing({
+      isDone: s => s.messages.some(m => m.role === 'assistant' && textOf(m).includes('DONE')),
+      prompt: 'continue',
+    })
 
     const state = await createSession(createAgent({ model, plugins: [plugin] })).send('go').state
-    expect(state.messages.map(m => (m.role === 'assistant' ? textOf(m) : m.content))).toEqual(['go', 'step 1', 'continue', 'step 2 DONE'])
+    expect(state.messages.map(m => (m.role === 'assistant' ? textOf(m) : m.content))).toEqual([
+      'go',
+      'step 1',
+      'continue',
+      'step 2 DONE',
+    ])
     expect(plugin.select(state)).toBe(1)
   })
 

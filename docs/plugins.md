@@ -25,18 +25,18 @@ export const myPlugin = definePlugin({
 
 ## Hooks, in execution order
 
-| Hook | Shape | Runs | Typical use |
-| --- | --- | --- | --- |
-| `tools` | list | At `createAgent` | Register tools |
-| `system` | transform | Once, at `createAgent` | Edit the system prompt |
-| `policy` | middleware | Wraps the whole step | Compaction, budgets, stopping |
-| `input` | transform | At each boundary | Auto-continue, reminders |
-| `context` | transform | Before each model call | Retrieval, windowing. History is unchanged. |
-| `request` | middleware | Each model call (a stream) | Switch model, temperature, fallback |
-| `env` | middleware | All tool calls of one turn | Batch approval. Skipped for turns without tool calls. |
-| `tool` | middleware | Each tool call | Truncate, approve, timeout, retry |
-| `update` | middleware | Recording every Turn | Trim history. Must be pure. |
-| `state` | reducer | After `update` | The plugin's own data. Must be pure. |
+| Hook      | Shape      | Runs                       | Typical use                                           |
+| --------- | ---------- | -------------------------- | ----------------------------------------------------- |
+| `tools`   | list       | At `createAgent`           | Register tools                                        |
+| `system`  | transform  | Once, at `createAgent`     | Edit the system prompt                                |
+| `policy`  | middleware | Wraps the whole step       | Compaction, budgets, stopping                         |
+| `input`   | transform  | At each boundary           | Auto-continue, reminders                              |
+| `context` | transform  | Before each model call     | Retrieval, windowing. History is unchanged.           |
+| `request` | middleware | Each model call (a stream) | Switch model, temperature, fallback                   |
+| `env`     | middleware | All tool calls of one turn | Batch approval. Skipped for turns without tool calls. |
+| `tool`    | middleware | Each tool call             | Truncate, approve, timeout, retry                     |
+| `update`  | middleware | Recording every Turn       | Trim history. Must be pure.                           |
+| `state`   | reducer    | After `update`             | The plugin's own data. Must be pure.                  |
 
 Read a plugin's state with `myPlugin.select(state)`. It returns `init` until the plugin has written.
 
@@ -46,13 +46,13 @@ Read a plugin's state with `myPlugin.select(state)`. It returns `init` until the
 
 **Middleware:** `(input, next) => output`.
 
-| You... | Effect |
-| --- | --- |
-| return `next(input)` | No change |
-| call `next` with a modified input | Change the input |
-| change what `next` returns | Change the output |
-| don't call `next` | Intercept |
-| call `next` more than once | Retry |
+| You...                            | Effect            |
+| --------------------------------- | ----------------- |
+| return `next(input)`              | No change         |
+| call `next` with a modified input | Change the input  |
+| change what `next` returns        | Change the output |
+| don't call `next`                 | Intercept         |
+| call `next` more than once        | Retry             |
 
 `before(f)` and `after(g)` are shorthands for the input-only and output-only cases. On stream hooks (`request`), `after` forwards deltas unchanged and applies `g` to the final message.
 
@@ -71,19 +71,19 @@ Read a plugin's state with `myPlugin.select(state)`. It returns `init` until the
 
 ## Which hook?
 
-| I want to... | Use | Example |
-| --- | --- | --- |
-| Change tool arguments or results | `tool: before(...)` / `tool: after(...)` | [`truncate-tool-results.ts`](../apps/examples/src/plugins/truncate-tool-results.ts) |
-| Approve, block, time out or retry a tool | `tool` | Skip `next` to block |
-| Switch model, temperature or thinking | `request: before(...)` | `lowTemperature` in [`hooks.ts`](../apps/examples/src/hooks.ts) |
-| Fall back to another model on error | `request` | `fallbackTo` in [`hooks.ts`](../apps/examples/src/hooks.ts) |
-| Add retrieval results or send only the last N messages | `context` | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts) |
-| Keep going until done, add reminders | `input` | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts) |
-| Summarize and replace history | `policy` + `rewriteHistory` | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts) |
-| Enforce a budget or step cap | `policy` + `stop` | [`budget.ts`](../apps/examples/src/plugins/budget.ts) |
-| Trim history (no model call) | `update` | `keepLast` in [`apps/demo`](../apps/demo/src/main.ts) |
-| Keep your own counters | `state: { init, reduce }` | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts) |
-| Measure time, tokens or cost | No plugin: `r.summary`, `r.turns`, `usageOf` | [`metrics.ts`](../apps/examples/src/metrics.ts) |
+| I want to...                                           | Use                                          | Example                                                                             |
+| ------------------------------------------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Change tool arguments or results                       | `tool: before(...)` / `tool: after(...)`     | [`truncate-tool-results.ts`](../apps/examples/src/plugins/truncate-tool-results.ts) |
+| Approve, block, time out or retry a tool               | `tool`                                       | Skip `next` to block                                                                |
+| Switch model, temperature or thinking                  | `request: before(...)`                       | `lowTemperature` in [`hooks.ts`](../apps/examples/src/hooks.ts)                     |
+| Fall back to another model on error                    | `request`                                    | `fallbackTo` in [`hooks.ts`](../apps/examples/src/hooks.ts)                         |
+| Add retrieval results or send only the last N messages | `context`                                    | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
+| Keep going until done, add reminders                   | `input`                                      | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
+| Summarize and replace history                          | `policy` + `rewriteHistory`                  | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
+| Enforce a budget or step cap                           | `policy` + `stop`                            | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |
+| Trim history (no model call)                           | `update`                                     | `keepLast` in [`apps/demo`](../apps/demo/src/main.ts)                               |
+| Keep your own counters                                 | `state: { init, reduce }`                    | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
+| Measure time, tokens or cost                           | No plugin: `r.summary`, `r.turns`, `usageOf` | [`metrics.ts`](../apps/examples/src/metrics.ts)                                     |
 
 The plugins under [`apps/examples/src/plugins`](../apps/examples/src/plugins) are meant to be copied and adapted.
 

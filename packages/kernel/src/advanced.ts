@@ -64,7 +64,9 @@ export function widen<S, A, N, O, R, D>(
 }
 
 /** 不含 policy 的中间件。可直接传给 extend，与 R、D 无关 */
-export type EnvUpdateExtension<S, A, O> = Omit<Extension<S, A, O, never, never>, 'policy'> & { policy?: never }
+export type EnvUpdateExtension<S, A, O> = Omit<Extension<S, A, O, never, never>, 'policy'> & {
+  policy?: never
+}
 
 /**
  * 把写在 A 上的 env / update 中间件提升到 A | N：新动作直接交给 next，旧动作走原中间件。

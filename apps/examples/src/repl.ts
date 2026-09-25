@@ -56,35 +56,36 @@ async function render(r: Run): Promise<void> {
     for await (const e of r) {
       if (e.tag === 'delta' && e.delta.type === 'thinking_start') {
         status.show('Thinking')
-      }
-      else if (e.tag === 'delta' && e.delta.type === 'thinking_delta') {
+      } else if (e.tag === 'delta' && e.delta.type === 'thinking_delta') {
         status.hide()
         out.write(e.delta.delta, 'thinking')
-      }
-      else if (e.tag === 'delta' && e.delta.type === 'text_delta') {
+      } else if (e.tag === 'delta' && e.delta.type === 'text_delta') {
         status.hide()
         out.write(e.delta.delta, 'text')
-      }
-      else if (e.tag === 'delta' && e.delta.type === 'toolcall_end') {
+      } else if (e.tag === 'delta' && e.delta.type === 'toolcall_end') {
         const call = e.delta.toolCall
         status.hide()
         out.end()
         // 同一回合的多个调用连在一起，不空行
-        log.message(describeCall(call), { symbol: styleText('cyan', '▸'), spacing: afterCall ? 0 : 1 })
+        log.message(describeCall(call), {
+          symbol: styleText('cyan', '▸'),
+          spacing: afterCall ? 0 : 1,
+        })
         afterCall = true
         status.show(`Running ${call.name}`)
-      }
-      else if (e.tag === 'act' && e.obs.length > 0) {
+      } else if (e.tag === 'act' && e.obs.length > 0) {
         status.hide()
         for (const result of e.obs) {
-          log.message(describeResult(result), { symbol: result.isError ? styleText('red', '✗') : styleText('green', '✓'), spacing: 0 })
+          log.message(describeResult(result), {
+            symbol: result.isError ? styleText('red', '✗') : styleText('green', '✓'),
+            spacing: 0,
+          })
         }
         afterCall = false
         status.show('Waiting')
       }
     }
-  }
-  finally {
+  } finally {
     status.hide()
     out.end()
   }
@@ -104,7 +105,9 @@ function describeUsage(usage: UsageTotals): string {
 
 /** 写成函数调用：calc(expr: "17*23") */
 function describeCall(call: ToolCall): string {
-  const args = Object.entries(call.arguments).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join(', ')
+  const args = Object.entries(call.arguments)
+    .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+    .join(', ')
   return `${styleText('bold', call.name)}${dim('(')}${clip(args)}${dim(')')}`
 }
 
@@ -124,7 +127,7 @@ function clip(s: string): string {
 type BlockKind = 'thinking' | 'text'
 
 /** 每种文字块的样式：标题行（可选）、左侧竖线、文字 */
-const BLOCKS: Record<BlockKind, { title?: string, rail: string, paint: (s: string) => string }> = {
+const BLOCKS: Record<BlockKind, { title?: string; rail: string; paint: (s: string) => string }> = {
   thinking: {
     title: `${styleText('gray', '◌')}  ${styleText(['dim', 'italic'], 'Thinking')}`,
     rail: styleText('gray', '┊'),
@@ -224,7 +227,11 @@ function dim(s: string): string {
 function pickModel(id: string): Model<Api> {
   const found = getModels('deepseek').find(m => m.id === id)
   if (!found) {
-    cancel(`Unknown DeepSeek model "${id}". Available: ${getModels('deepseek').map(m => m.id).join(', ')}`)
+    cancel(
+      `Unknown DeepSeek model "${id}". Available: ${getModels('deepseek')
+        .map(m => m.id)
+        .join(', ')}`,
+    )
     process.exit(1)
   }
   return found as Model<Api>
@@ -265,10 +272,15 @@ let chat = createSession(agent)
 
 // 输入框里的 Ctrl+C 由 clack 处理（返回 cancel）；这里只在回答进行中收到
 let current: Run | undefined
-process.on('SIGINT', () => current ? current.abort(STOPPED) : process.exit(130))
+process.on('SIGINT', () => (current ? current.abort(STOPPED) : process.exit(130)))
 
 intro(`ji · ${model.provider}/${model.id}`)
-log.message(dim(`thinking: ${thinking} · tools: calc, now\n/think <${levels.replaceAll(', ', '|')}> · Ctrl+C stops a reply · /exit quits`), { spacing: 0 })
+log.message(
+  dim(
+    `thinking: ${thinking} · tools: calc, now\n/think <${levels.replaceAll(', ', '|')}> · Ctrl+C stops a reply · /exit quits`,
+  ),
+  { spacing: 0 },
+)
 
 /** 停止或出错后，把没完成的那条消息填回输入框，改一改再发 */
 let retry = ''
@@ -294,8 +306,7 @@ for (;;) {
       agent = agentFor(model, level)
       chat = createSession(agent, { state: chat.state })
       log.success(`Thinking: ${level}`)
-    }
-    else {
+    } else {
       log.info(`Thinking: ${thinking}. Change it with /think <${levels.replaceAll(', ', '|')}>.`)
     }
     continue
@@ -305,19 +316,18 @@ for (;;) {
   current = chat.send(message)
   try {
     await render(current)
-  }
-  catch (error) {
+  } catch (error) {
     // 回到发送前：这条消息不留在历史里，下一条不会接着回答它
     chat = createSession(agent, { state: before })
     retry = message
     if (error === STOPPED) {
       log.warn('Stopped. Your message is back in the input. Edit it or clear it.')
+    } else {
+      log.error(
+        `${error instanceof Error ? error.message : String(error)}\nYour message is back in the input. Press Enter to retry.`,
+      )
     }
-    else {
-      log.error(`${error instanceof Error ? error.message : String(error)}\nYour message is back in the input. Press Enter to retry.`)
-    }
-  }
-  finally {
+  } finally {
     current = undefined
   }
 }

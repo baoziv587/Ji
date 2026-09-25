@@ -11,9 +11,7 @@
 /** Stream<D, T>：边产出 D、最后返回 T 的异步流（就是 AsyncGenerator 本身） */
 export type Stream<D, T> = AsyncGenerator<D, T, undefined>
 
-export type Step<A, R>
-  = | { tag: 'act', action: A }
-    | { tag: 'done', result: R }
+export type Step<A, R> = { tag: 'act'; action: A } | { tag: 'done'; result: R }
 
 export const act = <A>(action: A): Step<A, never> => ({ tag: 'act', action })
 export const done = <R>(result: R): Step<never, R> => ({ tag: 'done', result })
@@ -34,10 +32,10 @@ export interface Extension<S, A, O, R, D = never> {
   update?: (s: S, a: A, o: O, next: Agent<S, A, O, R, D>['update']) => S
 }
 
-export type Event<S, A, O, R, D>
-  = | { t: number, tag: 'delta', delta: D }
-    | { t: number, tag: 'act', action: A, obs: O, state: S }
-    | { t: number, tag: 'done', result: R, state: S }
+export type Event<S, A, O, R, D> =
+  | { t: number; tag: 'delta'; delta: D }
+  | { t: number; tag: 'act'; action: A; obs: O; state: S }
+  | { t: number; tag: 'done'; result: R; state: S }
 
 /* ── 动词 1：unfold，整条轨迹（含 token 级增量）是一个惰性流 ───── */
 /** 消费方 break 即取消：return() 会沿 yield* 一路传到 provider 的 HTTP 流 */
@@ -94,19 +92,14 @@ export async function* mapYield<D, E, T>(it: Stream<D, T>, f: (d: D) => E): Stre
       }
       yield f(r.value)
     }
-  }
-  finally {
+  } finally {
     await it.return(undefined as never)
   }
 }
 
 /* ── 内部 ─────────────────────────────────────────────── */
 function wrap<S, A, O, R, D>(inner: Agent<S, A, O, R, D>, ext: Extension<S, A, O, R, D>): Agent<S, A, O, R, D> {
-  const {
-    policy = (s, next) => next(s),
-    env = (a, next) => next(a),
-    update = (s, a, o, next) => next(s, a, o),
-  } = ext
+  const { policy = (s, next) => next(s), env = (a, next) => next(a), update = (s, a, o, next) => next(s, a, o) } = ext
 
   return {
     policy: s => policy(s, inner.policy),
