@@ -99,11 +99,12 @@ export async function* mapYield<D, E, T>(it: Stream<D, T>, f: (d: D) => E): Stre
 
 /* ── 内部 ─────────────────────────────────────────────── */
 function wrap<S, A, O, R, D>(inner: Agent<S, A, O, R, D>, ext: Extension<S, A, O, R, D>): Agent<S, A, O, R, D> {
-  const { policy = (s, next) => next(s), env = (a, next) => next(a), update = (s, a, o, next) => next(s, a, o) } = ext
+  const { policy, env, update } = ext
 
+  // 没写的中间件不包一层，直接用内层的
   return {
-    policy: s => policy(s, inner.policy),
-    env: a => env(a, inner.env),
-    update: (s, a, o) => update(s, a, o, inner.update),
+    policy: policy ? s => policy(s, inner.policy) : inner.policy,
+    env: env ? a => env(a, inner.env) : inner.env,
+    update: update ? (s, a, o) => update(s, a, o, inner.update) : inner.update,
   }
 }
