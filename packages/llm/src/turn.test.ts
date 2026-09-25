@@ -51,11 +51,17 @@ describe('applyTurn', () => {
 
 describe('rewriteHistory / stop', () => {
   it('rewriteHistory is an act step carrying the new history', () => {
-    expect(rewriteHistory([user('s')])).toMatchObject({ tag: 'act', action: { kind: 'rewrite', messages: [{ content: 's' }] } })
+    expect(rewriteHistory([user('s')])).toMatchObject({
+      tag: 'act',
+      action: { kind: 'rewrite', messages: [{ content: 's' }] },
+    })
   })
 
   it('stop ends with the last assistant message, even when it is followed by tool results', () => {
-    expect(stop({ messages: [user('q'), answer, withCall, result], plugins: {} })).toEqual({ tag: 'done', result: withCall })
+    expect(stop({ messages: [user('q'), answer, withCall, result], plugins: {} })).toEqual({
+      tag: 'done',
+      result: withCall,
+    })
   })
 
   it('stop throws when there is no assistant message yet', () => {

@@ -17,7 +17,7 @@ function streamNext(closed: { value: boolean }): (input: string) => Stream<strin
     })()
 }
 
-async function drain<D, T>(stream: Stream<D, T>): Promise<{ deltas: D[], result: T }> {
+async function drain<D, T>(stream: Stream<D, T>): Promise<{ deltas: D[]; result: T }> {
   const deltas: D[] = []
   for (;;) {
     const r = await stream.next()

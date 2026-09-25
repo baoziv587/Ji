@@ -140,7 +140,7 @@ describe('focus: the cases the comment in advanced.ts walks through', () => {
       lens,
     )
     const passed: T[] = []
-    await ext.policy!(t0, (t) => {
+    await ext.policy!(t0, t => {
       passed.push(t)
       return (async function* () {
         return done('ok')
@@ -169,7 +169,10 @@ describe('focus: the cases the comment in advanced.ts walks through', () => {
 
     // second inner call receives the part returned by the first, put into the original t (count still 0)
     expect(twice.update!(t0, 0, 5, spy)).toEqual({ messages: [1, 5, 10, 0], count: 1 })
-    expect(calls).toEqual([{ messages: [1], count: 0 }, { messages: [1, 5], count: 0 }])
+    expect(calls).toEqual([
+      { messages: [1], count: 0 },
+      { messages: [1, 5], count: 0 },
+    ])
   })
 })
 
