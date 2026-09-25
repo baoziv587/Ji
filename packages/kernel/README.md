@@ -1,0 +1,1 @@
+Some fp utilities for fp programming in TypeScript.
