@@ -8,7 +8,7 @@
 
 export { type Agent, type AgentOptions, createAgent } from './agent.ts'
 export { callsOf, textOf, user } from './message.ts'
-export { after, before, type Middleware } from './middleware.ts'
+export { after, before, mapDeltas, type Middleware } from './middleware.ts'
 export {
   definePlugin,
   type Plugin,

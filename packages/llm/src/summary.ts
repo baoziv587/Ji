@@ -31,11 +31,17 @@ export interface TimedTurn {
  */
 export const summaryReducer: Reducer<TimedTurn, RunSummary> = combine({
   turns: on('model', count),
-  usage: on('model', mapInput(usage, ({ turn }) => turn.message)),
+  usage: on(
+    'model',
+    mapInput(usage, ({ turn }) => turn.message),
+  ),
   modelMs: sum(({ timing }) => timing.modelMs ?? 0),
   toolMs: sum(({ timing }) => Object.values(timing.toolMs ?? {}).reduce((a, b) => a + b, 0)),
   tools: on('model', { init: NO_TOOLS, reduce: addToolStats }),
-  inputs: on('input', sum(({ turn }) => turn.messages.length)),
+  inputs: on(
+    'input',
+    sum(({ turn }) => turn.messages.length),
+  ),
   rewrites: on('rewrite', count),
 })
 
@@ -44,14 +50,16 @@ export const summaryReducer: Reducer<TimedTurn, RunSummary> = combine({
 type TimedTurnOf<K extends Turn['kind']> = TimedTurn & { turn: Extract<Turn, { kind: K }> }
 
 /** Only steps of this kind reach r; inside r, `turn` is already narrowed to that kind. */
-function on<K extends Turn['kind'], Acc, Out>(kind: K, r: Reducer<TimedTurnOf<K>, Acc, Out>): Reducer<TimedTurn, Acc, Out> {
+function on<K extends Turn['kind'], Acc, Out>(
+  kind: K,
+  r: Reducer<TimedTurnOf<K>, Acc, Out>,
+): Reducer<TimedTurn, Acc, Out> {
   return filterInput(r, (x: TimedTurn): x is TimedTurnOf<K> => x.turn.kind === kind)
 }
 
 function sum<In>(amount: (input: In) => number): Reducer<In, number> {
   return { init: 0, reduce: (n, input) => n + amount(input) }
 }
-
 
 function addUsage(total: UsageTotals, u: Usage): UsageTotals {
   return {

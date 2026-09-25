@@ -56,7 +56,7 @@ transform(extend(a, x)) ≃ extend(transform(a), lift(x))
 | `withState(agent, lens)`：`S → T`             | `focus(ext, lens)`      | 把 agent 嵌进更大的状态里；中间件只看到自己那一部分 |
 | `widen(agent, isNew, handlers)`：`A → A \| N` | `liftWiden(ext, isNew)` | 增加一种新动作，由外层中间件发出                    |
 
-`Lens<T, S>` 必须满足三条 lens 定律：get-set、set-get、set-set。`liftWiden` 只接受 `env` / `update` 中间件：policy 中间件的输出里含有 `A`，没有通用的提升方式，类型上直接拒绝。
+`Lens<T, S>` 必须满足三条 lens 定律：get-set、set-get、set-set。`@gaoxiang.ai/llm` 的插件状态也用 `Lens`：`pluginStateSlot(name, init)` 是指向 `state.plugins[name]` 的 lens，`plugin.select` 就是它的 `get`，状态 reducer 通过它的 `set` 写入。`liftWiden` 只接受 `env` / `update` 中间件：policy 中间件的输出里含有 `A`，没有通用的提升方式，类型上直接拒绝。
 
 ## Reducer（`/reduce`）
 

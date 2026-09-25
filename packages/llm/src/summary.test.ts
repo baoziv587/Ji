@@ -37,7 +37,13 @@ describe('usageOf', () => {
   })
 
   it('is all zeros for an empty history', () => {
-    expect(usageOf({ messages: [], plugins: {} })).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 })
+    expect(usageOf({ messages: [], plugins: {} })).toEqual({
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      cost: 0,
+    })
   })
 })
 
@@ -48,7 +54,11 @@ describe('summaryReducer', () => {
   const turns: TimedTurn[] = [
     { turn: { kind: 'input', messages: [user('a'), user('b')], idle: true, interrupted: false }, timing: { ms: 1 } },
     {
-      turn: { kind: 'model', message: withTools, results: [toolResult(call('t1', 'echo'), 'ok'), toolError(call('t2', 'fail'), 'nope')] },
+      turn: {
+        kind: 'model',
+        message: withTools,
+        results: [toolResult(call('t1', 'echo'), 'ok'), toolError(call('t2', 'fail'), 'nope')],
+      },
       timing: { ms: 200, modelMs: 100, toolMs: { t1: 30, t2: 20 } },
     },
     { turn: { kind: 'rewrite', messages: [user('summary')] }, timing: { ms: 5 } },

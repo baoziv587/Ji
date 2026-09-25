@@ -56,7 +56,7 @@ That means code can always be written as `extend(transform(base), ...extensions)
 | `withState(agent, lens)`: `S → T`             | `focus(ext, lens)`      | Embed an agent in a larger state. The middleware only sees its own slice. |
 | `widen(agent, isNew, handlers)`: `A → A \| N` | `liftWiden(ext, isNew)` | Add a new kind of action, emitted by an outer middleware                  |
 
-A `Lens<T, S>` must satisfy the three lens laws: get-set, set-get and set-set. `liftWiden` only accepts `env`/`update` middleware. A policy middleware's output mentions `A`, so there is no general lift for it, and the types reject it.
+A `Lens<T, S>` must satisfy the three lens laws: get-set, set-get and set-set. `@gaoxiang.ai/llm` also uses `Lens` for plugin state: its `pluginStateSlot(name, init)` is a lens onto `state.plugins[name]`: `plugin.select` is its `get`, and the state reducer writes through its `set`. `liftWiden` only accepts `env`/`update` middleware. A policy middleware's output mentions `A`, so there is no general lift for it, and the types reject it.
 
 ## Reducers (`/reduce`)
 

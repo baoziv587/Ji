@@ -87,7 +87,7 @@ export const myPlugin = definePlugin({
 钩子有两种形状：
 
 - **变换**（`system`、`input`、`context`）：返回新的值。多个插件按数组顺序依次执行。
-- **中间件**（`policy`、`request`、`env`、`tool`、`update`）：`(input, next)`。调用 `next` 并返回它的结果 = 什么都不改；改参数再调用 = 改输入；改返回值 = 改输出；不调用 = 拦截；调用多次 = 重试。只改输入或只改输出时，用 `before` / `after` 简写。
+- **中间件**（`policy`、`request`、`env`、`tool`、`update`）：`(input, next)`。调用 `next` 并返回它的结果 = 什么都不改；改参数再调用 = 改输入；改返回值 = 改输出；不调用 = 拦截；调用多次 = 重试。只改输入或只改输出时，用 `before` / `after` 简写；只改流式增量（只影响显示）时，用 `request: mapDeltas(...)`。
 
 **顺序。** 同一个钩子上，`plugins` 数组里后面的中间件在外层。不同钩子之间的顺序是固定的，所以写不同钩子的插件顺序可以随意。
 
@@ -105,6 +105,7 @@ export const myPlugin = definePlugin({
 | 审批、拦截、超时、重试                | `tool`                                             | 不调用 `next` 即拦截           |
 | 换模型、改 temperature / thinking     | `request: before(...)`                             | `hooks.ts` 的 `lowTemperature` |
 | 模型出错时换兜底模型                  | `request`                                          | `hooks.ts` 的 `fallbackTo`     |
+| 改写流式文字（只影响显示）            | `request: mapDeltas(...)`                          | 输出时遮盖密钥                 |
 | 给这一次请求加检索结果、只发最近 N 条 | `context`                                          | `hooks.ts` 的 `retrieval`      |
 | 自动继续、定时提醒                    | `input`                                            | `keepGoing`                    |
 | 替换历史（压缩）                      | `policy` 返回 `rewriteHistory(messages)`           | `compaction`                   |

@@ -1,4 +1,5 @@
 import type { Extension, Step, Stream } from '@gaoxiang.ai/kernel'
+import type { Lens } from '@gaoxiang.ai/kernel/advanced'
 import type { AssistantMessage, AssistantMessageEvent, Message, ToolResultMessage } from '@mariozechner/pi-ai'
 import type {
   AgentAction,
@@ -66,10 +67,26 @@ export type PluginList = ReadonlyArray<AnyPlugin | PluginList>
 
 export function definePlugin<State = undefined>(spec: PluginSpec<State>): Plugin<State> {
   const { name, state } = spec
+  return { ...spec, select: pluginStateSlot(name, state?.init as State).get }
+}
 
+/**
+ * The place inside AgentState where one plugin keeps its own data: `state.plugins[name]`.
+ *
+ *   get(state)       reads the plugin's data; `init` until something has been written
+ *   set(state, own)  returns a copy of state with the plugin's data replaced; nothing else changes
+ *
+ * plugin.select is `get`. After every step, the plugin's state reducer reads with `get` and writes with `set`.
+ *
+ * Three rules keep saved and resumed state reliable (tested in plugin.test.ts; in kernel terms this is a Lens):
+ *   - reading right after a write gives back what was written
+ *   - of two writes in a row, only the last one counts
+ *   - writing back what was just read changes nothing (an empty slot gets `init` written in, which reads the same)
+ */
+export function pluginStateSlot<State>(name: string, init: State): Lens<AgentState, State> {
   return {
-    ...spec,
-    select: s => (Object.hasOwn(s.plugins, name) ? s.plugins[name] : state?.init) as State,
+    get: s => (Object.hasOwn(s.plugins, name) ? (s.plugins[name] as State) : init),
+    set: (s, own) => ({ ...s, plugins: { ...s.plugins, [name]: own } }),
   }
 }
 
@@ -108,7 +125,7 @@ type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], Assi
  * from the kernel's (action, obs); state.reduce runs on the result of this plugin's update, inside its own layer.
  */
 export function extensionOf(plugin: AnyPlugin): LLMExtension {
-  const { name, policy, env, update, state, select } = plugin
+  const { name, policy, env, update, state } = plugin
   const ext: LLMExtension = { policy }
 
   if (env) {
@@ -116,18 +133,17 @@ export function extensionOf(plugin: AnyPlugin): LLMExtension {
   }
 
   if (update || state) {
+    const slot = state ? pluginStateSlot(name, state.init) : undefined
+
     ext.update = (s, action, results, next) => {
       const turn = turnOf(action, results)
       const inner = (s2: AgentState, turn2: Turn): AgentState => next(s2, ...actionOf(turn2))
       const updated = update ? update(s, turn, inner) : inner(s, turn)
 
-      if (!state) {
+      if (!state || !slot) {
         return updated
       }
-      return {
-        ...updated,
-        plugins: { ...updated.plugins, [name]: state.reduce(select(updated), turn) },
-      }
+      return slot.set(updated, state.reduce(slot.get(updated), turn))
     }
   }
 

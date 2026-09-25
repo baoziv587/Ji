@@ -18,6 +18,7 @@ import {
   createAgent,
   createSession,
   definePlugin,
+  mapDeltas,
   PluginConflictError,
   rewriteHistory,
   textOf,
@@ -334,6 +335,40 @@ describe('hooks', () => {
 
     expect((await collect(r.text)).join('')).toBe('prompt=patched')
     expect(textOf(await r.result)).toBe('replaced')
+  })
+
+  it('request: mapDeltas changes only the streamed deltas; the stored message stays as the model wrote it', async () => {
+    const shout = definePlugin({
+      name: 'shout',
+      request: mapDeltas(e => (e.type === 'text_delta' ? { ...e, delta: e.delta.toUpperCase() } : e)),
+    })
+    const model = fauxModel([fauxAssistantMessage('quiet reply')])
+    const r = createSession(createAgent({ model, plugins: [shout] })).send('go')
+
+    expect((await collect(r.text)).join('')).toBe('QUIET REPLY')
+    expect(textOf(await r.result)).toBe('quiet reply')
+  })
+
+  it('request: breaking out of r.text still aborts the model call through mapDeltas', async () => {
+    let seen: AbortSignal | undefined
+    const model = fauxModel(
+      [
+        (_ctx, opts) => {
+          seen = opts?.signal
+          return fauxAssistantMessage('a long long long long answer')
+        },
+      ],
+      { tokensPerSecond: 20 },
+    )
+    const identity = definePlugin({ name: 'identity', request: mapDeltas(e => e) })
+    const r = createSession(createAgent({ model, plugins: [identity] })).send('go')
+
+    const text = r.text[Symbol.asyncIterator]()
+    await text.next() // the first delta
+    await text.return?.() // what break does
+
+    await expect(r.result).rejects.toThrow(/aborted/)
+    expect(seen?.aborted).toBe(true)
   })
 
   it('tool: after changes only the output', async () => {

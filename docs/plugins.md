@@ -54,7 +54,7 @@ Read a plugin's state with `myPlugin.select(state)`. It returns `init` until the
 | don't call `next`                 | Intercept         |
 | call `next` more than once        | Retry             |
 
-`before(f)` and `after(g)` are shorthands for the input-only and output-only cases. On stream hooks (`request`), `after` forwards deltas unchanged and applies `g` to the final message.
+`before(f)` and `after(g)` are shorthands for the input-only and output-only cases. On stream hooks (`request`), `after` forwards deltas unchanged and applies `g` to the final message, and `mapDeltas(f)` maps each delta one to one while leaving the final message alone. Deltas only reach `r.text` and the events, so pair `mapDeltas` with `after` when the stored message should change too.
 
 ## Ordering
 
@@ -77,6 +77,7 @@ Read a plugin's state with `myPlugin.select(state)`. It returns `init` until the
 | Approve, block, time out or retry a tool               | `tool`                                       | Skip `next` to block                                                                |
 | Switch model, temperature or thinking                  | `request: before(...)`                       | `lowTemperature` in [`hooks.ts`](../apps/examples/src/hooks.ts)                     |
 | Fall back to another model on error                    | `request`                                    | `fallbackTo` in [`hooks.ts`](../apps/examples/src/hooks.ts)                         |
+| Rewrite streamed text for display only                 | `request: mapDeltas(...)`                    | Redact secrets as they stream                                                       |
 | Add retrieval results or send only the last N messages | `context`                                    | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
 | Keep going until done, add reminders                   | `input`                                      | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
 | Summarize and replace history                          | `policy` + `rewriteHistory`                  | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |

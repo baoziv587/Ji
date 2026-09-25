@@ -54,7 +54,7 @@ export const myPlugin = definePlugin({
 | 不调用 `next`       | 拦截       |
 | 多次调用 `next`     | 重试       |
 
-只改输入或只改输出时，用 `before(f)` / `after(g)` 简写。在流式钩子（`request`）上，`after` 原样转发增量，`g` 只作用于最终消息。
+只改输入或只改输出时，用 `before(f)` / `after(g)` 简写。在流式钩子（`request`）上，`after` 原样转发增量，`g` 只作用于最终消息；`mapDeltas(f)` 逐个改写增量，最终消息不变。增量只会出现在 `r.text` 和事件里，要连写入状态的消息一起改，就同时用 `mapDeltas` 和 `after`。
 
 ## 顺序
 
@@ -77,6 +77,7 @@ export const myPlugin = definePlugin({
 | 审批、拦截、超时、重试工具        | `tool`                                      | 不调用 `next` 即拦截                                                                   |
 | 换模型、改 temperature / thinking | `request: before(...)`                      | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature`                     |
 | 模型出错时换兜底模型              | `request`                                   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`                         |
+| 改写流式文字（只影响显示）        | `request: mapDeltas(...)`                   | 输出时遮盖密钥                                                                         |
 | 给请求加检索结果、只发最近 N 条   | `context`                                   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
 | 任务没完成就自动继续、定时提醒    | `input`                                     | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
 | 写摘要并替换历史                  | `policy` + `rewriteHistory`                 | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
