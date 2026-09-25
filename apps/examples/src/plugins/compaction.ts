@@ -41,7 +41,7 @@ export function compaction({ model, maxTokens, keepRecent = 6 }: CompactionOptio
 }
 
 /** 粗略估计：约 4 个字符 1 个 token。要更准可以改用上一个助手回合的 usage.input */
-export function estimateTokens(messages: Message[]): number {
+function estimateTokens(messages: Message[]): number {
   return Math.ceil(JSON.stringify(messages).length / 4)
 }
 

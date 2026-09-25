@@ -16,6 +16,7 @@ export {
   type PluginList,
   type PluginSpec,
   type PluginState,
+  type PolicyStream,
 } from './plugin.ts'
 export type { Run } from './run.ts'
 export { createSession, type Session, type SessionOptions } from './session.ts'

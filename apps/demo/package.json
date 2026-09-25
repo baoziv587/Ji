@@ -8,7 +8,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@gaoxiang.ai/kernel": "workspace:*",
     "@gaoxiang.ai/llm": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }

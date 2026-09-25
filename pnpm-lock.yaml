@@ -202,9 +202,6 @@ importers:
 
   apps/demo:
     dependencies:
-      '@gaoxiang.ai/kernel':
-        specifier: workspace:*
-        version: link:../../packages/kernel
       '@gaoxiang.ai/llm':
         specifier: workspace:*
         version: link:../../packages/llm
