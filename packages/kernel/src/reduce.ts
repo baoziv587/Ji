@@ -14,23 +14,24 @@ type AnyReducer<In> = Reducer<In, any, any>
 type AccOf<R> = R extends { init: infer Acc } ? Acc : never
 /** 没有 result 时结果就是累加值 */
 type OutOf<R> = R extends { result: (acc: any) => infer Out } ? Out : AccOf<R>
+type AccsOf<Rs> = { [K in keyof Rs]: AccOf<Rs[K]> }
+type OutsOf<Rs> = { [K in keyof Rs]: OutOf<Rs[K]> }
 
 /** 一次遍历同时计算多个 reducer（R1） */
 export function combine<In, Rs extends Record<string, AnyReducer<In>>>(
   reducers: Rs,
-): Reducer<In, { [K in keyof Rs]: AccOf<Rs[K]> }, { [K in keyof Rs]: OutOf<Rs[K]> }> {
+): Reducer<In, AccsOf<Rs>, OutsOf<Rs>> {
   const entries = Object.entries(reducers)
 
+  /** 对每个 reducer 求一个值，按原来的 key 拼回对象 */
+  function each<T>(f: (key: string, r: AnyReducer<In>) => unknown): T {
+    return Object.fromEntries(entries.map(([key, r]) => [key, f(key, r)])) as T
+  }
+
   return {
-    init: Object.fromEntries(entries.map(([key, r]) => [key, r.init])) as {
-      [K in keyof Rs]: AccOf<Rs[K]>
-    },
-    reduce: (acc, input) =>
-      Object.fromEntries(entries.map(([key, r]) => [key, r.reduce(acc[key], input)])) as typeof acc,
-    result: acc =>
-      Object.fromEntries(entries.map(([key, r]) => [key, resultOf(r, acc[key])])) as {
-        [K in keyof Rs]: OutOf<Rs[K]>
-      },
+    init: each<AccsOf<Rs>>((_, r) => r.init),
+    reduce: (acc, input) => each<AccsOf<Rs>>((key, r) => r.reduce(acc[key], input)),
+    result: acc => each<OutsOf<Rs>>((key, r) => resultOf(r, acc[key])),
   }
 }
 
