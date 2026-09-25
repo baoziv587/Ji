@@ -59,7 +59,9 @@ export function focus<S, T, A, O, R, D>(ext: Extension<S, A, O, R, D>, lens: Len
         latest = next(lens.set(t, s), a2, o2)
         return lens.get(latest)
       }
-      return lens.set(latest, update(lens.get(t), a, o, inner))
+      // Call update first: `latest` must be read after the middleware has made its next calls
+      const part = update(lens.get(t), a, o, inner)
+      return lens.set(latest, part)
     }
   }
 

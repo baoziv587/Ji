@@ -1,7 +1,7 @@
 import type { Agent, Extension } from './index.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { act, done, extend, mapState, run, unfold } from './index.ts'
+import { act, done, extend, mapState, mapYield, run, unfold } from './index.ts'
 
 // Agent under test: S = number[], each step appends env's result, done at length 3
 type S = number[]
@@ -149,5 +149,45 @@ describe('extend: laws from appendix A.1', () => {
   it('mapState equals a post on update', async () => {
     const f = (s: S): S => s.map(v => v + 1)
     await expectSame(mapState(base, f), extend(base, { update: (s, a, o, next) => f(next(s, a, o)) }))
+  })
+})
+
+describe('mapYield', () => {
+  /** Yields 1, 2, 3 and returns 'end'; records whether its finally block ran */
+  function numbers(closed: { value: boolean }): AsyncGenerator<number, string, undefined> {
+    return (async function* () {
+      try {
+        yield 1
+        yield 2
+        yield 3
+        return 'end'
+      } finally {
+        closed.value = true
+      }
+    })()
+  }
+
+  it('maps every yielded value and keeps the return value', async () => {
+    const mapped = mapYield(numbers({ value: false }), n => `#${n}`)
+    const seen: string[] = []
+
+    for (;;) {
+      const r = await mapped.next()
+      if (r.done) {
+        expect(r.value).toBe('end')
+        break
+      }
+      seen.push(r.value)
+    }
+    expect(seen).toEqual(['#1', '#2', '#3'])
+  })
+
+  it('passes an early return (cancellation) through to the source', async () => {
+    const closed = { value: false }
+    const mapped = mapYield(numbers(closed), n => n * 10)
+
+    expect((await mapped.next()).value).toBe(10)
+    await mapped.return(undefined as never)
+    expect(closed.value).toBe(true)
   })
 })

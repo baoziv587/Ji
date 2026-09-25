@@ -116,3 +116,84 @@ describe('withState: extends state', () => {
     )
   })
 })
+
+describe('focus: the cases the comment in advanced.ts walks through', () => {
+  interface T {
+    messages: S
+    count: number
+  }
+  const lens: Lens<T, S> = { get: t => t.messages, set: (t, messages) => ({ ...t, messages }) }
+  const t0: T = { messages: [1], count: 0 }
+
+  /** The real next: appends o to messages and bumps count, so we can see which whole state survives */
+  const next = (t: T, _a: number, o: number): T => ({ messages: [...t.messages, o], count: t.count + 1 })
+
+  it('policy: the middleware sees only its part, and the rest of T is put back before next', async () => {
+    const seen: S[] = []
+    const ext = focus<S, T, number, number, string, never>(
+      {
+        policy: (s, inner) => {
+          seen.push(s)
+          return inner([...s, 99])
+        },
+      },
+      lens,
+    )
+    const passed: T[] = []
+    await ext.policy!(t0, (t) => {
+      passed.push(t)
+      return (async function* () {
+        return done('ok')
+      })()
+    }).next()
+
+    expect(seen).toEqual([[1]])
+    expect(passed).toEqual([{ messages: [1, 99], count: 0 }])
+  })
+
+  it('update, next never called: the result keeps the rest of the original t', () => {
+    const ext = focus<S, T, number, number, string, never>({ update: s => [...s, 7] }, lens)
+    expect(ext.update!(t0, 0, 5, next)).toEqual({ messages: [1, 7], count: 0 })
+  })
+
+  it('update, next called twice: each call starts from the original t, the result keeps the rest of the last one', () => {
+    const calls: T[] = []
+    const spy = (t: T, a: number, o: number): T => {
+      calls.push(t)
+      return next(t, a, o)
+    }
+    const twice = focus<S, T, number, number, string, never>(
+      { update: (s, a, o, inner) => [...inner(inner(s, a, o), a, o * 2), 0] },
+      lens,
+    )
+
+    // second inner call receives the part returned by the first, put into the original t (count still 0)
+    expect(twice.update!(t0, 0, 5, spy)).toEqual({ messages: [1, 5, 10, 0], count: 1 })
+    expect(calls).toEqual([{ messages: [1], count: 0 }, { messages: [1, 5], count: 0 }])
+  })
+})
+
+describe('widen / liftWiden: routing by action kind', () => {
+  interface Compact {
+    compact: true
+  }
+  const isCompact = (x: number | Compact): x is Compact => typeof x === 'object'
+  const compact: Compact = { compact: true }
+
+  it('widen sends new actions to the handlers and old ones to the agent', async () => {
+    const widened = widen(base, isCompact, { env: async () => -1, update: s => [s.length] })
+
+    expect(await widened.env(compact)).toBe(-1)
+    expect(await widened.env(2)).toBe(20)
+    expect(widened.update([4, 5], compact, -1)).toEqual([2])
+    expect(widened.update([4, 5], 3, 30)).toEqual([4, 5, 30])
+  })
+
+  it('liftWiden skips the middleware for new actions and runs it for old ones', async () => {
+    const lifted = liftWiden<S, number, Compact, number>({ env: async (a, next) => (await next(a)) + 1 }, isCompact)
+    const inner = async (x: number | Compact): Promise<number> => (isCompact(x) ? -1 : x * 10)
+
+    expect(await lifted.env!(compact, inner)).toBe(-1)
+    expect(await lifted.env!(2, inner)).toBe(21)
+  })
+})
