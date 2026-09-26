@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "javascript-testing-expert": {
+      "source": "dubzzz/fast-check",
+      "sourceType": "github",
+      "skillPath": "skills/javascript-testing-expert/SKILL.md",
+      "computedHash": "3e620ddfd019d9f6c1a91cbbfaf598a24c6424c36e86c1396798f0fda527f5bb"
+    }
+  }
+}
