@@ -176,9 +176,6 @@ export class AgentRun implements Run {
     }
 
     const controller = new AbortController()
-    const stopped = new Promise<'stopped'>(resolve => {
-      this.stopSegment = () => resolve('stopped')
-    })
     this.controller = controller
 
     const isCurrent = (): boolean => this.controller === controller
@@ -201,11 +198,7 @@ export class AgentRun implements Run {
 
     try {
       for (;;) {
-        const pending = events.next()
-        pending.catch(noop)
-
-        // `stopped` goes first: when an interrupt and a step completion coincide, the interrupt wins.
-        const next = await Promise.race([stopped, pending])
+        const next = await this.nextUnlessStopped(events)
         if (next === 'stopped') {
           return 'stopped'
         }
@@ -233,6 +226,23 @@ export class AgentRun implements Run {
       // unfold may still be inside a tool or model call; don't wait for it, it ends once the signal aborts.
       events.return(undefined).catch(noop)
     }
+  }
+
+  /**
+   * The next event, or 'stopped' if interrupt() / abort() comes first; when both land together, the stop wins.
+   * Each call waits on its own promise: racing one promise that lives for the whole segment would pile a reaction per
+   * event onto it and keep every event alive until the segment ends.
+   */
+  private nextUnlessStopped<T>(events: AsyncIterator<T>): Promise<IteratorResult<T> | 'stopped'> {
+    if (this.stopping) {
+      return Promise.resolve('stopped')
+    }
+
+    const pending = events.next()
+    return new Promise((resolve, reject) => {
+      this.stopSegment = () => resolve('stopped')
+      pending.then(resolve, reject)
+    })
   }
 
   private commit(action: AgentAction, results: ToolResultMessage[], state: AgentState): void {

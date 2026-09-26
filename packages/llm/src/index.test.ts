@@ -2,6 +2,7 @@
 import type {
   Api,
   AssistantMessage,
+  AssistantMessageEvent,
   Context,
   FauxResponseStep,
   Message,
@@ -9,7 +10,9 @@ import type {
   SimpleStreamOptions,
   ToolResultMessage,
 } from '@mariozechner/pi-ai'
-import type { AgentTool, PluginSpec, Turn, TurnEvent } from './index.ts'
+import type { AgentTool, PluginSpec, Run, Turn, TurnEvent } from './index.ts'
+import { setFlagsFromString } from 'node:v8'
+import { runInNewContext } from 'node:vm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import {
@@ -539,7 +542,38 @@ describe('run records and stats', () => {
     expect(final.timing.modelMs).toBeTypeOf('number')
     expect(turns[0].timing.modelMs).toBeUndefined()
   })
+
+  it('a finished run does not keep the events it streamed alive', async () => {
+    const r = createSession(createAgent({ model: fauxModel([fauxAssistantMessage('a streamed answer')]) })).send('go')
+    const delta = await firstDelta(r)
+
+    await collectGarbage()
+    expect(delta.deref()).toBeUndefined()
+    expect(await r.result).toBeDefined() // r is still reachable here
+  })
 })
+
+/** Reads the whole run (leaving early would cancel it) and holds the first model delta only weakly. */
+async function firstDelta(r: Run): Promise<WeakRef<AssistantMessageEvent>> {
+  let first: WeakRef<AssistantMessageEvent> | undefined
+  for await (const e of r) {
+    if (e.tag === 'delta') {
+      first ??= new WeakRef(e.delta)
+    }
+  }
+  if (first === undefined) {
+    throw new Error('no deltas')
+  }
+  return first
+}
+
+async function collectGarbage(): Promise<void> {
+  setFlagsFromString('--expose-gc')
+  const gc = runInNewContext('gc') as () => void
+  // A WeakRef target stays alive until the job that created the WeakRef ends.
+  await new Promise(resolve => setTimeout(resolve, 0))
+  gc()
+}
 
 describe('sessions and interjections', () => {
   const blocked = (g: ReturnType<typeof gate>): AgentTool =>
