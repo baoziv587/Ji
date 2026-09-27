@@ -3,7 +3,7 @@
 //   input    keep going automatically while the agent is idle but the task is unfinished (keepGoing plugin)
 //   context  add retrieval results to this one request without touching the history
 //   request  switch to a fallback model on error
-//   policy   stop once over budget (budget plugin)
+//   turn     stop once over budget (budget plugin)
 import type { Plugin } from '@gaoxiang.ai/llm'
 import type { Api, Model } from '@mariozechner/pi-ai'
 import { before, createAgent, createSession, definePlugin, textOf, user } from '@gaoxiang.ai/llm'

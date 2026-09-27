@@ -478,12 +478,12 @@ describe('thinking levels', () => {
 })
 
 describe('rewriteHistory', () => {
-  it('policy returning rewriteHistory replaces the history; env is skipped, update and state see the rewrite', async () => {
+  it('turn returning rewriteHistory replaces the history; env is skipped, update and state see the rewrite', async () => {
     let envCalls = 0
     const seen: Turn['kind'][] = []
     const compact = definePlugin({
       name: 'compact',
-      async *policy(state, next) {
+      async *turn(state, next) {
         if (state.messages.length >= 3 && state.messages[0].content !== 'summary') {
           return rewriteHistory([user('summary')])
         }

@@ -30,7 +30,7 @@ export const myPlugin = definePlugin({
 | --------- | ------- | ---------------------------- | ------------------------------------ |
 | `tools`   | 列表    | `createAgent` 时             | 注册工具                             |
 | `system`  | 变换    | `createAgent` 时执行一次     | 修改 system prompt                   |
-| `policy`  | 中间件  | 包住整一步                   | 压缩、预算、结束运行                 |
+| `turn`    | 中间件  | 决定每一步的 turn            | 压缩、预算、结束运行                 |
 | `input`   | 变换    | 每个步边界                   | 自动继续、提醒                       |
 | `context` | 变换    | 每次调用模型前               | 检索、窗口截取；不改历史             |
 | `request` | 中间件  | 每次模型调用（流）           | 换模型、改 temperature、兜底         |
@@ -56,7 +56,7 @@ export const myPlugin = definePlugin({
 | 不调用 `next`       | 拦截       |
 | 多次调用 `next`     | 重试       |
 
-有副作用的钩子（`policy`、`request`、`env`、`tool`）都是**流**：`yield` 往这次运行追加一个事件，`return` 给出结果，`yield* next(...)` 把内层的事件原样传出去。
+有副作用的钩子（`turn`、`request`、`env`、`tool`）都是**流**：`yield` 往这次运行追加一个事件，`return` 给出结果，`yield* next(...)` 把内层的事件原样传出去。
 
 ```ts
 const retry = definePlugin({
@@ -81,10 +81,10 @@ const retry = definePlugin({
 
 ## 规则
 
-1. `update` 和 `state.reduce` **同步且纯**。IO 放在 `policy`、`request`、`env` 或 `tool` 里。
-2. 在 `policy`、`request`、`env`、`tool` 里用 **`return yield* next(...)`** 消费流，保证取消能传下去、内层事件和返回值都不会丢。
+1. `update` 和 `state.reduce` **同步且纯**。IO 放在 `turn`、`request`、`env` 或 `tool` 里。
+2. 在 `turn`、`request`、`env`、`tool` 里用 **`return yield* next(...)`** 消费流，保证取消能传下去、内层事件和返回值都不会丢。
 3. 工具用 **`toolError(call, reason)`** 报告失败，不要抛错。
-4. 在 `policy` 里返回 `rewriteHistory(messages)` 替换历史，返回 `stop(state)` 以最后一条助手消息结束运行。
+4. 在 `turn` 里返回 `rewriteHistory(messages)` 替换历史，返回 `stop(state)` 以最后一条助手消息结束运行。
 5. 插件之间不互相导入。它们共享的是每个插件都能读到的东西：`Turn`、消息，以及事件名和它的形状。
 
 ## 插件发出的事件
@@ -101,7 +101,7 @@ declare module '@gaoxiang.ai/llm' {
 
 definePlugin({
   name: 'compaction',
-  async *policy(state, next) {
+  async *turn(state, next) {
     if (count(state.messages) < limit) return yield* next(state)
     yield { type: 'compaction:start', tokens: count(state.messages) }
     const messages = await summarize(state.messages)
@@ -124,13 +124,13 @@ definePlugin({
 | 改写流式文字（只影响显示）        | `request: mapDeltas(...)`                   | 输出时遮盖密钥                                                                         |
 | 给请求加检索结果、只发最近 N 条   | `context`                                   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
 | 任务没完成就自动继续、定时提醒    | `input`                                     | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
-| 写摘要并替换历史                  | `policy` + `rewriteHistory`                 | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
-| 预算、步数上限                    | `policy` + `stop`                           | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
+| 写摘要并替换历史                  | `turn` + `rewriteHistory`                   | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
+| 预算、步数上限                    | `turn` + `stop`                             | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
 | 截断历史（不调用模型）            | `update`                                    | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast`                               |
 | 保存自己的计数                    | `state: { init, reduce }`                   | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
 | 统计耗时、token、费用             | 不写插件：`r.summary`、`r.turns`、`usageOf` | [`metrics.ts`](../../apps/examples/src/metrics.ts)                                     |
 | 记录日志、追踪、计数              | `observe`                                   | [`plugins/otel`](../../plugins/otel)、[`plugins/jsonl`](../../plugins/jsonl)           |
-| 显示一个耗时步骤正在做什么        | 在 `policy`、`request` 或 `tool` 里 `yield` | [插件发出的事件](#插件发出的事件)                                                      |
+| 显示一个耗时步骤正在做什么        | 在 `turn`、`request` 或 `tool` 里 `yield`   | [插件发出的事件](#插件发出的事件)                                                      |
 
 [`apps/examples/src/plugins`](../../apps/examples/src/plugins) 里的插件可以直接复制过去改；[`plugins/`](../../plugins) 下的包可以直接安装：`otel`、`jsonl`、`throttle-updates`；每个示例的详细说明见 [示例 README](../../apps/examples/README.md)。
 

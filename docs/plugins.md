@@ -30,7 +30,7 @@ export const myPlugin = definePlugin({
 | --------- | ---------- | ------------------------------------- | ----------------------------------------------------- |
 | `tools`   | list       | At `createAgent`                      | Register tools                                        |
 | `system`  | transform  | Once, at `createAgent`                | Edit the system prompt                                |
-| `policy`  | middleware | Wraps the whole step                  | Compaction, budgets, stopping                         |
+| `turn`    | middleware | Decides each step's turn              | Compaction, budgets, stopping                         |
 | `input`   | transform  | At each boundary                      | Auto-continue, reminders                              |
 | `context` | transform  | Before each model call                | Retrieval, windowing. History is unchanged.           |
 | `request` | middleware | Each model call (a stream)            | Switch model, temperature, fallback                   |
@@ -56,7 +56,7 @@ Read a plugin's state with `myPlugin.select(state)`. It returns `init` until the
 | don't call `next`                 | Intercept         |
 | call `next` more than once        | Retry             |
 
-The hooks with side effects (`policy`, `request`, `env`, `tool`) are **streams**: `yield` adds an event to the run, `return` gives the result, and `yield* next(...)` passes the inner layers' events through.
+The hooks with side effects (`turn`, `request`, `env`, `tool`) are **streams**: `yield` adds an event to the run, `return` gives the result, and `yield* next(...)` passes the inner layers' events through.
 
 ```ts
 const retry = definePlugin({
@@ -81,10 +81,10 @@ const retry = definePlugin({
 
 ## Rules
 
-1. `update` and `state.reduce` are **synchronous and pure**. Put IO in `policy`, `request`, `env` or `tool`.
-2. In `policy`, `request`, `env` and `tool`, consume the stream with **`return yield* next(...)`**. That keeps cancellation, the inner events and the return value intact.
+1. `update` and `state.reduce` are **synchronous and pure**. Put IO in `turn`, `request`, `env` or `tool`.
+2. In `turn`, `request`, `env` and `tool`, consume the stream with **`return yield* next(...)`**. That keeps cancellation, the inner events and the return value intact.
 3. Tools report failure with **`toolError(call, reason)`**, never by throwing.
-4. From `policy`, return `rewriteHistory(messages)` to replace history, or `stop(state)` to end the run with the last assistant message.
+4. From `turn`, return `rewriteHistory(messages)` to replace history, or `stop(state)` to end the run with the last assistant message.
 5. Plugins don't import each other. They share what every plugin can read: `Turn`s, the messages, and event names with their shapes.
 
 ## Events from plugins
@@ -101,7 +101,7 @@ declare module '@gaoxiang.ai/llm' {
 
 definePlugin({
   name: 'compaction',
-  async *policy(state, next) {
+  async *turn(state, next) {
     if (count(state.messages) < limit) return yield* next(state)
     yield { type: 'compaction:start', tokens: count(state.messages) }
     const messages = await summarize(state.messages)
@@ -124,13 +124,13 @@ Readers match on `e.type === 'compaction:start'` without importing the plugin; a
 | Rewrite streamed text for display only                 | `request: mapDeltas(...)`                    | Redact secrets as they stream                                                       |
 | Add retrieval results or send only the last N messages | `context`                                    | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
 | Keep going until done, add reminders                   | `input`                                      | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
-| Summarize and replace history                          | `policy` + `rewriteHistory`                  | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
-| Enforce a budget or step cap                           | `policy` + `stop`                            | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |
+| Summarize and replace history                          | `turn` + `rewriteHistory`                    | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
+| Enforce a budget or step cap                           | `turn` + `stop`                              | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |
 | Trim history (no model call)                           | `update`                                     | `keepLast` in [`apps/demo`](../apps/demo/src/main.ts)                               |
 | Keep your own counters                                 | `state: { init, reduce }`                    | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
 | Measure time, tokens or cost                           | No plugin: `r.summary`, `r.turns`, `usageOf` | [`metrics.ts`](../apps/examples/src/metrics.ts)                                     |
 | Log, trace or count what happens                       | `observe`                                    | [`plugins/otel`](../plugins/otel), [`plugins/jsonl`](../plugins/jsonl)              |
-| Show what a long step is doing                         | `yield` in `policy`, `request` or `tool`     | [Events from plugins](#events-from-plugins)                                         |
+| Show what a long step is doing                         | `yield` in `turn`, `request` or `tool`       | [Events from plugins](#events-from-plugins)                                         |
 
 The plugins under [`apps/examples/src/plugins`](../apps/examples/src/plugins) are meant to be copied and adapted. The packages under [`plugins/`](../plugins) are meant to be installed: `otel`, `jsonl` and `throttle-updates`.
 

@@ -29,7 +29,7 @@ export interface PluginState<State> {
  * Transforms `(value, context) => value` run in plugin order; for middleware `(input, next) => output`,
  * earlier plugins are nested inside later ones.
  *
- * The middleware with side effects (policy, request, env, tool) are streams: `yield` adds an event to the run,
+ * The middleware with side effects (turn, request, env, tool) are streams: `yield` adds an event to the run,
  * `return` gives the result, `yield* next(...)` passes the inner layers' events through (RFC-0005 §3.2).
  */
 export interface PluginSpec<State = undefined> {
@@ -38,8 +38,11 @@ export interface PluginSpec<State = undefined> {
   tools?: AgentTool[]
   /** Transform, run once at createAgent. */
   system?: (prompt: string) => string
-  /** Middleware around the whole step. May return rewriteHistory(...) to replace history, or stop(state) to end. */
-  policy?: (state: AgentState, next: (state: AgentState) => PolicyStream) => PolicyStream
+  /**
+   * Middleware that decides this step's turn: insert messages, call the model, or return rewriteHistory(...) to replace
+   * history or stop(state) to end. The turn's tool calls run afterwards, in env.
+   */
+  turn?: (state: AgentState, next: (state: AgentState) => TurnStream) => TurnStream
   /** Transform of the messages to insert at this boundary; starts with the queued messages deliverable now. */
   input?: (messages: Message[], boundary: Boundary) => Message[] | Promise<Message[]>
   /** Transform of the messages sent in this request only; history is untouched. */
@@ -60,7 +63,7 @@ export interface PluginSpec<State = undefined> {
   observe?: (e: RunEvent, run: RunInfo) => void
 }
 
-export type PolicyStream = Stream<Payload, Step<AgentAction, AssistantMessage>>
+export type TurnStream = Stream<Payload, Step<AgentAction, AssistantMessage>>
 
 export type EnvCall = (msg: AssistantMessage) => Stream<Payload, ToolResultMessage[]>
 
@@ -131,12 +134,12 @@ export function assertNoConflicts(tools: AgentTool[], plugins: AnyPlugin[]): voi
 type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, Payload>
 
 /**
- * Plugin policy / env / update / state -> kernel middleware. update and state work on Turns, so this converts to and
+ * Plugin turn / env / update / state -> kernel middleware (turn wraps the kernel's policy). update and state work on Turns, so this converts to and
  * from the kernel's (action, obs); state.reduce runs on the result of this plugin's update, inside its own layer.
  */
 export function extensionOf(plugin: AnyPlugin): LLMExtension {
-  const { name, policy, env, update, state } = plugin
-  const ext: LLMExtension = { policy }
+  const { name, turn, env, update, state } = plugin
+  const ext: LLMExtension = { policy: turn }
 
   if (env) {
     ext.env = (action, next) => (hasToolCalls(action) ? env(action, next) : next(action))

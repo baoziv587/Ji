@@ -18,7 +18,7 @@ export const SUMMARY_PREFIX = '[Summary of the earlier conversation]'
  * Context compaction: when the history grows too long, the model summarizes the older messages and the history
  * becomes "summary + the last few messages".
  *
- * - Writing the summary calls a model, which is IO, so it happens in policy.
+ * - Writing the summary calls a model, which is IO, so it happens in the turn middleware.
  * - The replacement goes through update via rewriteHistory, so it lands in AgentState and a restored session
  *   does not need to summarize again.
  * - Replaced messages are neither sent to the model nor kept in state. For the full record, read the state
@@ -28,7 +28,7 @@ export function compaction({ model, maxTokens, keepRecent = 6 }: CompactionOptio
   return definePlugin({
     name: 'compaction',
 
-    async *policy(state, next) {
+    async *turn(state, next) {
       const { messages } = state
       const cut = cutIndex(messages, keepRecent)
 

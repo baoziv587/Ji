@@ -86,7 +86,7 @@ export function createAgent(options: AgentOptions): Agent {
    *     context   state.messages -> p1 -> p2        every model request
    *
    *   middleware, later plugins wrap earlier ones (p2 sees the input first and the output last)
-   *     policy^   p2( p1( baseAgent.policy ) )      every step
+   *     turn^     p2( p1( baseAgent.policy ) )      every step
    *     env^      p2( p1( runTools ) )              every model turn with tool calls
    *     update^   p2( p1( applyTurn ) )             every step; each layer then runs its own state.reduce
    *     request   p2( p1( callModel ) )             every model call

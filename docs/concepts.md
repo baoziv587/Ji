@@ -29,13 +29,15 @@ Everything with side effects is a stream of the same `D`; everything pure is a p
 A **step boundary** is the moment between two steps when no model output is streaming and no tool is running. At each boundary:
 
 ```
-policy ─┬─ ① input    messages to insert here?  yes → record them, step ends
+turn ───┬─ ① input    messages to insert here?  yes → record them, step ends
         │             none and agent idle?       → run finishes
         ├─ ② context  messages to send this time (history unchanged)
         └─ ③ request  call the model, stream deltas
 env ───── tool calls of this turn, run in parallel → tool (per call)
 update ── append the turn to history → each plugin's state.reduce
 ```
+
+`turn`, `env` and `update` are the plugin hooks around π, ε and δ. The LLM layer calls π's middleware `turn` because what it decides is this step's Turn (below).
 
 The agent is **idle** when the history is empty, or the last message is an assistant message with no tool calls.
 
@@ -45,7 +47,7 @@ Every step produces exactly one **Turn**, and `update`, `state.reduce` and `Run.
 | ----------- | ------------------------------------------------------------------------- | ------------------------- |
 | `model`     | A model reply plus its tool results. The final answer has `results: []`.  | Appends message + results |
 | `input`     | External messages inserted at a boundary (user, steer, follow-up, plugin) | Appends messages          |
-| `rewrite`   | `rewriteHistory(messages)` returned from a `policy` middleware            | Replaces history          |
+| `rewrite`   | `rewriteHistory(messages)` returned from a `turn` middleware              | Replaces history          |
 
 The final answer is recorded before the run ends, so it also goes through `update`.
 
@@ -54,9 +56,9 @@ The final answer is recorded before the run ends, so it also goes through `updat
 The design relies on these rules. Breaking one leads to subtle bugs, not a crash.
 
 1. **`update` and `state.reduce` are synchronous and pure.** They must not read clocks or make requests. That is why a saved state reproduces exactly.
-2. **Do IO in `policy`, `request`, `env` or `tool`.** For example, compaction writes its summary in `policy`, then hands the replacement to `update` via `rewriteHistory`.
+2. **Do IO in `turn`, `request`, `env` or `tool`.** For example, compaction writes its summary in `turn`, then hands the replacement to `update` via `rewriteHistory`.
 3. **Tool failures are results, not exceptions.** Return `toolError(call, reason)`. Anything thrown is converted to an error result for the model anyway.
-4. **Cancellation and events flow through `yield*`.** In stream middleware (`policy`, `request`, `env`, `tool`), write `return yield* next(...)` so aborts reach the HTTP request and the tools, inner events reach the run, and the return value isn't lost.
+4. **Cancellation and events flow through `yield*`.** In stream middleware (`turn`, `request`, `env`, `tool`), write `return yield* next(...)` so aborts reach the HTTP request and the tools, inner events reach the run, and the return value isn't lost.
 5. **An interrupted step is never recorded.** State only advances on completed steps.
 6. **Plugin state lives in `AgentState`.** Stored as `state.plugins[name]`, it is saved and restored along with the messages.
 
