@@ -1,10 +1,10 @@
 import type { AgentTool, Api, Model, PluginList, RunEvent, Session } from '@gaoxiang.ai/llm'
-import type { Attributes, MeterLike, SpanLike } from './index.ts'
+import type { Attributes, MeterLike, SpanLike } from '../src/index.ts'
 import { createAgent, createSession, definePlugin, tool, Type } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
-import { otel } from './index.ts'
+import { otel } from '../src/index.ts'
 
 declare module '@gaoxiang.ai/llm' {
   interface Events {

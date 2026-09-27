@@ -1,9 +1,9 @@
-import type { EnvUpdateExtension, Lens } from './advanced.ts'
-import type { Agent, Extension, Stream } from './index.ts'
+import type { EnvUpdateExtension, Lens } from '../src/advanced.ts'
+import type { Agent, Extension, Stream } from '../src/index.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { focus, liftWiden, widen, withState } from './advanced.ts'
-import { act, done, extend, unfold } from './index.ts'
+import { focus, liftWiden, widen, withState } from '../src/advanced.ts'
+import { act, done, extend, unfold } from '../src/index.ts'
 
 type S = number[]
 type Ext = Extension<S, number, number, string, string>

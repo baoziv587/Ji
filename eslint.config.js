@@ -31,8 +31,18 @@ export default antfu(
     },
   },
   {
+    // src/ holds source only; tests live in each workspace's tests/
+    files: ['{packages,plugins,apps}/*/src/**/*.{test,spec}.{ts,tsx,js,mjs}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'Program', message: 'Move test files out of src/ into <workspace>/tests/.' },
+      ],
+    },
+  },
+  {
     files: ['plugins/**'],
-    ignores: ['plugins/*/src/**/*.test.ts'],
+    ignores: ['plugins/*/tests/**'],
     rules: {
       'no-restricted-imports': [
         'error',

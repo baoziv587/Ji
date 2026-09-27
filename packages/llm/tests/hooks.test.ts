@@ -1,7 +1,7 @@
 // Plugin hooks as RFC-0006 defines them: the list order, registration, ctx, ctx.complete, model attempts, observer
 // misuse, development checks and the error channels. Runs against pi-ai's faux provider.
 import type { AssistantMessage, Context, FauxResponseStep, Message, SimpleStreamOptions } from '@mariozechner/pi-ai'
-import type { AgentState, Api, Model, Plugin, RunEvent, Session, UsageTotals } from './index.ts'
+import type { AgentState, Api, Model, Plugin, RunEvent, Session, UsageTotals } from '../src/index.ts'
 import process from 'node:process'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
@@ -20,7 +20,7 @@ import {
   toolError,
   usageOf,
   user,
-} from './index.ts'
+} from '../src/index.ts'
 
 const echo = tool({
   name: 'echo',

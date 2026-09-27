@@ -1,11 +1,11 @@
 // Turn helpers: how a step is recorded, converted to the kernel's (action, obs), and written into history.
 import type { ToolCall } from '@mariozechner/pi-ai'
-import type { AgentState, Turn } from './types.ts'
+import type { AgentState, Turn } from '../src/types.ts'
 import { fauxAssistantMessage, fauxToolCall } from '@mariozechner/pi-ai'
 import { describe, expect, it } from 'vitest'
-import { isIdle, user } from './message.ts'
-import { toolResult } from './tool.ts'
-import { actionOf, applyTurn, isModelAction, rewriteHistory, stop, turnOf } from './turn.ts'
+import { isIdle, user } from '../src/message.ts'
+import { toolResult } from '../src/tool.ts'
+import { actionOf, applyTurn, isModelAction, rewriteHistory, stop, turnOf } from '../src/turn.ts'
 
 const call: ToolCall = { type: 'toolCall', id: 't1', name: 'echo', arguments: {} }
 const withCall = fauxAssistantMessage([fauxToolCall('echo', {})], { stopReason: 'toolUse' })

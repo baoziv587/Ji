@@ -1,9 +1,9 @@
 // session.use: switching agents keeps the conversation, and a run in progress switches at the next step boundary.
 import type { Context, SimpleStreamOptions } from '@mariozechner/pi-ai'
-import type { Api, AssistantMessage, Model, RunEvent } from './index.ts'
+import type { Api, AssistantMessage, Model, RunEvent } from '../src/index.ts'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
-import { createAgent, createSession, tool, Type } from './index.ts'
+import { createAgent, createSession, tool, Type } from '../src/index.ts'
 
 describe('session.use', () => {
   it('should run the next send with the new agent', async () => {

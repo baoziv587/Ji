@@ -9,7 +9,7 @@ import type {
   SimpleStreamOptions,
   ToolResultMessage,
 } from '@mariozechner/pi-ai'
-import type { AgentTool, PluginSpec, Run, RunEvent, Turn, TurnEvent } from './index.ts'
+import type { AgentTool, PluginSpec, Run, RunEvent, Turn, TurnEvent } from '../src/index.ts'
 import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
@@ -30,7 +30,7 @@ import {
   UnsupportedThinkingError,
   usageOf,
   user,
-} from './index.ts'
+} from '../src/index.ts'
 
 const echo = tool({
   name: 'echo',

@@ -1,11 +1,11 @@
 // toolRunner: a plain run returns its text; a generator run streams tool_update events and returns its result.
 import type { Stream } from '@gaoxiang.ai/kernel'
 import type { ToolCall } from '@mariozechner/pi-ai'
-import type { AgentTool, Payload } from './types.ts'
+import type { AgentTool, Payload } from '../src/types.ts'
 import { Type } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { tool, toolRunner } from './tool.ts'
+import { tool, toolRunner } from '../src/tool.ts'
 
 const call: ToolCall = { type: 'toolCall', id: 'call-1', name: 'count', arguments: {} }
 const signal = new AbortController().signal

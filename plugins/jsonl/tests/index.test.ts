@@ -2,7 +2,7 @@ import type { Api, Model } from '@gaoxiang.ai/llm'
 import { createAgent, createSession, definePlugin, tool, Type } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
-import { jsonl } from './index.ts'
+import { jsonl } from '../src/index.ts'
 
 describe('jsonl', () => {
   it('should write one parsable line per event, tagged with the run and the session', async () => {

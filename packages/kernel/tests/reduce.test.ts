@@ -1,8 +1,8 @@
 // Laws R1–R4 from RFC-0004 appendix B.2
-import type { Reducer } from './reduce.ts'
+import type { Reducer } from '../src/reduce.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { combine, filterInput, mapInput, mapResult, reduce, scan } from './reduce.ts'
+import { combine, filterInput, mapInput, mapResult, reduce, scan } from '../src/reduce.ts'
 
 const count: Reducer<number, number> = { init: 0, reduce: n => n + 1 }
 const sum: Reducer<number, number> = { init: 0, reduce: (s, x) => s + x }

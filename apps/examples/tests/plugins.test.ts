@@ -3,10 +3,10 @@ import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, 
 import { createAgent, createSession, textOf, tool, toolResult, user } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
-import { budget } from './budget.ts'
-import { compaction, cutIndex, SUMMARY_PREFIX } from './compaction.ts'
-import { keepGoing } from './keep-going.ts'
-import { truncate, truncateToolResults } from './truncate-tool-results.ts'
+import { budget } from '../src/plugins/budget.ts'
+import { compaction, cutIndex, SUMMARY_PREFIX } from '../src/plugins/compaction.ts'
+import { keepGoing } from '../src/plugins/keep-going.ts'
+import { truncate, truncateToolResults } from '../src/plugins/truncate-tool-results.ts'
 
 function fauxModel(script: FauxResponseStep[]): Model<Api> {
   const faux = registerFauxProvider()

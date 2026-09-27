@@ -3,7 +3,7 @@ import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
-import { throttleUpdates } from './index.ts'
+import { throttleUpdates } from '../src/index.ts'
 
 describe('throttleUpdates', () => {
   it('should let through one update per call every ms and drop the ones in between', async () => {

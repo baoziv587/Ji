@@ -1,7 +1,7 @@
-import type { Agent, Extension, Stream } from './index.ts'
+import type { Agent, Extension, Stream } from '../src/index.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { act, done, extend, mapState, mapYield, MaxStepsError, merge, run, unfold } from './index.ts'
+import { act, done, extend, mapState, mapYield, MaxStepsError, merge, run, unfold } from '../src/index.ts'
 
 // Agent under test: S = number[], each step appends env's result, done at length 3
 type S = number[]

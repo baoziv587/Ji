@@ -1,15 +1,15 @@
 // summaryReducer, usageOf and addUsage are pure, so they are tested with hand-built turns and exact numbers.
 // Timing and cost cannot be asserted exactly through the faux provider (timings vary, cost is always 0).
 import type { AssistantMessage, ToolCall, Usage } from '@mariozechner/pi-ai'
-import type { TimedTurn } from './summary.ts'
-import type { RunSummary, UsageTotals } from './types.ts'
+import type { TimedTurn } from '../src/summary.ts'
+import type { RunSummary, UsageTotals } from '../src/types.ts'
 import { resultOf } from '@gaoxiang.ai/kernel/reduce'
 import { fauxAssistantMessage } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { user } from './message.ts'
-import { addUsage, NO_USAGE, summaryReducer, usageOf } from './summary.ts'
-import { toolError, toolResult } from './tool.ts'
+import { user } from '../src/message.ts'
+import { addUsage, NO_USAGE, summaryReducer, usageOf } from '../src/summary.ts'
+import { toolError, toolResult } from '../src/tool.ts'
 
 function assistant(input: number, output: number, cost: number): AssistantMessage {
   return {

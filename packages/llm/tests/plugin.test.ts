@@ -1,12 +1,12 @@
 // pluginStateSlot is where a plugin reads and writes its own data (plugin.select and the state reducer).
 // Guarantee 4 (hot swap keeps plugin state reliable) rests on these three rules. pluginsOf is how a nested plugin
 // list is registered (RFC-0006 §6.1, appendix A.1).
-import type { AnyPlugin, PluginList } from './plugin.ts'
-import type { AgentState } from './types.ts'
+import type { AnyPlugin, PluginList } from '../src/plugin.ts'
+import type { AgentState } from '../src/types.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { user } from './message.ts'
-import { definePlugin, pluginsOf, pluginStateSlot } from './plugin.ts'
+import { user } from '../src/message.ts'
+import { definePlugin, pluginsOf, pluginStateSlot } from '../src/plugin.ts'
 
 // A small pool of real objects, so the same index is the same object (appendix A.1: identity, not structure)
 const pool = Array.from({ length: 4 }, (_, i) => definePlugin({ name: `p${i}` }))

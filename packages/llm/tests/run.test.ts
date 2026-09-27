@@ -12,15 +12,15 @@ import type {
   RunEvent,
   RunInfo,
   Session,
-} from './index.ts'
+} from '../src/index.ts'
 import process from 'node:process'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { callsOf, createAgent, createSession, definePlugin, tool, toolError, Type } from './index.ts'
+import { callsOf, createAgent, createSession, definePlugin, tool, toolError, Type } from '../src/index.ts'
 
 // Plugin events are registered with declaration merging, through the package entry like any user would
-declare module './index.ts' {
+declare module '../src/index.ts' {
   interface Events {
     'wrap:before': Record<never, never>
     'wrap:after': Record<never, never>

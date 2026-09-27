@@ -141,7 +141,7 @@ export function definePlugin<State = undefined>(spec: PluginSpec<State>): Plugin
  *
  * plugin.select is `get`. After every step, the plugin's state reducer reads with `get` and writes with `set`.
  *
- * Three rules keep saved and resumed state reliable (tested in plugin.test.ts; in kernel terms this is a Lens):
+ * Three rules keep saved and resumed state reliable (tested in tests/plugin.test.ts; in kernel terms this is a Lens):
  *   - reading right after a write gives back what was written
  *   - of two writes in a row, only the last one counts
  *   - writing back what was just read changes nothing (an empty slot gets `init` written in, which reads the same)

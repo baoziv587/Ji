@@ -1,7 +1,7 @@
 // findModel / listModels: resolving 'provider/id' against pi-ai's catalog, and errors a model picker can use.
 import fc from 'fast-check'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { findModel, listModels, UnknownModelError } from './models.ts'
+import { findModel, listModels, UnknownModelError } from '../src/models.ts'
 
 afterEach(() => {
   vi.unstubAllEnvs()
