@@ -4,6 +4,8 @@
 
 New to JI? Run the offline demo in the [quick start](../README.md#quick-start), with no API key, then connect your own model.
 
+<br>
+
 ## Find your task
 
 | You want to…                                  | Read                                                                    |
@@ -17,11 +19,15 @@ New to JI? Run the offline demo in the [quick start](../README.md#quick-start), 
 | Understand how a run progresses               | [Concepts](concepts.md)                                                 |
 | Implement your own agent loop                 | [Kernel API](kernel.md)                                                 |
 
+<br>
+
 ## A learning path
 
 [Sessions & Runs](sessions-and-runs.md) → [Writing Plugins](plugins.md) → [Concepts](concepts.md). Read the Kernel API when you need to customize the underlying loop.
 
 Sessions covers usage, plugins covers extension, and concepts explains execution. Each page also works as a reference; you do not need to read them all in order.
+
+<br>
 
 ## Runnable examples
 

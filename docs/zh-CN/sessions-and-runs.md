@@ -4,6 +4,8 @@
 
 先完成一次对话，再按需要添加事件显示、运行中插话和状态恢复。以下示例假设你已选好 `model`，并配置了所需的 API key。
 
+<br>
+
 ## 发送并读取回答
 
 ```ts
@@ -21,11 +23,20 @@ console.log(await r.summary)
 
 提前退出任何流式循环都会取消整次运行；[取消与恢复](#取消)说明如何处理。
 
+<br>
+
 ## 三个对象
 
 ```ts
 // 无状态，可复用
-const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking, system, tools, plugins, ...streamOptions })
+const agent = createAgent({
+  model: 'deepseek/deepseek-v4-flash',
+  thinking,
+  system,
+  tools,
+  plugins,
+  ...streamOptions,
+})
 
 // 一段对话
 const chat = createSession(agent, { state, maxSteps })
@@ -34,9 +45,14 @@ const chat = createSession(agent, { state, maxSteps })
 const r = chat.send('hi')
 ```
 
-- **Agent**：模型 + 工具 + 插件。它没有状态，一个 agent 可以服务多个会话。配置错误在这里就暴露，而不是等到第一次请求：模型不存在抛出 `UnknownModelError`（带最接近的候选），思考档位不受支持抛出 `UnsupportedThinkingError`（列出支持的档位），工具或插件重名抛出 `PluginConflictError`，并一次列出全部冲突。
+- **Agent**：模型 + 工具 + 插件。它没有状态，一个 agent 可以服务多个会话。
+
+  配置错误在创建 agent 时就暴露：模型不存在抛出 `UnknownModelError`（带最接近的候选），思考档位不受支持抛出 `UnsupportedThinkingError`（列出支持的档位），工具或插件重名抛出 `PluginConflictError`，并一次列出全部冲突。
+
 - **Session**：持有 `state`（最后写入的状态）和 `pending`（尚未送达的消息）。方法是 `send` 和 `use`。
 - **Run**：从第一步开始，到 agent 空闲、并且没有可送达的消息为止。
+
+<br>
 
 ## 读取一次运行
 
@@ -67,13 +83,19 @@ for await (const { t, turn, timing, summary } of r.turns) {
 await printing
 ```
 
+<br>
+
 ## 取消
 
 - 提前退出任何 `for await`（`break` 或抛出异常）都会**取消整次运行**。
 - `r.abort()` 是显式的取消。
 - 取消信号会传到正在进行的模型请求和正在执行的工具。工具通过 `run(args, signal)` 拿到它。
 
-取消会停止后续执行，但不会撤销已经完成的工具副作用。当前未完成步骤不会写入状态；已经显示的文字也需要由界面自行标记为已中断。工具必须使用收到的 `signal` 才能及时停止它启动的 IO。
+取消会停止后续执行，但不会撤销已经完成的工具副作用。当前未完成步骤不会写入状态。
+
+已经显示的文字需要由界面自行标记为已中断。工具必须使用收到的 `signal` 才能及时停止它启动的 IO。
+
+### 从错误中恢复
 
 出错后，从最后写入的状态继续：
 
@@ -91,6 +113,8 @@ try {
 ```
 
 恢复状态不会自动重试失败的步骤。原会话中尚未送达的消息仍在 `chat.pending`，它们不属于状态快照；新会话不会自动带上这些消息。
+
+<br>
 
 ## 在 agent 工作时插话
 
@@ -111,6 +135,8 @@ chat.send('停，先列大纲', { when: 'now' })
 
 **送达规则**：每个步边界上，按发送顺序检查等待中的消息，条件成立就插入。每插入一条，agent 就不再空闲，所以多条 follow-up 会逐条处理，效果和每次等上一次运行结束后再 `send` 相同。
 
+<br>
+
 ## 保存与恢复
 
 `chat.state` 是最后写入的 JSON 快照：`{ messages, plugins }`。成功运行后的快照用 `await r.state` 获取；快照不包含尚未送达的消息。
@@ -123,6 +149,8 @@ createSession(agent, { state: messages })
 ```
 
 保存和恢复之间可以更换插件列表。没有保存过状态的插件从它的 `init` 开始。
+
+<br>
 
 ## 模型与思考档位
 
@@ -141,9 +169,13 @@ agent.model.hasEnvKey // 此刻是否设置了 DEEPSEEK_API_KEY
 - **按请求改**：写一个 `request: before(req => ({ ...req, thinking: 'xhigh' }))` 插件。插件也可能换了模型，所以这里的档位会映射到这次请求的模型支持的最近一档，实际发出的档位在 `model_start` 里报告。
 - **API key**：库不替你检查，因为 key 也可能来自 `apiKey` 或 request 插件。在用户准备发送时检查 `agent.model.hasEnvKey`，而不是一开始就拦住。
 
+<br>
+
 ## 上限
 
 `maxSteps`（默认 64）限制一次运行的步数。插入消息、结束运行各占一步。超出上限时运行失败。
+
+<br>
 
 ## 统计，不需要插件
 
@@ -159,6 +191,8 @@ usageOf(chat.state) // 整段对话
 
 - `r.summary.usage` 累加这次运行发布的每个 `model_end` 和 `model_error` 的用量，包括插件 `ctx.complete` 的调用。一步之后即使被取消、`stop` 或改写历史，已经花掉的用量也不会撤销。被中断而没有终态事件的调用拿不到用量，不计入。
 - `usageOf(state)` 累加仍在历史里的主模型消息。插件的调用和被压缩掉的消息都不在内。
+
+<br>
 
 ## 事件
 
@@ -201,7 +235,9 @@ for await (const e of r) {
 }
 ```
 
-**工具的中间更新**：`run` 写成异步生成器的工具可以边做边报告。每个 `yield` 成为一个 `tool_update`（任意值：数字、字符串、对象），`return` 的值是结果。取消时它的 `finally` 照常执行。
+### 工具的中间更新
+
+`run` 写成异步生成器的工具可以边做边报告。每个 `yield` 成为一个 `tool_update`（任意值：数字、字符串、对象），`return` 的值是结果。取消时它的 `finally` 照常执行。
 
 ```ts
 const runTests = tool({
@@ -219,7 +255,13 @@ const runTests = tool({
 })
 ```
 
-**日志与追踪**：`for await` 循环抛错或提前退出会取消整次运行，而且它只能看到一次运行。日志、追踪、指标请用插件的只读钩子 `observe`：它从第一个事件起收到这个 agent 每次运行的全部事件，抛出的异常只会作为警告报告，不影响运行。`observe` 是同步的，不会被等待：要异步导出，就在 `observe` 里入队，运行结束后再 flush（[示例](plugins.md#observer-是同步的)）。现成的插件在 [`plugins/`](../../plugins)：`@gaoxiang.ai/plugin-otel`、`@gaoxiang.ai/plugin-jsonl`。
+### 日志与追踪
+
+`for await` 循环抛错或提前退出会取消整次运行，而且它只能看到一次运行。日志、追踪、指标请用插件的只读钩子 `observe`：它从第一个事件起收到这个 agent 每次运行的全部事件，抛出的异常只会作为警告报告，不影响运行。
+
+`observe` 是同步的，不会被等待：要异步导出，就在 `observe` 里入队，运行结束后再 flush（[示例](plugins.md#observer-是同步的)）。现成的插件在 [`plugins/`](../../plugins)：`@gaoxiang.ai/plugin-otel`、`@gaoxiang.ai/plugin-jsonl`。
+
+<br>
 
 ## 继续阅读
 

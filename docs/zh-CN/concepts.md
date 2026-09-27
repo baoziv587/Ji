@@ -4,6 +4,8 @@
 
 这一篇讲 JI 背后的模型。只想直接用的话，先看 [README](../../README.zh-CN.md) 和 [会话与运行](sessions-and-runs.md)。
 
+<br>
+
 ## 四个对象
 
 | 对象    | 负责什么                                    | 入口                   |
@@ -12,6 +14,8 @@
 | Session | 一段对话的状态和待送达消息                  | `createSession(agent)` |
 | Run     | 一次持续到 agent 空闲的执行，包含输出和统计 | `chat.send(...)`       |
 | Plugin  | 在固定位置修改行为或观察事件                | `definePlugin(...)`    |
+
+<br>
 
 ## 从一条消息看循环
 
@@ -23,6 +27,8 @@
 4. **结束**：agent 空闲，没有可送达的消息，Run 完成。
 
 一次运行包含多步。每个完成并写入状态的步骤对应一条 `Turn`；结束检查和被中断的步骤不会生成已写入的 Turn。插件可以修改其中某个环节，例如在 `request` 前补充检索内容，在 `toolCall` 后缩短工具结果。
+
+<br>
 
 ## 一步里发生了什么
 
@@ -50,6 +56,8 @@ agent **空闲**是指：历史为空，或者最后一条是没有工具调用�
 
 最终回答在运行结束前就已经写入，所以它同样经过 `record`。
 
+<br>
+
 ## 一步，三个函数
 
 内核把任何 agent 描述成三个函数：
@@ -62,6 +70,8 @@ agent **空闲**是指：历史为空，或者最后一条是没有工具调用�
 
 有副作用的都是同一种 `D` 的流，纯的都是普通函数。`unfold` 反复执行「决策 → 执行 → 记录」，直到 policy 给出结果为止，输出是一个惰性的事件流。`extend` 给这三个函数中的任意一个套上中间件，这是扩展 agent 的唯一方式。
 
+<br>
+
 ## 三层结构
 
 | 层                         | 职责                                                    | 类型                                                                                                    |
@@ -69,6 +79,8 @@ agent **空闲**是指：历史为空，或者最后一条是没有工具调用�
 | `@gaoxiang.ai/kernel`      | `(π, ε, δ)` 代数、`unfold`、`extend`。与 LLM 和 IO 无关 | 泛型 `S, A, O, R, D`                                                                                    |
 | `@gaoxiang.ai/llm` agent   | 用 pi-ai 实现 `(π, ε, δ)`，把插件编译成内核中间件       | `S = AgentState`、`O = ToolResultMessage[]`、`D` = 全部事件：模型输出、工具开始 / 更新 / 结束、插件事件 |
 | `@gaoxiang.ai/llm` session | 驱动 `unfold`，排队外部消息，遇到中断时把一次运行分段   | `Session`、`Run`                                                                                        |
+
+<br>
 
 ## 不变量
 
@@ -80,6 +92,8 @@ agent **空闲**是指：历史为空，或者最后一条是没有工具调用�
 4. **取消和事件通过 `yield*` 传递**：流式中间件（`decide`、`request`、`toolCalls`、`toolCall`）里写 `return yield* next(...)`，或者用 `before` / `after` / `intercept` / `mapEvents`，取消才能传到 HTTP 请求和工具，内层事件才能到达运行，返回值也不会丢。
 5. **被中断的一步不会写入**：状态只在一步完成后才前进。
 6. **插件状态存在 `AgentState` 里**：位于 `state.plugins[name]`，跟消息一起保存和恢复。
+
+<br>
 
 ## 继续阅读
 

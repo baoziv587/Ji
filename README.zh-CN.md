@@ -8,14 +8,21 @@ JI 负责模型调用、工具执行和对话状态。用插件扩展行为，�
 
 > 开发中，API 可能变化，包尚未发布到 npm。
 
+<br>
+
 ## Highlights
 
-- **一致的钩子 API。** `before` 改输入，`after` 改结果，`intercept` 提前返回。同一套 helper 包装 `decide`、`request`、`toolCalls`、`toolCall` 四个钩子。
-- **上下文压缩也是插件。** 用 `ctx.complete` 总结早期消息，再用 `rewriteHistory` 更新历史，复用已有的请求插件、取消和用量统计。[查看实现 →](apps/examples/src/plugins/compaction.ts)
-- **运行中随时调整。** 消息可以排队、在下一步送达，或立即打断；对话与插件状态一起保存为 JSON。
-- **自带运行信息。** 流式文字、每一步的记录、token、费用和耗时，无需额外插件。
+**一套一致的 hook API，从几行变换到完整中间件；独立编写的插件，可以自由组合。**
 
-**钩子决定在哪里介入，helper 决定怎么介入。** 三个独立插件，分别改请求、改工具结果、拦截调用：
+长时间工具调用也能随时报告进度：工具里 `yield`，运行中就收到 `tool_update`。
+
+<br>
+
+### 一套钩子，三种介入方式
+
+**钩子决定在哪里介入，helper 决定怎么介入。**
+
+`before` 改输入 · `after` 改结果 · `intercept` 提前返回。它们通用于 `decide`、`request`、`toolCalls`、`toolCall`。
 
 ```ts
 import { after, before, definePlugin, intercept, toolError } from '@gaoxiang.ai/llm'
@@ -29,23 +36,40 @@ const trimOutput = definePlugin({
   name: 'trim-output',
   toolCall: after(result => ({
     ...result,
-    content: result.content.map(part => (part.type === 'text' ? { ...part, text: part.text.slice(0, 2_000) } : part)),
+    content: result.content.map(part =>
+      part.type === 'text' ? { ...part, text: part.text.slice(0, 2_000) } : part,
+    ),
   })),
 })
 
 const blockShell = definePlugin({
   name: 'block-shell',
-  toolCall: intercept(call => (call.name === 'shell' ? toolError(call, 'Shell access is disabled.') : undefined)),
+  toolCall: intercept(call =>
+    call.name === 'shell' ? toolError(call, 'Shell access is disabled.') : undefined,
+  ),
 })
-
-const toolPlugins = [trimOutput, blockShell]
 ```
 
-插件可以独立复用，也可以组成数组预设。相同钩子按插件列表从外到内包装；`intercept` 返回 `undefined` 放行。需要重试、串行执行或发事件时，直接写 `(input, next, ctx)` 中间件，用 `yield* next(input)` 继续。
+`intercept` 返回 `undefined` 放行；需要重试、串行执行或发事件时，展开为 `(input, next, ctx)`，用 `yield* next(input)` 继续。
+
+<br>
+
+### 独立编写，按需组合
+
+每个插件只负责一件事。组合成数组预设后，还可以继续嵌套复用：
+
+```ts
+const toolPlugins = [trimOutput, blockShell]
+const plugins = [lowTemperature, toolPlugins]
+```
+
+传给 `createAgent({ model, plugins })` 即可。同一钩子按列表从外到内包装：输入依次进入，结果反向返回。[组合顺序 →](docs/zh-CN/plugins.md#顺序)
+
+<br>
 
 ### 用中间件压缩上下文
 
-核心流程如下；估算 token、保留工具调用配对和整理文本的辅助函数见 [完整实现](apps/examples/src/plugins/compaction.ts)。
+**复杂能力，也沿用同一套中间件。** `decide` 中调用 `complete` 生成摘要，再用 `rewriteHistory` 替换历史。
 
 ```ts
 import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
@@ -55,22 +79,31 @@ const compactHistory = definePlugin({
   async *decide(state, next, { complete }) {
     const { messages } = state
     const cut = cutIndex(messages, 6)
+
     if (estimateTokens(messages) <= 100_000 || cut < 2) return yield* next(state)
 
     const summary = yield* complete({
-      systemPrompt: 'Summarize facts, decisions, open tasks and important tool results.',
+      systemPrompt:
+        'Summarize facts, decisions, open tasks and important tool results.',
       messages: [user(transcript(messages.slice(0, cut)))],
     })
+
     return rewriteHistory([user(textOf(summary)), ...messages.slice(cut)])
   },
 })
 ```
 
-加进 `plugins` 即可。摘要调用复用 request 插件、取消和统计，新的历史通过 `record` 保存。
+压缩插件调用模型时，已有的 `request` 插件仍会生效，温度设置、备用模型等能力无需重写；新的历史通过 `record` 保存。
 
-### 工具边执行，边报告进度
+[完整实现 →](apps/examples/src/plugins/compaction.ts) 包含上例的 token 估算、工具调用配对和文本整理辅助函数。
 
-工具中的 `yield` 自动成为 `tool_update`，`return` 才是交给模型的最终结果：
+<br>
+
+### 长时间工具调用，随时更新进度
+
+**不用等工具结束，用户就能看到进展。**
+
+把工具写成异步生成器：`yield` 报告进度，`return` 交付最终结果，无需另写回调或事件通道。下面以批量检查 URL 为例：
 
 ```ts
 import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
@@ -81,24 +114,35 @@ const checkUrls = tool({
   parameters: Type.Object({ urls: Type.Array(Type.String()) }),
   async *run({ urls }, signal) {
     const results = []
+
     for (const [i, url] of urls.entries()) {
       const response = await fetch(url, { method: 'HEAD', signal })
       results.push({ url, status: response.status })
       yield { done: i + 1, total: urls.length, url, status: response.status }
     }
+
     return JSON.stringify(results)
   },
 })
+```
 
-const checking = createSession(createAgent({ model, tools: [checkUrls] }))
+在运行的事件流中读取进度：
+
+```ts
+const checking = createSession(
+  createAgent({ model, tools: [checkUrls], plugins: toolPlugins }),
+)
+
 for await (const event of checking.send('Check https://example.com')) {
   if (event.type === 'tool_update') console.log(event.call.name, event.data)
 }
 ```
 
-同一条事件流还包含文字、工具开始与结束；需要降低进度推送频率时，组合 [throttleUpdates](plugins/throttle-updates/src/index.ts) 插件。
+同一工具可以组合结果截断、调用拦截和 [进度节流](plugins/throttle-updates/src/index.ts)。`toolCall` 中间件包装整条执行流，`observe` 可以统一记录事件。
 
-更多能力，仍用同一套钩子：
+<br>
+
+### 更多能力，按需组合
 
 | 能力       | 示例                                                                                                                    |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
@@ -106,6 +150,8 @@ for await (const event of checking.send('Check https://example.com')) {
 | 推进任务   | [自动继续](apps/examples/src/plugins/keep-going.ts)、[检索与备用模型](apps/examples/src/hooks.ts)                       |
 | 控制工具   | [串行执行](apps/examples/src/plugins/sequential-tools.ts)、[进度节流](plugins/throttle-updates/src/index.ts)            |
 | 导出事件   | [OpenTelemetry](plugins/otel/src/index.ts)、[JSONL](plugins/jsonl/src/index.ts)                                         |
+
+<br>
 
 ## 快速开始
 
@@ -116,7 +162,9 @@ pnpm install
 pnpm demo
 ```
 
-demo 离线演示计算工具，无需 API key。连接真实模型时，设置服务商的 API key，再运行 `MODEL=provider/model pnpm demo`，将 `provider/model` 换成支持的模型。
+demo 离线演示计算工具，无需 API key。
+
+连接真实模型时，设置服务商的 API key，再运行 `MODEL=provider/model pnpm demo`，将 `provider/model` 换成支持的模型。
 
 选好 `model` 和插件后，应用中的调用如下：
 
@@ -128,16 +176,26 @@ const chat = createSession(agent)
 const run = chat.send('用一句话解释什么是中间件')
 
 for await (const chunk of run.text) process.stdout.write(chunk)
+
 console.log(await run.summary)
 ```
 
+运行中可以排队、插话或打断，对话和插件状态可一起保存为 JSON。[会话与运行 →](docs/zh-CN/sessions-and-runs.md)
+
 更多离线示例见 [apps/examples](apps/examples/README.md)。
+
+<br>
 
 ## 文档
 
-[会话与运行](docs/zh-CN/sessions-and-runs.md) · [编写插件](docs/zh-CN/plugins.md) · [核心概念](docs/zh-CN/concepts.md) · [内核 API](docs/zh-CN/kernel.md) · [可运行示例](apps/examples/README.md)
+- [会话与运行](docs/zh-CN/sessions-and-runs.md) — 流式输出、插话、停止与恢复
+- [编写插件](docs/zh-CN/plugins.md) — 钩子、组合顺序与中间件
+- [核心概念](docs/zh-CN/concepts.md) · [内核 API](docs/zh-CN/kernel.md) — 理解底层循环
+- [可运行示例](apps/examples/README.md) — 从具体场景开始
 
 构建 LLM agent 用 [`@gaoxiang.ai/llm`](packages/llm)；需要自定义「决策 → 执行 → 记录」循环时，用零依赖的 [`@gaoxiang.ai/kernel`](packages/kernel)。
+
+<br>
 
 ## 开发
 

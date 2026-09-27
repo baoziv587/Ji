@@ -7,5 +7,14 @@
   "trailingComma": "all",
   "sortImports": false,
   "sortPackageJson": false,
-  "ignorePatterns": ["pnpm-lock.yaml"]
+  "ignorePatterns": ["pnpm-lock.yaml"],
+  "overrides": [
+    {
+      "files": ["README.md", "README.zh-CN.md", "docs/**/*.md"],
+      "options": {
+        "printWidth": 88,
+        "proseWrap": "preserve"
+      }
+    }
+  ]
 }

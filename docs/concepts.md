@@ -4,6 +4,8 @@
 
 This page covers the model behind JI. If you only want to use it, read the [README](../README.md) and [Sessions & Runs](sessions-and-runs.md) first.
 
+<br>
+
 ## Four objects
 
 | Object  | Responsibility                                           | Entry point            |
@@ -12,6 +14,8 @@ This page covers the model behind JI. If you only want to use it, read the [READ
 | Session | One conversation’s state and pending messages            | `createSession(agent)` |
 | Run     | Execution until the agent is idle, with output and usage | `chat.send(...)`       |
 | Plugin  | Change behavior or observe events at fixed points        | `definePlugin(...)`    |
+
+<br>
 
 ## Follow one message
 
@@ -23,6 +27,8 @@ Suppose the user asks the agent to calculate `17 × 23`:
 4. **Finish:** the agent is idle with no deliverable messages, so the Run completes.
 
 A run contains several steps. Each step that commits state produces one `Turn`; the final idle check and interrupted steps do not produce a committed Turn. Plugins can change individual parts, such as adding retrieved context before `request` or shortening a result after `toolCall`.
+
+<br>
 
 ## What happens in one step
 
@@ -50,6 +56,8 @@ Every committed step produces exactly one **Turn**, and `record`, `state.reduce`
 
 The final answer is recorded before the run ends, so it also goes through `record`.
 
+<br>
+
 ## One step, three functions
 
 The kernel describes any agent as three functions:
@@ -62,6 +70,8 @@ The kernel describes any agent as three functions:
 
 Everything with side effects is a stream of the same `D`; everything pure is a plain function. `unfold` repeats _decide → act → record_ until the policy returns a result. The output is a lazy stream of events. `extend` wraps any of the three functions in middleware, and that is the only way to extend an agent.
 
+<br>
+
 ## Three layers
 
 | Layer                      | Responsibility                                                                     | Types                                                                                                                  |
@@ -69,6 +79,8 @@ Everything with side effects is a stream of the same `D`; everything pure is a p
 | `@gaoxiang.ai/kernel`      | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO.       | Generic `S, A, O, R, D`                                                                                                |
 | `@gaoxiang.ai/llm` agent   | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware.        | `S = AgentState`, `O = ToolResultMessage[]`, `D` = every event: model output, tool start / update / end, plugin events |
 | `@gaoxiang.ai/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run`                                                                                                       |
+
+<br>
 
 ## Invariants
 
@@ -80,6 +92,8 @@ The design relies on these rules. Use them when writing plugins; development che
 4. **Cancellation and events flow through `yield*`.** In stream middleware (`decide`, `request`, `toolCalls`, `toolCall`), write `return yield* next(...)`, or use `before` / `after` / `intercept` / `mapEvents`, so aborts reach the HTTP request and the tools, inner events reach the run, and the return value isn't lost.
 5. **An interrupted step is never recorded.** State only advances on completed steps.
 6. **Plugin state lives in `AgentState`.** Stored as `state.plugins[name]`, it is saved and restored along with the messages.
+
+<br>
 
 ## Next
 

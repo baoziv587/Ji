@@ -4,6 +4,8 @@
 
 插件是一个有名字的对象，只需声明你要改变的行为。先选钩子，再选 `before`、`after` 或 `intercept`；需要控制完整执行过程时，再写中间件。
 
+<br>
+
 ## 第一个插件
 
 下面的插件在每次模型调用前设置 temperature。把它放进 `plugins` 后，主模型调用和插件发起的模型调用都会经过它：
@@ -25,6 +27,8 @@ const agent = createAgent({ model, plugins: [temperature] })
 `model` 是你选定的模型。插件名称必须唯一；helper 的参数和返回值类型由钩子推导。这个插件只修改请求参数，不修改对话历史。
 
 先读下面的辅助函数，再按[需求选钩子](#该用哪个钩子)。遇到组合问题查[顺序](#顺序)，需要状态或取消信号查 [`ctx`](#ctx)。
+
+<br>
 
 ## 辅助函数：不写生成器
 
@@ -51,7 +55,9 @@ decide: intercept(state => (overBudget(state) ? stop(state) : undefined))
 
 // 审批：拒绝时直接给模型一个错误结果
 toolCall: intercept(async (call, { signal }) =>
-  (await askApproval(call, { signal })) ? undefined : toolError(call, 'User denied this call'),
+  (await askApproval(call, { signal }))
+    ? undefined
+    : toolError(call, 'User denied this call'),
 )
 ```
 
@@ -59,32 +65,55 @@ toolCall: intercept(async (call, { signal }) =>
 - `after` 原样转发事件，只变换最终结果；`mapEvents` 同步地逐个改写事件，一进一出，结果不变。事件只会到达运行的读者，要同时改流式文字和写入状态的消息（比如遮盖密钥），就两个一起用。
 - 辅助函数只用于四个流式钩子。`record` 直接写普通函数：`record: (input, next) => trim(next(input))`。
 
+<br>
+
 ## 该用哪个钩子
 
-| 我想……                            | 用                                               | 例子                                                                                   |
-| --------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| 修改工具参数或结果                | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../../apps/examples/src/plugins/truncate-tool-results.ts) |
-| 审批、拦截工具调用                | `toolCall: intercept(...)`                       | 返回 `toolError(call, reason)` 即拦截                                                  |
-| 重试工具                          | `toolCall`                                       | [错误与重试](#错误与重试)                                                              |
-| 一个回合的工具调用逐个执行        | `toolCalls`                                      | [`sequential-tools.ts`](../../apps/examples/src/plugins/sequential-tools.ts)           |
-| 一次审批一个回合的全部工具调用    | `toolCalls: intercept(...)`                      | 拒绝时为 `callsOf(message)` 的每个调用返回一个 `toolError`                             |
-| 工具超时                          | 在工具的 `run` 里                                | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                   |
-| 换模型、改 temperature / thinking | `request: before(...)`                           | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature`                     |
-| 模型出错时换兜底模型              | `request`                                        | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`                         |
-| 改写流式文字（只影响显示）        | `request: mapEvents(...)`                        | 输出时遮盖密钥                                                                         |
-| 给请求加检索结果、只发最近 N 条   | `request: before(...)`，跳过带 `ctx.by` 的调用   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
-| 任务没完成就自动继续、定时提醒    | `input`                                          | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
-| 写摘要并替换历史                  | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
-| 预算、步数上限                    | `decide: intercept(...)` + `stop`                | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
-| 截断历史（不调用模型）            | `record`                                         | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast`                               |
-| 保存自己的计数                    | `state: { init, reduce }`，用 `ctx.own` 读取     | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
-| 统计耗时、token、费用             | 不写插件：`r.summary`、`r.turns`、`usageOf`      | [`metrics.ts`](../../apps/examples/src/metrics.ts)                                     |
-| 记录日志、追踪、计数              | `observe`                                        | [`plugins/otel`](../../plugins/otel)、[`plugins/jsonl`](../../plugins/jsonl)           |
-| 显示一个耗时步骤正在做什么        | 在 `decide`、`request` 或 `toolCall` 里 `yield`  | [插件发出的事件](#插件发出的事件)                                                      |
+先按要改变的对象找位置，再选 helper。
+
+### 工具调用
+
+| 我想……                         | 用                                               | 例子                                                                                   |
+| ------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| 修改工具参数或结果             | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../../apps/examples/src/plugins/truncate-tool-results.ts) |
+| 审批、拦截工具调用             | `toolCall: intercept(...)`                       | 返回 `toolError(call, reason)` 即拦截                                                  |
+| 重试工具                       | `toolCall`                                       | [错误与重试](#错误与重试)                                                              |
+| 一个回合的工具调用逐个执行     | `toolCalls`                                      | [`sequential-tools.ts`](../../apps/examples/src/plugins/sequential-tools.ts)           |
+| 一次审批一个回合的全部工具调用 | `toolCalls: intercept(...)`                      | 拒绝时为 `callsOf(message)` 的每个调用返回一个 `toolError`                             |
+| 工具超时                       | 在工具的 `run` 里                                | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                   |
+
+### 模型请求
+
+| 我想……                            | 用                                             | 例子                                                               |
+| --------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------ |
+| 换模型、改 temperature / thinking | `request: before(...)`                         | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature` |
+| 模型出错时换兜底模型              | `request`                                      | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`     |
+| 改写流式文字（只影响显示）        | `request: mapEvents(...)`                      | 输出时遮盖密钥                                                     |
+| 给请求加检索结果、只发最近 N 条   | `request: before(...)`，跳过带 `ctx.by` 的调用 | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`      |
+
+### 对话与状态
+
+| 我想……                         | 用                                           | 例子                                                             |
+| ------------------------------ | -------------------------------------------- | ---------------------------------------------------------------- |
+| 任务没完成就自动继续、定时提醒 | `input`                                      | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts) |
+| 写摘要并替换历史               | `decide` + `ctx.complete` + `rewriteHistory` | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts) |
+| 预算、步数上限                 | `decide: intercept(...)` + `stop`            | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)         |
+| 截断历史（不调用模型）         | `record`                                     | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast`         |
+| 保存自己的计数                 | `state: { init, reduce }`，用 `ctx.own` 读取 | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts) |
+
+### 事件与观测
+
+| 我想……                     | 用                                              | 例子                                                                         |
+| -------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| 统计耗时、token、费用      | 不写插件：`r.summary`、`r.turns`、`usageOf`     | [`metrics.ts`](../../apps/examples/src/metrics.ts)                           |
+| 记录日志、追踪、计数       | `observe`                                       | [`plugins/otel`](../../plugins/otel)、[`plugins/jsonl`](../../plugins/jsonl) |
+| 显示一个耗时步骤正在做什么 | 在 `decide`、`request` 或 `toolCall` 里 `yield` | [插件发出的事件](#插件发出的事件)                                            |
 
 `budget` 用 `usageOf(state)` 计数，它只看得到仍在历史里的主模型消息，所以不是严格的费用上限：`ctx.complete` 的调用和被压缩掉的消息都不算在内（见[会话与运行](sessions-and-runs.md#统计不需要插件)）。
 
 [`apps/examples/src/plugins`](../../apps/examples/src/plugins) 里的插件可以直接复制过去改；[`plugins/`](../../plugins) 下提供可复用的 workspace 包：`otel`、`jsonl`、`throttle-updates`，目前尚未发布到 npm；每个示例的详细说明见 [示例 README](../../apps/examples/README.md)。
+
+<br>
 
 ## agent loop
 
@@ -105,6 +134,8 @@ run                observe                                 这次运行的每个
 ```
 
 `input`、`request` 都在 `decide` 里面：`decide` 不调用 `next`、直接返回 `rewriteHistory(...)` 或 `stop(state)` 时，它们都不会执行，改写历史直接进入 `record`。工具不在里面：`decide` 的 `next` 返回时，模型已经回答，但还没有任何工具执行。
+
+<br>
 
 ## 钩子
 
@@ -138,6 +169,8 @@ toolCalls( message )            看得到这一回合的全部调用
 
 改历史用 `record`，存自己的数据用 `state`。在插件外部用 `myPlugin.select(state)` 读取插件状态，插件还没写入时返回 `init`；在插件自己的钩子里，`ctx.own` 就是同一个值。
 
+<br>
+
 ## 钩子签名
 
 ```text
@@ -160,6 +193,8 @@ toolCalls( message )            看得到这一回合的全部调用
 
 有副作用的四个中间件（`decide`、`request`、`toolCalls`、`toolCall`）都是**流**：`yield` 往这次运行追加一个事件，`return` 给出结果，`yield* next(...)` 把内层的事件原样传出去。`record` 也是 `(input, next)` 的形状，但它是普通的同步函数：`record: ({ state, turn }, next) => AgentState`。
 
+<br>
+
 ## `ctx`
 
 带 `ctx` 的钩子都有下面三个字段，个别钩子多一个。
@@ -176,12 +211,18 @@ toolCalls( message )            看得到这一回合的全部调用
 有状态的插件读自己的状态，不需要引用自己，也不需要写类型：
 
 ```ts
-export const keepGoing = ({ isDone, maxTimes = 3, prompt = 'Keep going until the task is done.' }: KeepGoingOptions) =>
+export const keepGoing = ({
+  isDone,
+  maxTimes = 3,
+  prompt = 'Keep going until the task is done.',
+}: KeepGoingOptions) =>
   definePlugin({
     name: 'keep-going',
     state: { init: 0, reduce: (n, turn) => (isNudge(turn, prompt) ? n + 1 : n) },
     input: (messages, { state, idle, own }) =>
-      idle && messages.length === 0 && !isDone(state) && own < maxTimes ? [user(prompt)] : messages,
+      idle && messages.length === 0 && !isDone(state) && own < maxTimes
+        ? [user(prompt)]
+        : messages,
   })
 ```
 
@@ -202,6 +243,8 @@ const enrich = definePlugin({
 
 不要原地修改 `ctx.state` 或 `ctx.own`，要返回新值。打开[开发检查](#开发检查)时，`ctx.own.count++` 这样的写入会在那一行抛出 `TypeError`。
 
+<br>
+
 ## 顺序
 
 插件列表从上到下，就是从外到内：
@@ -221,6 +264,8 @@ observe   a，然后 b                每个事件都按列表顺序
 
 内核的 `extend(base, m1, m2)` 让 `m2` 在外层；LLM 层把列表反过来再交给它（见 [内核 API](kernel.md)）。
 
+<br>
+
 ## 调用模型：`ctx.complete`
 
 在 `decide` 里，`ctx.complete(req, { signal? })` 借助 agent 自己的机制调用模型，不需要导入 pi-ai：
@@ -232,7 +277,8 @@ const summarize = definePlugin({
     if (!tooLong(state.messages)) return yield* next(state)
 
     const reply = yield* complete({
-      systemPrompt: 'Summarize the conversation below for an assistant that will continue it.',
+      systemPrompt:
+        'Summarize the conversation below for an assistant that will continue it.',
       messages: [user(transcript(state.messages))],
     })
     return rewriteHistory([user(textOf(reply))])
@@ -244,7 +290,9 @@ const summarize = definePlugin({
 - 它经过完整的 `request` 链，fallback 等 request 插件照常生效。这些插件看到 `ctx.by === '<插件名>'`，能与主模型的请求区分开：
 
   ```ts
-  request: before((req, { by }) => (by === undefined ? { ...req, model: mainModel } : req))
+  request: before((req, { by }) =>
+    by === undefined ? { ...req, model: mainModel } : req,
+  )
   ```
 
 - 它随这一步一起取消。它的 `thinking`、`text`、`tool_call` 事件不进入流，所以 `r.text` 只有主模型的回答；它的 `model_start`、`model_end`、`model_error` 带 `by: '<插件名>'`，用量计入 `r.summary.usage`。
@@ -262,7 +310,10 @@ const compaction = definePlugin({
     const deadline = AbortSignal.timeout(30_000)
     let reply: AssistantMessage
     try {
-      const req = { systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] }
+      const req = {
+        systemPrompt: SUMMARIZE,
+        messages: [user(transcript(state.messages))],
+      }
       reply = yield* complete(req, { signal: deadline })
     } catch (error) {
       // 只处理自己的时限；步骤被取消或模型出错照常向上抛
@@ -300,7 +351,8 @@ const retryReads = definePlugin({
         return yield* next(call) // isError 结果是返回值，不重试
       } catch (error) {
         signal.throwIfAborted() // 运行已取消就不再重试
-        if (attempt >= 3 || !safeToRepeat.has(call.name) || !isTransient(error)) throw error
+        if (attempt >= 3 || !safeToRepeat.has(call.name) || !isTransient(error))
+          throw error
       }
       await delay(100 * 2 ** (attempt - 1), undefined, { signal })
     }
@@ -327,9 +379,16 @@ definePlugin({
   async *decide(state, next, { complete }) {
     if (count(state.messages) < limit) return yield* next(state)
     yield { type: 'compaction:start', tokens: count(state.messages) }
-    const reply = yield* complete({ systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] })
+    const reply = yield* complete({
+      systemPrompt: SUMMARIZE,
+      messages: [user(transcript(state.messages))],
+    })
     const messages = [user(textOf(reply))]
-    yield { type: 'compaction:end', before: count(state.messages), after: count(messages) }
+    yield {
+      type: 'compaction:end',
+      before: count(state.messages),
+      after: count(messages),
+    }
     return rewriteHistory(messages)
   },
 })
@@ -413,6 +472,8 @@ const calc = tool({
 ```
 
 `run` 之前会先按 schema 校验参数。同一回合的多个工具调用并行执行，它们的事件交错出现，结果保持调用顺序。`run` 写成异步生成器就能报告进度，见[工具的中间更新](sessions-and-runs.md#事件)。
+
+<br>
 
 ## 继续阅读
 

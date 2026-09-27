@@ -8,14 +8,21 @@ JI handles model calls, tools and conversation state. Add behavior through plugi
 
 > In development. APIs may change; packages are not published to npm yet.
 
+<br>
+
 ## Highlights
 
-- **Consistent hooks.** `before` changes input, `after` changes the result, `intercept` returns early. The same helpers wrap `decide`, `request`, `toolCalls` and `toolCall`.
-- **Compaction is a plugin.** Summarize older messages with `ctx.complete`, then commit the new history with `rewriteHistory`. Existing request plugins, cancellation and usage tracking still apply. [Implementation →](apps/examples/src/plugins/compaction.ts)
-- **Control while running.** Queue messages, steer at the next step or interrupt immediately. Save conversation and plugin state together as JSON.
-- **Built-in visibility.** Stream text, inspect each step and read tokens, cost and timing without extra plugins.
+**One consistent hook API, from small transforms to full middleware. Write plugins independently, then compose them.**
 
-**The hook chooses where; the helper chooses how.** Three independent plugins change requests, transform tool results and block calls:
+Long-running tools can report progress as they work: `yield` in the tool, receive `tool_update` in the run.
+
+<br>
+
+### One hook model, three ways to intervene
+
+**The hook chooses where; the helper chooses how.**
+
+`before` changes input · `after` changes results · `intercept` returns early. All three work with `decide`, `request`, `toolCalls` and `toolCall`.
 
 ```ts
 import { after, before, definePlugin, intercept, toolError } from '@gaoxiang.ai/llm'
@@ -29,23 +36,40 @@ const trimOutput = definePlugin({
   name: 'trim-output',
   toolCall: after(result => ({
     ...result,
-    content: result.content.map(part => (part.type === 'text' ? { ...part, text: part.text.slice(0, 2_000) } : part)),
+    content: result.content.map(part =>
+      part.type === 'text' ? { ...part, text: part.text.slice(0, 2_000) } : part,
+    ),
   })),
 })
 
 const blockShell = definePlugin({
   name: 'block-shell',
-  toolCall: intercept(call => (call.name === 'shell' ? toolError(call, 'Shell access is disabled.') : undefined)),
+  toolCall: intercept(call =>
+    call.name === 'shell' ? toolError(call, 'Shell access is disabled.') : undefined,
+  ),
 })
-
-const toolPlugins = [trimOutput, blockShell]
 ```
 
-Reuse plugins individually or group them into array presets. On the same hook, the list wraps outside in; `intercept` returns `undefined` to continue. For retries, sequential execution or custom events, write `(input, next, ctx)` middleware and delegate with `yield* next(input)`.
+`intercept` returns `undefined` to continue. For retries, sequential execution or custom events, use `(input, next, ctx)` and delegate with `yield* next(input)`.
+
+<br>
+
+### Write independently, compose as needed
+
+Each plugin does one job. Group plugins into reusable presets, then nest them:
+
+```ts
+const toolPlugins = [trimOutput, blockShell]
+const plugins = [lowTemperature, toolPlugins]
+```
+
+Pass them to `createAgent({ model, plugins })`. On the same hook, the list wraps outside in: inputs flow forward, results return in reverse. [Composition order →](docs/plugins.md#ordering)
+
+<br>
 
 ### Compact context with middleware
 
-The core flow below uses helpers for token estimates, tool-call pairing and transcript formatting from the [full implementation](apps/examples/src/plugins/compaction.ts).
+**Complex behavior uses the same middleware model.** Call `complete` inside `decide` to summarize, then use `rewriteHistory` to replace history.
 
 ```ts
 import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
@@ -55,22 +79,31 @@ const compactHistory = definePlugin({
   async *decide(state, next, { complete }) {
     const { messages } = state
     const cut = cutIndex(messages, 6)
+
     if (estimateTokens(messages) <= 100_000 || cut < 2) return yield* next(state)
 
     const summary = yield* complete({
-      systemPrompt: 'Summarize facts, decisions, open tasks and important tool results.',
+      systemPrompt:
+        'Summarize facts, decisions, open tasks and important tool results.',
       messages: [user(transcript(messages.slice(0, cut)))],
     })
+
     return rewriteHistory([user(textOf(summary)), ...messages.slice(cut)])
   },
 })
 ```
 
-Add it to `plugins`. The summary call reuses request plugins, cancellation and usage tracking; `record` commits the new history.
+The summary call runs through the existing `request` plugins, reusing temperature settings and fallback behavior. `record` commits the new history.
 
-### Stream progress from tools
+[Full implementation →](apps/examples/src/plugins/compaction.ts) includes the token-estimation, tool-call pairing and transcript helpers used above.
 
-A tool’s `yield` becomes a `tool_update`; its `return` is the final result sent to the model:
+<br>
+
+### Live progress from long-running tools
+
+**Show progress before the tool finishes.**
+
+Write an async generator: `yield` reports progress and `return` delivers the final result, with no separate callback or event channel. For example, check a batch of URLs:
 
 ```ts
 import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
@@ -81,24 +114,35 @@ const checkUrls = tool({
   parameters: Type.Object({ urls: Type.Array(Type.String()) }),
   async *run({ urls }, signal) {
     const results = []
+
     for (const [i, url] of urls.entries()) {
       const response = await fetch(url, { method: 'HEAD', signal })
       results.push({ url, status: response.status })
       yield { done: i + 1, total: urls.length, url, status: response.status }
     }
+
     return JSON.stringify(results)
   },
 })
+```
 
-const checking = createSession(createAgent({ model, tools: [checkUrls] }))
+Read progress from the run’s event stream:
+
+```ts
+const checking = createSession(
+  createAgent({ model, tools: [checkUrls], plugins: toolPlugins }),
+)
+
 for await (const event of checking.send('Check https://example.com')) {
   if (event.type === 'tool_update') console.log(event.call.name, event.data)
 }
 ```
 
-The same stream carries text and tool start/end events. Add [throttleUpdates](plugins/throttle-updates/src/index.ts) to reduce progress update frequency.
+Compose result trimming, call interception and [progress throttling](plugins/throttle-updates/src/index.ts) around the same tool. `toolCall` middleware wraps its execution stream; `observe` can log events across runs.
 
-More capabilities, built with the same hooks:
+<br>
+
+### More capabilities, ready to compose
 
 | Capability       | Examples                                                                                                                            |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -106,6 +150,8 @@ More capabilities, built with the same hooks:
 | Keep work moving | [Auto-continue](apps/examples/src/plugins/keep-going.ts), [retrieval and fallback](apps/examples/src/hooks.ts)                      |
 | Control tools    | [Sequential execution](apps/examples/src/plugins/sequential-tools.ts), [progress throttling](plugins/throttle-updates/src/index.ts) |
 | Export events    | [OpenTelemetry](plugins/otel/src/index.ts), [JSONL](plugins/jsonl/src/index.ts)                                                     |
+
+<br>
 
 ## Quick start
 
@@ -116,7 +162,9 @@ pnpm install
 pnpm demo
 ```
 
-The demo runs offline with a calculator; no API key is needed. For a real model, set your provider's API key and run `MODEL=provider/model pnpm demo`, replacing `provider/model` with a supported model.
+The demo runs offline with a calculator; no API key is needed.
+
+For a real model, set your provider's API key and run `MODEL=provider/model pnpm demo`, replacing `provider/model` with a supported model.
 
 Application code, with your selected `model` and plugins:
 
@@ -128,16 +176,26 @@ const chat = createSession(agent)
 const run = chat.send('Explain middleware in one sentence.')
 
 for await (const chunk of run.text) process.stdout.write(chunk)
+
 console.log(await run.summary)
 ```
 
+Queue, steer or interrupt a running agent, and save conversation and plugin state together as JSON. [Sessions & Runs →](docs/sessions-and-runs.md)
+
 Find more offline scenarios in [apps/examples](apps/examples/README.md).
+
+<br>
 
 ## Documentation
 
-[Sessions & Runs](docs/sessions-and-runs.md) · [Writing Plugins](docs/plugins.md) · [Concepts](docs/concepts.md) · [Kernel API](docs/kernel.md) · [Runnable examples](apps/examples/README.md)
+- [Sessions & Runs](docs/sessions-and-runs.md) — streaming, interjections, cancellation and recovery
+- [Writing Plugins](docs/plugins.md) — hooks, ordering and middleware
+- [Concepts](docs/concepts.md) · [Kernel API](docs/kernel.md) — the underlying agent loop
+- [Runnable examples](apps/examples/README.md) — start from a working scenario
 
 Use [`@gaoxiang.ai/llm`](packages/llm) for LLM agents, or the dependency-free [`@gaoxiang.ai/kernel`](packages/kernel) for your own decide → act → record loop.
+
+<br>
 
 ## Development
 
