@@ -1,0 +1,20 @@
+{
+  "name": "@gaoxiang.ai/plugin-throttle-updates",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Caps how often a tool call's tool_update events come through",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@gaoxiang.ai/llm": "workspace:*"
+  },
+  "devDependencies": {
+    "@gaoxiang.ai/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}

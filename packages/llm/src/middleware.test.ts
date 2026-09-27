@@ -36,14 +36,18 @@ describe('before', () => {
 })
 
 describe('after', () => {
-  it('on a promise hook, maps the resolved value and can read the input', async () => {
-    const mw = after<number, string>((out, input) => `${out} for ${input}`)
-    expect(await mw(3, async n => `got ${n}`)).toBe('got 3 for 3')
+  it('forwards deltas unchanged and maps only the return value, reading the input', async () => {
+    const mw = after<string, string, string>((out, input) => `${out.toUpperCase()} for ${input}`)
+    expect(await drain(mw('a', streamNext({ value: false })))).toEqual({ deltas: ['a:1', 'a:2'], result: 'A! for a' })
   })
 
-  it('on a stream hook, forwards deltas unchanged and maps only the return value', async () => {
-    const mw = after<string, string>(out => out.toUpperCase())
-    expect(await drain(mw('a', streamNext({ value: false })))).toEqual({ deltas: ['a:1', 'a:2'], result: 'A!' })
+  it('passes an early return (cancellation) through to next', async () => {
+    const closed = { value: false }
+    const stream = after<string, string, string>(out => out)('a', streamNext(closed))
+
+    await stream.next()
+    await stream.return(undefined as never)
+    expect(closed.value).toBe(true)
   })
 })
 

@@ -4,39 +4,40 @@
 
 `@gaoxiang.ai/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@gaoxiang.ai/llm`](sessions-and-runs.md) wraps it for you.
 
-| Entry                          | Contents                                                                                 |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| `@gaoxiang.ai/kernel`          | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `act`, `done`   |
-| `@gaoxiang.ai/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden`                   |
-| `@gaoxiang.ai/kernel/reduce`   | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan` |
+| Entry                          | Contents                                                                                                         |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `@gaoxiang.ai/kernel`          | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `merge`, `act`, `done`, `MaxStepsError` |
+| `@gaoxiang.ai/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden`                                           |
+| `@gaoxiang.ai/kernel/reduce`   | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan`                         |
 
 ## Core
 
 ```ts
 interface Agent<S, A, O, R, D = never> {
   policy: (s: S) => Stream<D, Step<A, R>> // Stream = AsyncGenerator<D, Step>
-  env: (a: A) => Promise<O>
+  env: (a: A) => Stream<D, O>
   update: (s: S, a: A, o: O) => S // synchronous, pure
 }
 ```
 
-A policy yields any number of deltas `D`, then returns `act(action)` to continue or `done(result)` to stop.
+A policy yields any number of deltas `D`, then returns `act(action)` to continue or `done(result)` to stop. An env yields deltas of the same type while it works, then returns the observation. Everything with side effects is a stream; `update` is a plain function. An env with nothing to report is `async function* (a) { return o }`.
 
-| Function                          | Does                                                                                                                              |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `unfold(agent, s, maxSteps = 32)` | Lazy stream of events: `delta`, `act` (with `obs` and new `state`) and `done`. Calling `return()` on it cancels all the way down. |
-| `run(agent, s, maxSteps?)`        | Folds `unfold` to the final result                                                                                                |
-| `extend(agent, ...exts)`          | Applies middleware. **Earlier is inner, later is outer.**                                                                         |
-| `mapState(agent, f)`              | Shorthand for an `update` middleware that post-processes state                                                                    |
-| `mapYield(stream, f)`             | `yield*` with a map applied to each delta. Keeps the return value and propagates cancellation.                                    |
+| Function                          | Does                                                                                                                                                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unfold(agent, s, maxSteps = 32)` | Lazy stream of events: `delta` (from policy, then env), `act` (with `obs` and new `state`) and `done`. Calling `return()` on it cancels all the way down, into env too. Throws `MaxStepsError` past `maxSteps`. |
+| `run(agent, s, maxSteps?)`        | Folds `unfold` to the final result                                                                                                                                                                              |
+| `extend(agent, ...exts)`          | Applies middleware. **Earlier is inner, later is outer.**                                                                                                                                                       |
+| `mapState(agent, f)`              | Shorthand for an `update` middleware that post-processes state                                                                                                                                                  |
+| `mapYield(stream, f)`             | `yield*` with a map applied to each delta. Keeps the return value and propagates cancellation.                                                                                                                  |
+| `merge(streams)`                  | Runs streams at once: deltas in arrival order, results in source order. Cancelling it closes every source that started.                                                                                         |
 
 An `Extension` has up to three middlewares with the same `(input, next)` shape as [LLM plugins](plugins.md#two-shapes).
 
 ```ts
 const logged = extend(agent, {
-  env: async (a, next) => {
+  async *env(a, next) {
     console.log('act', a)
-    return next(a)
+    return yield* next(a)
   },
 })
 ```

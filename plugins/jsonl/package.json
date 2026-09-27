@@ -1,0 +1,20 @@
+{
+  "name": "@gaoxiang.ai/plugin-jsonl",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "One JSON line per run event, for replay and debugging",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@gaoxiang.ai/llm": "workspace:*"
+  },
+  "devDependencies": {
+    "@gaoxiang.ai/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}

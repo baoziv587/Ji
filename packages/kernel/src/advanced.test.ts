@@ -1,5 +1,5 @@
 import type { EnvUpdateExtension, Lens } from './advanced.ts'
-import type { Agent, Extension } from './index.ts'
+import type { Agent, Extension, Stream } from './index.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { focus, liftWiden, widen, withState } from './advanced.ts'
@@ -13,15 +13,26 @@ const base: Agent<S, number, number, string, string> = {
     yield `d${s.length}`
     return s.length >= 3 ? done(String(s.reduce((a, b) => a + b, 0))) : act(s.length + 1)
   },
-  env: async a => a * 10,
+  async *env(a) {
+    return a * 10
+  },
   update: (s, _a, o) => [...s, o],
 }
 
 /** env / update only, so liftWiden can lift them */
-const envAndUpdate: EnvUpdateExtension<S, number, number>[] = [
+const envAndUpdate: EnvUpdateExtension<S, number, number, string>[] = [
   { env: (a, next) => next(a * 2) },
-  { env: async (a, next) => (await next(a)) + 1 },
-  { env: async (a, next) => (a > 2 ? -a : next(a)) },
+  {
+    async *env(a, next) {
+      return (yield* next(a)) + 1
+    },
+  },
+  {
+    async *env(a, next) {
+      yield 'e'
+      return a > 2 ? -a : yield* next(a)
+    },
+  },
   { update: (s, a, o, next) => next(s, a, o * 3) },
   { update: (s, a, o, next) => next(s, a, o).slice(-2) },
   { update: (s, a, o, next) => (s.length > 1 ? next(next(s, a, o), a, o) : next(s, a, o)) },
@@ -54,7 +65,7 @@ describe('widen: adds action kinds', () => {
     compact: true
   }
   const isCompact = (x: number | Compact): x is Compact => typeof x === 'object'
-  const handlers = { env: async () => -1, update: (s: S): S => [s.length] }
+  const handlers = { env: () => returning(-1), update: (s: S): S => [s.length] }
 
   // The outer layer emits a new action on the widened type so the new branch is exercised
   const trigger: Extension<S, number | Compact, number, string, string> = {
@@ -184,19 +195,43 @@ describe('widen / liftWiden: routing by action kind', () => {
   const compact: Compact = { compact: true }
 
   it('widen sends new actions to the handlers and old ones to the agent', async () => {
-    const widened = widen(base, isCompact, { env: async () => -1, update: s => [s.length] })
+    const widened = widen(base, isCompact, { env: () => returning(-1), update: s => [s.length] })
 
-    expect(await widened.env(compact)).toBe(-1)
-    expect(await widened.env(2)).toBe(20)
+    expect(await drain(widened.env(compact))).toBe(-1)
+    expect(await drain(widened.env(2))).toBe(20)
     expect(widened.update([4, 5], compact, -1)).toEqual([2])
     expect(widened.update([4, 5], 3, 30)).toEqual([4, 5, 30])
   })
 
   it('liftWiden skips the middleware for new actions and runs it for old ones', async () => {
-    const lifted = liftWiden<S, number, Compact, number>({ env: async (a, next) => (await next(a)) + 1 }, isCompact)
-    const inner = async (x: number | Compact): Promise<number> => (isCompact(x) ? -1 : x * 10)
+    const lifted = liftWiden<S, number, Compact, number, string>(
+      {
+        async *env(a, next) {
+          return (yield* next(a)) + 1
+        },
+      },
+      isCompact,
+    )
+    const inner = (x: number | Compact): Stream<string, number> => returning(isCompact(x) ? -1 : x * 10)
 
-    expect(await lifted.env!(compact, inner)).toBe(-1)
-    expect(await lifted.env!(2, inner)).toBe(21)
+    expect(await drain(lifted.env!(compact, inner))).toBe(-1)
+    expect(await drain(lifted.env!(2, inner))).toBe(21)
   })
 })
+
+// Helpers
+
+/** A stream with no deltas that returns value. */
+async function* returning<T>(value: T): Stream<never, T> {
+  return value
+}
+
+/** Reads a stream to the end and returns what it returned. */
+async function drain<D, T>(stream: Stream<D, T>): Promise<T> {
+  for (;;) {
+    const r = await stream.next()
+    if (r.done) {
+      return r.value
+    }
+  }
+}

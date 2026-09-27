@@ -1,16 +1,24 @@
 // Minimal REPL: DEEPSEEK_API_KEY=sk-... pnpm --filter @gaoxiang.ai/examples repl
 //
-//   Enter sends; replies stream in, with one line per tool call and one per result
+//   Enter sends; replies stream in, with one line per tool call and one per result as each call finishes
 //   Ctrl+C during a reply stops only that reply; Ctrl+C at the prompt or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=high turns thinking on (default off); /think <level> switches it mid-chat, thinking shows in gray
-import type { Agent, Run, UsageTotals } from '@gaoxiang.ai/llm'
-import type { Api, Model, ModelThinkingLevel, ToolCall, ToolResultMessage } from '@mariozechner/pi-ai'
+//
+// Everything comes from @gaoxiang.ai/llm: the model, its thinking levels and the events need nothing from pi-ai.
+import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@gaoxiang.ai/llm'
 import process from 'node:process'
 import { styleText } from 'node:util'
 import { cancel, intro, isCancel, log, outro, S_BAR, text } from '@clack/prompts'
-import { createAgent, createSession, tool } from '@gaoxiang.ai/llm'
-import { getModels, getSupportedThinkingLevels, Type } from '@mariozechner/pi-ai'
+import {
+  createAgent,
+  createSession,
+  RunError,
+  tool,
+  Type,
+  UnknownModelError,
+  UnsupportedThinkingError,
+} from '@gaoxiang.ai/llm'
 
 const calc = tool({
   name: 'calc',
@@ -41,52 +49,70 @@ const STOPPED = new Error('stopped by user')
  *
  *   |                          <- Gutter opens a block with a bare rail
  *   o  Thinking                <- title, thinking blocks only
- *   :  The user wants 17*23    <- thinking_delta: gray rail, dim italic text
+ *   :  The user wants 17*23    <- thinking: gray rail, dim italic text
  *   |
- *   |  Let me compute that.    <- text_delta: plain rail, normal text
+ *   |  Let me compute that.    <- text: plain rail, normal text
  *   |                          <- blank line before the first call of a turn only
- *   >  calc(expr: "17*23")     <- toolcall_end: shown once the arguments are complete
- *   v  calc  391               <- act: one line per result, green (or red x on error)
- *   @  Running calc 1s         <- Status: one line redrawn in place, erased before anything else is written
+ *   >  calc(expr: "17*23")     <- tool_call: the arguments are complete; the tool has not started yet
+ *   v  calc  391               <- tool_end: one line per call as soon as it finishes, green (or red x on error)
+ *   @  Running calc 1s         <- Status: one line redrawn in place, erased before anything else is written;
+ *                                 timed from tool_start, so it never counts time the model was still writing
  */
 async function render(r: Run): Promise<void> {
   const started = performance.now()
   const out = new Gutter()
   const status = new Status()
+  const running = new Map<string, string>()
   let afterCall = false
 
-  status.show('Waiting')
+  /** A different kind of wait starts its own timer. */
+  const wait = (label: string): void => {
+    status.hide()
+    status.show(label)
+  }
+  const runningLabel = (): string => `Running ${[...new Set(running.values())].join(', ')}`
+
+  wait('Waiting')
   try {
     for await (const e of r) {
-      if (e.tag === 'delta' && e.delta.type === 'thinking_start') {
-        status.show('Thinking')
-      } else if (e.tag === 'delta' && e.delta.type === 'thinking_delta') {
-        status.hide()
-        out.write(e.delta.delta, 'thinking')
-      } else if (e.tag === 'delta' && e.delta.type === 'text_delta') {
-        status.hide()
-        out.write(e.delta.delta, 'text')
-      } else if (e.tag === 'delta' && e.delta.type === 'toolcall_end') {
-        const call = e.delta.toolCall
-        status.hide()
-        out.end()
-        // Calls from the same turn stay together without blank lines
-        log.message(describeCall(call), {
-          symbol: styleText('cyan', '▸'),
-          spacing: afterCall ? 0 : 1,
-        })
-        afterCall = true
-        status.show(`Running ${call.name}`)
-      } else if (e.tag === 'act' && e.obs.length > 0) {
-        status.hide()
-        for (const result of e.obs) {
-          log.message(describeResult(result), {
-            symbol: result.isError ? styleText('red', '✗') : styleText('green', '✓'),
+      switch (e.type) {
+        case 'model_start':
+          // The level actually sent, after any plugin and after mapping to what the model supports
+          wait(e.thinking === 'off' ? 'Waiting' : 'Thinking')
+          afterCall = false
+          break
+        case 'thinking':
+        case 'text':
+          status.hide()
+          out.write(e.delta, e.type)
+          break
+        case 'tool_call':
+          status.hide()
+          out.end()
+          // Calls from the same turn stay together without blank lines
+          log.message(describeCall(e.call), { symbol: styleText('cyan', '▸'), spacing: afterCall ? 0 : 1 })
+          afterCall = true
+          break
+        case 'tool_start':
+          running.set(e.call.id, e.call.name)
+          wait(runningLabel())
+          break
+        case 'tool_update':
+          status.show(`${runningLabel()} · ${clip(String(e.data))}`)
+          break
+        case 'tool_end':
+          running.delete(e.call.id)
+          status.hide()
+          log.message(describeResult(e.result), {
+            symbol: e.result.isError ? styleText('red', '✗') : styleText('green', '✓'),
             spacing: 0,
           })
-        }
-        afterCall = false
-        status.show('Waiting')
+          wait(running.size > 0 ? runningLabel() : 'Waiting')
+          break
+        case 'step_cancelled':
+          running.clear()
+          status.hide()
+          break
       }
     }
   } finally {
@@ -231,63 +257,45 @@ function dim(s: string): string {
   return styleText('dim', s)
 }
 
-function pickModel(id: string): Model<Api> {
-  const found = getModels('deepseek').find(m => m.id === id)
-  if (!found) {
-    cancel(
-      `Unknown DeepSeek model "${id}". Available: ${getModels('deepseek')
-        .map(m => m.id)
-        .join(', ')}`,
-    )
-    process.exit(1)
+/** The model and level are checked here, so a typo stops the REPL before the first prompt, with the choices listed. */
+function startAgent(): Agent {
+  try {
+    return createAgent({
+      model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`,
+      thinking: (process.env.DEEPSEEK_THINKING ?? 'off') as ThinkingLevel,
+      system: 'You are a concise assistant running in a terminal. Use tools when they help.',
+      tools: [calc, now],
+    })
+  } catch (error) {
+    if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
+      cancel(error.message)
+      process.exit(1)
+    }
+    throw error
   }
-  return found as Model<Api>
-}
-
-/** undefined when this model doesn't support the given level. */
-function parseThinking(model: Model<Api>, value: string): ModelThinkingLevel | undefined {
-  return getSupportedThinkingLevels(model).find(level => level === value)
-}
-
-/** Agents hold no state: a new level means a new agent, and the session continues from the same state. */
-function agentFor(model: Model<Api>, thinking: ModelThinkingLevel): Agent {
-  return createAgent({
-    model,
-    system: 'You are a concise assistant running in a terminal. Use tools when they help.',
-    tools: [calc, now],
-    reasoning: thinking === 'off' ? undefined : thinking,
-  })
 }
 
 // The main loop comes last because the class declarations above must be evaluated before render() runs.
 
-if (!process.env.DEEPSEEK_API_KEY) {
-  cancel('DEEPSEEK_API_KEY is not set. Run `export DEEPSEEK_API_KEY=sk-...` and try again.')
-  process.exit(1)
-}
-
-const model = pickModel(process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash')
-const levels = getSupportedThinkingLevels(model).join(', ')
-
-let thinking = parseThinking(model, process.env.DEEPSEEK_THINKING ?? 'off')
-if (!thinking) {
-  cancel(`DEEPSEEK_THINKING must be one of: ${levels}.`)
-  process.exit(1)
-}
-let agent = agentFor(model, thinking)
+let agent = startAgent()
 let chat = createSession(agent)
+const levels = agent.model.thinkingLevels.join('|')
+const MISSING_KEY =
+  'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
 
 // clack handles Ctrl+C at the prompt (returning a cancel), so SIGINT only arrives here mid-reply
 let current: Run | undefined
 process.on('SIGINT', () => (current ? current.abort(STOPPED) : process.exit(130)))
 
-intro(`ji · ${model.provider}/${model.id}`)
+intro(`ji · ${agent.model.provider}/${agent.model.id}`)
 log.message(
-  dim(
-    `thinking: ${thinking} · tools: calc, now\n/think <${levels.replaceAll(', ', '|')}> · Ctrl+C stops a reply · /exit quits`,
-  ),
+  dim(`thinking: ${agent.thinking} · tools: calc, now\n/think <${levels}> · Ctrl+C stops a reply · /exit quits`),
   { spacing: 0 },
 )
+// The key is only needed to send, so its absence is pointed out without blocking anything else
+if (!agent.model.hasEnvKey) {
+  log.warn(MISSING_KEY)
+}
 
 /** After a stop or an error, the unanswered message goes back into the input to edit and resend. */
 let retry = ''
@@ -307,15 +315,21 @@ for (;;) {
     continue
   }
   if (message === '/think' || message.startsWith('/think ')) {
-    const level = parseThinking(model, message.slice('/think'.length).trim())
+    const arg = message.slice('/think'.length).trim()
+    const level = agent.model.thinkingLevels.find(l => l === arg)
     if (level) {
-      thinking = level
-      agent = agentFor(model, level)
-      chat = createSession(agent, { state: chat.state })
-      log.success(`Thinking: ${level}`)
+      // Same conversation, new setting: the next model call uses it
+      agent = agent.with({ thinking: level })
+      chat.use(agent)
+      log.success(`Thinking: ${agent.thinking}`)
     } else {
-      log.info(`Thinking: ${thinking}. Change it with /think <${levels.replaceAll(', ', '|')}>.`)
+      log.info(`Thinking: ${agent.thinking}. Change it with /think <${levels}>.`)
     }
+    continue
+  }
+  if (!agent.model.hasEnvKey) {
+    log.warn(MISSING_KEY)
+    retry = message
     continue
   }
 
@@ -327,7 +341,7 @@ for (;;) {
     // Roll back to before the send, so the next message doesn't pick up this unanswered one
     chat = createSession(agent, { state: before })
     retry = message
-    if (error === STOPPED) {
+    if (error instanceof RunError && error.kind === 'aborted' && error.cause === STOPPED) {
       log.warn('Stopped. Your message is back in the input. Edit it or clear it.')
     } else {
       log.error(

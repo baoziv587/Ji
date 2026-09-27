@@ -4,7 +4,7 @@
 //     transform(extend(a, x)) ≃ extend(transform(a), lift(x))
 //   so code can always be written as extend(transform(base), ...extensions)
 
-import type { Agent, Extension } from './index.ts'
+import type { Agent, Extension, Stream } from './index.ts'
 
 /** Must satisfy: set(t, get(t)) = t; get(set(t, s)) = s; set(set(t, a), b) = set(t, b) */
 export interface Lens<T, S> {
@@ -68,8 +68,8 @@ export function focus<S, T, A, O, R, D>(ext: Extension<S, A, O, R, D>, lens: Len
   return focused
 }
 
-export interface WidenHandlers<S, N, O> {
-  env: (n: N) => Promise<O>
+export interface WidenHandlers<S, N, O, D = never> {
+  env: (n: N) => Stream<D, O>
   update: (s: S, n: N, o: O) => S
 }
 
@@ -77,7 +77,7 @@ export interface WidenHandlers<S, N, O> {
 export function widen<S, A, N, O, R, D>(
   agent: Agent<S, A, O, R, D>,
   isNew: (x: A | N) => x is N,
-  handlers: WidenHandlers<S, N, O>,
+  handlers: WidenHandlers<S, N, O, D>,
 ): Agent<S, A | N, O, R, D> {
   return {
     policy: agent.policy,
@@ -86,8 +86,8 @@ export function widen<S, A, N, O, R, D>(
   }
 }
 
-/** Middleware without policy; passes to extend for any R and D. */
-export type EnvUpdateExtension<S, A, O> = Omit<Extension<S, A, O, never, never>, 'policy'> & {
+/** Middleware without policy; passes to extend for any R. */
+export type EnvUpdateExtension<S, A, O, D = never> = Omit<Extension<S, A, O, never, D>, 'policy'> & {
   policy?: never
 }
 
@@ -95,12 +95,12 @@ export type EnvUpdateExtension<S, A, O> = Omit<Extension<S, A, O, never, never>,
  * Lifts env / update middleware from A to A | N: new actions go straight to next, old ones through the middleware.
  * Policy middleware outputs A and has no generic lift, so it is rejected by the type; write it against A | N directly.
  */
-export function liftWiden<S, A, N, O>(
-  ext: EnvUpdateExtension<S, A, O>,
+export function liftWiden<S, A, N, O, D = never>(
+  ext: EnvUpdateExtension<S, A, O, D>,
   isNew: (x: A | N) => x is N,
-): EnvUpdateExtension<S, A | N, O> {
+): EnvUpdateExtension<S, A | N, O, D> {
   const { env, update } = ext
-  const lifted: EnvUpdateExtension<S, A | N, O> = {}
+  const lifted: EnvUpdateExtension<S, A | N, O, D> = {}
 
   if (env) {
     lifted.env = (x, next) => (isNew(x) ? next(x) : env(x, next))

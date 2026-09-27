@@ -2,6 +2,7 @@ import type { Message } from '@mariozechner/pi-ai'
 import type { Agent } from './agent.ts'
 import type { Run, RunHost } from './run.ts'
 import type { AgentState, Boundary, PendingMessage, When } from './types.ts'
+import { randomUUID } from 'node:crypto'
 import { user } from './message.ts'
 import { AgentRun } from './run.ts'
 
@@ -11,6 +12,11 @@ export interface Session {
    * While a Run is in progress the message joins it and that Run is returned; otherwise a new Run starts.
    */
   send: (message: string | Message, options?: { when?: When }) => Run
+  /**
+   * Switches to another agent (say agent.with({ thinking: 'high' })) at the next step boundary. The state, the queued
+   * messages and a Run in progress are kept; the next model_start shows the new settings.
+   */
+  use: (agent: Agent) => void
   /** Last committed state; excludes partial output of the step in progress. */
   readonly state: AgentState
   readonly pending: readonly PendingMessage[]
@@ -28,21 +34,30 @@ export function createSession(agent: Agent, options: SessionOptions = {}): Sessi
 }
 
 class AgentSession implements Session, RunHost {
-  readonly agent: Agent
+  readonly id = randomUUID()
   readonly maxSteps: number
   state: AgentState
 
-  private queue: PendingMessage[] = []
   private current: AgentRun | undefined
+  private queue: PendingMessage[] = []
+  private using: Agent
 
   constructor(agent: Agent, { state = [], maxSteps = 64 }: SessionOptions) {
-    this.agent = agent
+    this.using = agent
     this.maxSteps = maxSteps
     this.state = toState(state)
   }
 
+  get agent(): Agent {
+    return this.using
+  }
+
   get pending(): readonly PendingMessage[] {
     return this.queue
+  }
+
+  use(agent: Agent): void {
+    this.using = agent
   }
 
   send(message: string | Message, { when = 'idle' }: { when?: When } = {}): Run {

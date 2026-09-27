@@ -1,8 +1,9 @@
 // Shared by the examples: picking a model and displaying a run.
-import type { Run, RunSummary, Turn } from '@gaoxiang.ai/llm'
-import type { Api, FauxResponseStep, KnownProvider, Model } from '@mariozechner/pi-ai'
+import type { Api, Model, Run, RunSummary, Turn } from '@gaoxiang.ai/llm'
+import type { FauxResponseStep } from '@mariozechner/pi-ai'
 import process from 'node:process'
-import { getModels, registerFauxProvider } from '@mariozechner/pi-ai'
+import { findModel } from '@gaoxiang.ai/llm'
+import { registerFauxProvider } from '@mariozechner/pi-ai'
 
 /**
  * MODEL=anthropic/claude-sonnet-5 -> a real model (API key read from env).
@@ -11,13 +12,7 @@ import { getModels, registerFauxProvider } from '@mariozechner/pi-ai'
 export function pickModel(script: FauxResponseStep[], tokensPerSecond = 200): Model<Api> {
   const spec = process.env.MODEL
   if (spec) {
-    const i = spec.indexOf('/')
-    const [provider, id] = [spec.slice(0, i), spec.slice(i + 1)]
-    const model = getModels(provider as KnownProvider).find(m => m.id === id)
-    if (!model) {
-      throw new Error(`unknown model: ${spec}`)
-    }
-    return model as Model<Api>
+    return findModel(spec)
   }
 
   const faux = registerFauxProvider({ tokensPerSecond })

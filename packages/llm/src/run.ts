@@ -1,19 +1,23 @@
-import type { AssistantMessage, AssistantMessageEvent, ToolResultMessage } from '@mariozechner/pi-ai'
+import type { AssistantMessage, ToolCall, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { Agent, RunContext } from './agent.ts'
 import type {
   AgentAction,
-  AgentEvent,
   AgentState,
   Boundary,
+  Payload,
   PendingMessage,
+  RunEvent,
+  RunInfo,
   RunSummary,
   TurnEvent,
   TurnTiming,
 } from './types.ts'
+import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
-import { unfold } from '@gaoxiang.ai/kernel'
+import { MaxStepsError, unfold } from '@gaoxiang.ai/kernel'
 import { resultOf } from '@gaoxiang.ai/kernel/reduce'
-import { instantiate } from './agent.ts'
+import { instantiate, observe } from './agent.ts'
+import { ModelCallError, RunError } from './errors.ts'
 import { isIdle } from './message.ts'
 import { summaryReducer } from './summary.ts'
 import { turnOf } from './turn.ts'
@@ -22,12 +26,12 @@ import { turnOf } from './turn.ts'
  * Lasts until the agent is idle and no queued message can be inserted.
  * All members share one run; leaving any `for await` early cancels the whole run (I7).
  */
-export interface Run extends AsyncIterable<AgentEvent> {
+export interface Run extends AsyncIterable<RunEvent> {
   /** Text deltas produced after reading starts; earlier ones are not replayed. */
   readonly text: AsyncIterable<string>
   /** One record per step; always replays from the first step, whenever reading starts. */
   readonly turns: AsyncIterable<TurnEvent>
-  /** Rejects if the run is aborted or fails. */
+  /** Rejects with a RunError if the run is aborted or fails. */
   readonly summary: Promise<RunSummary>
   readonly result: Promise<AssistantMessage>
   readonly state: Promise<AgentState>
@@ -37,7 +41,10 @@ export interface Run extends AsyncIterable<AgentEvent> {
 
 /** What a Run needs from its Session. */
 export interface RunHost {
+  /** The session's agent; session.use may change it, and the Run switches at the next step boundary. */
   readonly agent: Agent
+  /** Session id, reported to observers. */
+  readonly id: string
   readonly maxSteps: number
   /** Last committed state; the Run updates it after every step. */
   state: AgentState
@@ -46,50 +53,60 @@ export interface RunHost {
   remove: (delivered: PendingMessage[]) => void
 }
 
+type Stopping = { kind: 'interrupt' } | { kind: 'abort'; reason: unknown }
+type RunEnd = Extract<Payload, { type: 'run_end' }>
+
 export class AgentRun implements Run {
   readonly summary: Promise<RunSummary>
   readonly result: Promise<AssistantMessage>
   readonly state: Promise<AgentState>
 
   private readonly host: RunHost
+  private readonly info: RunInfo
+  /** Fixed for the whole run, so every observer sees a run from its first event to its last. */
+  private readonly observe: (e: RunEvent, run: RunInfo) => void
   private readonly log: TurnEvent[] = []
-  private readonly subscribers = new Set<AgentEvent[]>()
-  private readonly clock = new StepClock()
-  private readonly outcome = {
-    summary: Promise.withResolvers<RunSummary>(),
-    result: Promise.withResolvers<AssistantMessage>(),
-    state: Promise.withResolvers<AgentState>(),
-  }
+  private readonly subscribers = new Set<RunEvent[]>()
+  /** result, state and summary are all read off this one settlement. */
+  private readonly outcome = Promise.withResolvers<{
+    result: AssistantMessage
+    state: AgentState
+    summary: RunSummary
+  }>()
 
   private changed = Promise.withResolvers<void>()
-  private finished = false
-  private failure: { error: unknown } | undefined
+  /** Set once run_end goes out; the run is finished from then on. */
+  private end: RunEnd | undefined
 
   private acc = summaryReducer.init
   private steps = 0
+  /** The step in progress, folded from the payloads it has published so far. */
+  private step = openStep(performance.now())
   /** Offered to the step in flight; dequeued only once that step is committed. */
   private offered: PendingMessage[] = []
   private interruptedBoundary = false
-  private stopping: { kind: 'interrupt' } | { kind: 'abort'; reason: unknown } | undefined
+  private stopping: Stopping | undefined
   private controller = new AbortController()
-  private stopSegment: () => void = () => {}
+  private stopSegment: () => void = noop
 
   constructor(host: RunHost) {
     this.host = host
+    this.info = { id: randomUUID(), session: host.id }
+    this.observe = host.agent[observe]
 
+    this.result = this.outcome.promise.then(o => o.result)
+    this.state = this.outcome.promise.then(o => o.state)
+    this.summary = this.outcome.promise.then(o => o.summary)
     // Nobody may await these; attach handlers up front so a failure is not an unhandled rejection.
-    for (const { promise } of Object.values(this.outcome)) {
+    for (const promise of [this.result, this.state, this.summary]) {
       promise.catch(noop)
     }
-    this.summary = this.outcome.summary.promise
-    this.result = this.outcome.result.promise
-    this.state = this.outcome.state.promise
 
     void this.drive()
   }
 
   get isFinished(): boolean {
-    return this.finished
+    return this.end !== undefined
   }
 
   get text(): AsyncIterable<string> {
@@ -100,28 +117,26 @@ export class AgentRun implements Run {
     return this.readTurns()
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<AgentEvent> {
+  [Symbol.asyncIterator](): AsyncIterator<RunEvent> {
     return this.readEvents()
   }
 
-  abort(reason: unknown = new Error('run aborted')): void {
-    if (this.finished) {
-      return
+  abort(reason?: unknown): void {
+    if (!this.end) {
+      this.stop({ kind: 'abort', reason })
     }
-
-    this.stopping = { kind: 'abort', reason }
-    this.controller.abort(reason)
-    this.stopSegment()
   }
 
   /** Cancels the step in flight, drops anything uncommitted, and continues from the last committed state. */
   interrupt(): void {
-    if (this.finished || this.stopping) {
-      return
+    if (!this.end && !this.stopping) {
+      this.stop({ kind: 'interrupt' })
     }
+  }
 
-    this.stopping = { kind: 'interrupt' }
-    this.controller.abort()
+  private stop(stopping: Stopping): void {
+    this.stopping = stopping
+    this.controller.abort(stopping.kind === 'abort' ? stopping.reason : undefined)
     this.stopSegment()
   }
 
@@ -130,15 +145,18 @@ export class AgentRun implements Run {
    *
    *   drive
    *     +-> runSegment: unfold(agent[instantiate](ctx), host.state, maxSteps - steps)
-   *     |     delta  -> publish
-   *     |     act    -> publish, dequeue offered, commit (host.state, log, summary acc, steps++)
-   *     |     done   -> publish, dequeue offered, return { result }
+   *     |     delta  -> publish the payload (step_start first if the step has not started)
+   *     |     act    -> dequeue offered, commit (host.state, log, summary acc, steps++), publish step_end
+   *     |     done   -> dequeue offered, return { result }
    *     |     interrupt() / abort() -> 'stopped': the step in flight is dropped uncommitted
+   *     |     session.use(agent) -> 'switched' after the commit: the next segment uses the new agent
    *     |
-   *     +-- 'stopped' by interrupt -> the next boundary reports interrupted: true
+   *     +-- 'stopped' by interrupt -> step_cancelled; the next boundary reports interrupted: true
+   *     +-- 'switched'
    *     +-- done, but a queued message has become deliverable
    *
-   *   'stopped' by abort -> fail(reason)          done otherwise -> finish(result)
+   *   'stopped' by abort, or a throw -> step_cancelled if a step was open, run_end failed
+   *   done otherwise                 -> run_end done
    *
    * steps, t and the summary carry across segments, so the whole Run shares one maxSteps budget.
    */
@@ -147,10 +165,14 @@ export class AgentRun implements Run {
       for (;;) {
         const outcome = await this.runSegment()
 
+        if (outcome === 'switched') {
+          continue
+        }
         if (outcome === 'stopped') {
           if (this.stopping?.kind === 'abort') {
             throw this.stopping.reason
           }
+          this.cancelStep('interrupt')
           this.stopping = undefined
           this.interruptedBoundary = true
           continue
@@ -162,15 +184,19 @@ export class AgentRun implements Run {
           continue
         }
 
-        this.finish(outcome.result)
+        this.settle({ type: 'run_end', outcome: 'done', result: outcome.result, summary: this.summarySoFar })
         return
       }
-    } catch (error) {
-      this.fail(error)
+    } catch (cause) {
+      const kind = this.stopping?.kind === 'abort' ? 'aborted' : kindOf(cause)
+      const error = new RunError(kind, { t: this.steps, state: this.host.state, cause })
+
+      this.cancelStep(kind === 'aborted' ? 'abort' : 'error')
+      this.settle({ type: 'run_end', outcome: 'failed', error, summary: this.summarySoFar })
     }
   }
 
-  private async runSegment(): Promise<'stopped' | { result: AssistantMessage }> {
+  private async runSegment(): Promise<'stopped' | 'switched' | { result: AssistantMessage }> {
     if (this.stopping) {
       return 'stopped'
     }
@@ -178,7 +204,7 @@ export class AgentRun implements Run {
     const controller = new AbortController()
     this.controller = controller
 
-    const isCurrent = (): boolean => this.controller === controller
+    const agent = this.host.agent
     const ctx: RunContext = {
       signal: controller.signal,
       offer: boundary => {
@@ -186,15 +212,13 @@ export class AgentRun implements Run {
         return this.offered.map(p => p.message)
       },
       interrupted: () => this.interruptedBoundary,
-      toolTime: (id, ms) => {
-        if (isCurrent()) {
-          this.clock.tool(id, ms)
-        }
-      },
     }
 
-    const events = unfold(this.host.agent[instantiate](ctx), this.host.state, this.host.maxSteps - this.steps)
-    this.clock.begin()
+    const events = unfold(agent[instantiate](ctx), this.host.state, this.host.maxSteps - this.steps)
+    // A step that has published nothing yet starts its clock here; one that has keeps going under its step_start.
+    if (!this.step.started) {
+      this.step = openStep(performance.now())
+    }
 
     try {
       for (;;) {
@@ -206,11 +230,9 @@ export class AgentRun implements Run {
           throw new Error('unfold ended without a done event')
         }
 
-        const e = { ...next.value, t: this.steps }
-        this.publish(e)
-
+        const e = next.value
         if (e.tag === 'delta') {
-          this.clock.delta(e.delta)
+          this.publishInStep(e.delta)
           continue
         }
 
@@ -221,6 +243,10 @@ export class AgentRun implements Run {
           return { result: e.result }
         }
         this.commit(e.action, e.obs, e.state)
+
+        if (this.host.agent !== agent) {
+          return 'switched'
+        }
       }
     } finally {
       // unfold may still be inside a tool or model call; don't wait for it, it ends once the signal aborts.
@@ -246,50 +272,65 @@ export class AgentRun implements Run {
   }
 
   private commit(action: AgentAction, results: ToolResultMessage[], state: AgentState): void {
+    const now = performance.now()
     const turn = turnOf(action, results)
-    const timing = this.clock.lap(turn.kind === 'model')
+    const timing = timingOf(this.step, now, turn.kind === 'model')
 
     this.host.state = state
     this.acc = summaryReducer.reduce(this.acc, { turn, timing })
-    this.log.push({
-      t: this.steps,
-      turn,
-      state,
-      timing,
-      summary: resultOf(summaryReducer, this.acc),
-    })
+    const record: TurnEvent = { t: this.steps, turn, state, timing, summary: this.summarySoFar }
+    this.log.push(record)
+    this.publishInStep({ ...record, type: 'step_end' })
 
+    this.step = openStep(now)
     this.steps++
     this.interruptedBoundary = false
-    this.notify()
   }
 
-  private finish(result: AssistantMessage): void {
-    this.finished = true
-    this.outcome.result.resolve(result)
-    this.outcome.state.resolve(this.host.state)
-    this.outcome.summary.resolve(resultOf(summaryReducer, this.acc))
-    this.notify()
-  }
-
-  private fail(error: unknown): void {
-    this.finished = true
-    this.failure = { error }
-    for (const { reject } of Object.values(this.outcome)) {
-      reject(error)
+  /** Closes a step that was dropped uncommitted; nothing to close if it had not published anything. */
+  private cancelStep(reason: 'interrupt' | 'abort' | 'error'): void {
+    if (this.step.started) {
+      this.publish({ type: 'step_cancelled', reason, open: [...this.step.open.values()] })
     }
-    this.notify()
+    this.step = openStep(performance.now())
+  }
+
+  /** result, state and summary are projections of run_end (RFC-0005 §3.6), so they settle from it. */
+  private settle(end: RunEnd): void {
+    this.end = end
+    this.publish(end)
+
+    if (end.outcome === 'done') {
+      this.outcome.resolve({ result: end.result, state: this.host.state, summary: end.summary })
+    } else {
+      this.outcome.reject(end.error)
+    }
+  }
+
+  private get summarySoFar(): RunSummary {
+    return resultOf(summaryReducer, this.acc)
   }
 
   /*
-   *   unfold events --publish--> one buffer per live reader --> for await (run), run.text
-   *                                                             (only events after subscribing)
-   *   commit -------------------> log[] ----------------------> run.turns (replays from log[0])
-   *   finish / fail ------------> result, state, summary promises
-   *
-   * notify() replaces `changed`, waking every waiting reader. A reader that exits early aborts the run.
+   *   deltas, step_end --publishInStep--> fold into this.step, then publish
+   *   every event --------publish-------> observe (every plugin, isolated)
+   *                                    +-> a buffer per live reader --> for await (run), run.text
+   *   commit ---------------------------> log[] --> run.turns (replays from log[0])
+   *   run_end ------------settle--------> result, state, summary
    */
-  private publish(e: AgentEvent): void {
+
+  /** Every event of a step comes after its step_start; a step that ends with no event at all has none. */
+  private publishInStep(payload: Payload): void {
+    if (!this.step.started) {
+      this.publish({ type: 'step_start' })
+    }
+    this.step = scanStep(this.step, payload, performance.now())
+    this.publish(payload)
+  }
+
+  private publish(payload: Payload): void {
+    const e = { ...payload, t: this.steps } as RunEvent
+    this.observe(e, this.info)
     for (const buffer of this.subscribers) {
       buffer.push(e)
     }
@@ -302,114 +343,116 @@ export class AgentRun implements Run {
     changed.resolve()
   }
 
-  private async *readEvents(): AsyncGenerator<AgentEvent, void> {
-    const buffer: AgentEvent[] = []
+  private async *readEvents(): AsyncGenerator<RunEvent, void> {
+    const buffer: RunEvent[] = []
     this.subscribers.add(buffer)
 
     try {
-      for (;;) {
-        const next = buffer.shift()
-        if (next !== undefined) {
-          yield next
-          continue
-        }
-        if (this.finished) {
-          this.throwIfFailed()
-          return
-        }
-
-        await this.changed.promise
-      }
+      yield* this.follow(() => buffer.shift())
     } finally {
       this.subscribers.delete(buffer)
-      this.abortIfRunning()
     }
   }
 
   private async *readText(): AsyncGenerator<string, void> {
     for await (const e of this.readEvents()) {
-      if (e.tag === 'delta' && e.delta.type === 'text_delta') {
-        yield e.delta.delta
+      if (e.type === 'text') {
+        yield e.delta
       }
     }
   }
 
-  private async *readTurns(): AsyncGenerator<TurnEvent, void> {
+  private readTurns(): AsyncGenerator<TurnEvent, void> {
     let i = 0
+    return this.follow(() => (i < this.log.length ? this.log[i++] : undefined))
+  }
 
+  /** Yields what take() has, waits while it has nothing, and ends with the run; leaving early aborts the run (I7). */
+  private async *follow<T>(take: () => T | undefined): AsyncGenerator<T, void> {
     try {
       for (;;) {
-        if (i < this.log.length) {
-          yield this.log[i++]
+        const next = take()
+        if (next !== undefined) {
+          yield next
           continue
         }
-        if (this.finished) {
-          this.throwIfFailed()
+        if (this.end?.outcome === 'failed') {
+          throw this.end.error
+        }
+        if (this.end) {
           return
         }
 
         await this.changed.promise
       }
     } finally {
-      this.abortIfRunning()
-    }
-  }
-
-  private abortIfRunning(): void {
-    if (!this.finished) {
       this.abort()
-    }
-  }
-
-  private throwIfFailed(): void {
-    if (this.failure) {
-      throw this.failure.error
     }
   }
 }
 
-/** Timing is observation only and never affects behavior, so it lives here rather than in state. */
-class StepClock {
-  private start = 0
-  private firstToken: number | undefined
-  private lastDelta: number | undefined
-  private tools: Record<string, number> = {}
-
-  begin(): void {
-    this.start = performance.now()
-    this.firstToken = undefined
-    this.lastDelta = undefined
-    this.tools = {}
+function kindOf(cause: unknown): RunError['kind'] {
+  if (cause instanceof MaxStepsError) {
+    return 'max_steps'
   }
+  return cause instanceof ModelCallError ? 'provider' : 'internal'
+}
 
-  delta(delta: AssistantMessageEvent): void {
-    const now = performance.now()
-    if (delta.type.endsWith('_delta')) {
-      this.firstToken ??= now
+/**
+ * What a step's own events say about it: whether step_start has gone out, which calls are still running, and when the
+ * timing marks fell. It is a pure fold over the step's payloads; the clock reading comes in with each one.
+ *
+ * Timing is observation only and never affects behavior, so it lives here rather than in state. It reads the same
+ * events everyone else sees: no side channel measures anything.
+ */
+interface OpenStep {
+  readonly at: number
+  readonly started: boolean
+  /** Calls with a tool_start but no tool_end yet. */
+  readonly open: ReadonlyMap<string, ToolCall>
+  readonly firstToken?: number
+  readonly modelEnd?: number
+  readonly toolMs: Readonly<Record<string, number>>
+}
+
+function openStep(at: number): OpenStep {
+  return { at, started: false, open: new Map(), toolMs: {} }
+}
+
+/** Returns step itself when nothing changes, so the hot path (text and thinking deltas) allocates nothing. */
+function scanStep(step: OpenStep, payload: Payload, at: number): OpenStep {
+  const s = step.started ? step : { ...step, started: true }
+
+  switch (payload.type) {
+    case 'thinking':
+    case 'text':
+    case 'tool_call':
+      return s.firstToken === undefined ? { ...s, firstToken: at } : s
+    case 'model_end':
+      return { ...s, modelEnd: at }
+    case 'tool_start':
+      return { ...s, open: new Map(s.open).set(payload.call.id, payload.call) }
+    case 'tool_end': {
+      const open = new Map(s.open)
+      open.delete(payload.call.id)
+      return { ...s, open, toolMs: { ...s.toolMs, [payload.call.id]: payload.ms } }
     }
-    this.lastDelta = now
+    default:
+      return s
   }
+}
 
-  tool(id: string, ms: number): void {
-    this.tools[id] = ms
-  }
+function timingOf(step: OpenStep, at: number, model: boolean): TurnTiming {
+  const timing: TurnTiming = { ms: at - step.at }
 
-  /** Also restarts the clock for the next step. */
-  lap(model: boolean): TurnTiming {
-    const now = performance.now()
-    const timing: TurnTiming = { ms: now - this.start }
-
-    if (model) {
-      timing.modelMs = (this.lastDelta ?? now) - this.start
-      timing.toolMs = this.tools
-      if (this.firstToken !== undefined) {
-        timing.firstTokenMs = this.firstToken - this.start
-      }
+  if (model) {
+    timing.modelMs = (step.modelEnd ?? at) - step.at
+    timing.toolMs = { ...step.toolMs }
+    if (step.firstToken !== undefined) {
+      timing.firstTokenMs = step.firstToken - step.at
     }
-
-    this.begin()
-    return timing
   }
+  return timing
 }
 
 function noop(): void {}

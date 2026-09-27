@@ -2,7 +2,6 @@
 import type {
   Api,
   AssistantMessage,
-  AssistantMessageEvent,
   Context,
   FauxResponseStep,
   Message,
@@ -10,7 +9,7 @@ import type {
   SimpleStreamOptions,
   ToolResultMessage,
 } from '@mariozechner/pi-ai'
-import type { AgentTool, PluginSpec, Run, Turn, TurnEvent } from './index.ts'
+import type { AgentTool, PluginSpec, Run, RunEvent, Turn, TurnEvent } from './index.ts'
 import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
@@ -24,9 +23,11 @@ import {
   mapDeltas,
   PluginConflictError,
   rewriteHistory,
+  RunError,
   textOf,
   tool,
   toolError,
+  UnsupportedThinkingError,
   usageOf,
   user,
 } from './index.ts'
@@ -87,9 +88,9 @@ function gate(): { wait: () => Promise<void>; open: () => void; started: Promise
 function tracer(name: string, log: string[]): PluginSpec {
   return {
     name,
-    tool: async (ctx, next) => {
+    async *tool(ctx, next) {
       log.push(`${name}>`)
-      const result = await next(ctx)
+      const result = yield* next(ctx)
       log.push(`<${name}`)
       return result
     },
@@ -117,7 +118,7 @@ describe('basic run', () => {
     expect((await r.state).messages.at(-1)).toBe(await r.result)
   })
 
-  it('on stopReason=error, result and summary reject and turns throws', async () => {
+  it('on stopReason=error, result and summary reject and turns throws, all with a provider RunError', async () => {
     const model = fauxModel([
       fauxAssistantMessage([fauxText('partial')], { stopReason: 'error', errorMessage: 'boom' }),
     ])
@@ -126,6 +127,8 @@ describe('basic run', () => {
     await expect(r.result).rejects.toThrow(/boom/)
     await expect(r.summary).rejects.toThrow(/boom/)
     await expect(collect(r.turns)).rejects.toThrow(/boom/)
+    await expect(r.result).rejects.toMatchObject({ kind: 'provider', t: 1 })
+    await expect(r.result).rejects.toBeInstanceOf(RunError)
   })
 
   it('breaking out of r.text cancels the run and aborts the underlying request', async () => {
@@ -152,10 +155,18 @@ describe('basic run', () => {
     expect(seen?.aborted).toBe(true)
   })
 
-  it('raw events can still be read one by one', async () => {
+  it('reading the run gives every event in order, one type per event', async () => {
     const r = createSession(createAgent({ model: fauxModel([fauxAssistantMessage('ok')]) })).send('go')
-    const tags = (await collect(r)).map(e => e.tag)
-    expect(tags.filter(t => t !== 'delta')).toEqual(['act', 'act', 'done'])
+    const types = (await collect(r)).map(e => e.type)
+    expect(types.filter(t => t !== 'text')).toEqual([
+      'step_start',
+      'step_end',
+      'step_start',
+      'model_start',
+      'model_end',
+      'step_end',
+      'run_end',
+    ])
   })
 })
 
@@ -178,7 +189,12 @@ describe('plugin middleware', () => {
         return ''
       },
     })
-    const deny = definePlugin({ name: 'deny', tool: async ({ call }) => toolError(call, 'denied') })
+    const deny = definePlugin({
+      name: 'deny',
+      async *tool({ call }) {
+        return toolError(call, 'denied')
+      },
+    })
     const model = fauxModel([
       callEcho('a'),
       ctx => {
@@ -194,7 +210,7 @@ describe('plugin middleware', () => {
   it('errors thrown by middleware become isError results and the agent keeps running (I8)', async () => {
     const boom = definePlugin({
       name: 'boom',
-      tool: async () => {
+      async *tool() {
         throw new Error('middleware failed')
       },
     })
@@ -343,7 +359,7 @@ describe('hooks', () => {
   it('request: mapDeltas changes only the streamed deltas; the stored message stays as the model wrote it', async () => {
     const shout = definePlugin({
       name: 'shout',
-      request: mapDeltas(e => (e.type === 'text_delta' ? { ...e, delta: e.delta.toUpperCase() } : e)),
+      request: mapDeltas(e => (e.type === 'text' ? { ...e, delta: e.delta.toUpperCase() } : e)),
     })
     const model = fauxModel([fauxAssistantMessage('quiet reply')])
     const r = createSession(createAgent({ model, plugins: [shout] })).send('go')
@@ -406,8 +422,8 @@ describe('hooks', () => {
   })
 })
 
-describe('reasoning levels', () => {
-  /** Like DeepSeek, supports only high and xhigh; records the reasoning each request actually carries. */
+describe('thinking levels', () => {
+  /** Like DeepSeek, supports only off, high and xhigh; records the reasoning each request actually carries. */
   function thinker(seen: unknown[], { reasoning = true, calls = 1 } = {}): Model<Api> {
     const faux = registerFauxProvider({ models: [{ id: 'thinker', reasoning }] })
     faux.setResponses(
@@ -423,33 +439,41 @@ describe('reasoning levels', () => {
     }
   }
 
-  it('passes supported levels through, maps unsupported ones to the nearest available, omits it when unset', async () => {
+  it('should send a supported level as is and send no reasoning for off', async () => {
     const seen: unknown[] = []
-    const model = thinker(seen, { calls: 3 })
+    const model = thinker(seen, { calls: 2 })
 
-    for (const reasoning of ['xhigh', 'medium', undefined] as const) {
-      await createSession(createAgent({ model, reasoning })).send('go').result
+    for (const thinking of ['xhigh', 'off'] as const) {
+      await createSession(createAgent({ model, thinking })).send('go').result
     }
-    expect(seen).toEqual(['xhigh', 'high', undefined])
+    expect(seen).toEqual(['xhigh', undefined])
   })
 
-  it('drops reasoning when the model cannot reason', async () => {
-    const seen: unknown[] = []
-    const model = thinker(seen, { reasoning: false })
+  it('should reject a level the model does not support when the agent is created, listing the supported ones', () => {
+    const model = thinker([])
 
-    await createSession(createAgent({ model, reasoning: 'high' })).send('go').result
-    expect(seen).toEqual([undefined])
+    expect(() => createAgent({ model, thinking: 'medium' })).toThrow(UnsupportedThinkingError)
+    expect(() => createAgent({ model, thinking: 'medium' })).toThrow('Supported: off, high, xhigh')
   })
 
-  it('a request plugin can change the level per request, still validated against the model', async () => {
+  it('should map a level set by a request plugin to the nearest supported one and report it in model_start', async () => {
     const seen: unknown[] = []
-    const think = definePlugin({
-      name: 'think',
-      request: before(req => ({ ...req, options: { ...req.options, reasoning: 'low' } })),
-    })
+    const think = definePlugin({ name: 'think', request: before(req => ({ ...req, thinking: 'low' })) })
+    const r = createSession(createAgent({ model: thinker(seen), plugins: [think] })).send('go')
 
-    await createSession(createAgent({ model: thinker(seen), plugins: [think] })).send('go').result
+    const starts = (await collect(r)).filter(e => e.type === 'model_start')
     expect(seen).toEqual(['high'])
+    expect(starts.map(e => e.thinking)).toEqual(['high'])
+  })
+
+  it('should send no reasoning and report off when a request plugin asks a model that cannot think', async () => {
+    const seen: unknown[] = []
+    const think = definePlugin({ name: 'think', request: before(req => ({ ...req, thinking: 'high' })) })
+    const r = createSession(createAgent({ model: thinker(seen, { reasoning: false }), plugins: [think] })).send('go')
+
+    const starts = (await collect(r)).filter(e => e.type === 'model_start')
+    expect(seen).toEqual([undefined])
+    expect(starts.map(e => e.thinking)).toEqual(['off'])
   })
 })
 
@@ -553,12 +577,12 @@ describe('run records and stats', () => {
   })
 })
 
-/** Reads the whole run (leaving early would cancel it) and holds the first model delta only weakly. */
-async function firstDelta(r: Run): Promise<WeakRef<AssistantMessageEvent>> {
-  let first: WeakRef<AssistantMessageEvent> | undefined
+/** Reads the whole run (leaving early would cancel it) and holds the first text event only weakly. */
+async function firstDelta(r: Run): Promise<WeakRef<RunEvent>> {
+  let first: WeakRef<RunEvent> | undefined
   for await (const e of r) {
-    if (e.tag === 'delta') {
-      first ??= new WeakRef(e.delta)
+    if (e.type === 'text') {
+      first ??= new WeakRef(e)
     }
   }
   if (first === undefined) {

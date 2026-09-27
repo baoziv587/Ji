@@ -1,0 +1,20 @@
+{
+  "name": "@gaoxiang.ai/plugin-otel",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenTelemetry traces and metrics from a run's events (RFC-0005 \u00a74.4)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@gaoxiang.ai/llm": "workspace:*"
+  },
+  "devDependencies": {
+    "@gaoxiang.ai/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}

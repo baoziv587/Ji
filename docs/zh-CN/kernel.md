@@ -4,39 +4,40 @@
 
 `@gaoxiang.ai/kernel` 零依赖，与 LLM 无关。写非 LLM 的 agent、或者搭新的一层时直接使用；其他情况下，[`@gaoxiang.ai/llm`](sessions-and-runs.md) 已经把它包装好了。
 
-| 入口                           | 内容                                                                                   |
-| ------------------------------ | -------------------------------------------------------------------------------------- |
-| `@gaoxiang.ai/kernel`          | `Agent`、`Extension`、`unfold`、`run`、`extend`、`mapState`、`mapYield`、`act`、`done` |
-| `@gaoxiang.ai/kernel/advanced` | 改变类型参数的变换：`withState` / `focus`、`widen` / `liftWiden`                       |
-| `@gaoxiang.ai/kernel/reduce`   | 可组合的 reducer：`combine`、`mapInput`、`filterInput`、`mapResult`、`reduce`、`scan`  |
+| 入口                           | 内容                                                                                                             |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `@gaoxiang.ai/kernel`          | `Agent`、`Extension`、`unfold`、`run`、`extend`、`mapState`、`mapYield`、`merge`、`act`、`done`、`MaxStepsError` |
+| `@gaoxiang.ai/kernel/advanced` | 改变类型参数的变换：`withState` / `focus`、`widen` / `liftWiden`                                                 |
+| `@gaoxiang.ai/kernel/reduce`   | 可组合的 reducer：`combine`、`mapInput`、`filterInput`、`mapResult`、`reduce`、`scan`                            |
 
 ## 核心
 
 ```ts
 interface Agent<S, A, O, R, D = never> {
   policy: (s: S) => Stream<D, Step<A, R>> // Stream = AsyncGenerator<D, Step>
-  env: (a: A) => Promise<O>
+  env: (a: A) => Stream<D, O>
   update: (s: S, a: A, o: O) => S // 同步、纯
 }
 ```
 
-policy 先产出任意多个增量 `D`，然后返回 `act(action)` 继续，或者返回 `done(result)` 结束。
+policy 先产出任意多个增量 `D`，然后返回 `act(action)` 继续，或者返回 `done(result)` 结束。env 执行时产出同一类型的增量，最后返回观测。有副作用的都是流，`update` 是普通函数。没什么可报告的 env 写成 `async function* (a) { return o }`。
 
-| 函数                              | 作用                                                                                              |
-| --------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `unfold(agent, s, maxSteps = 32)` | 惰性事件流：`delta`、`act`（带 `obs` 和新的 `state`）、`done`。对它调用 `return()` 会一路取消到底 |
-| `run(agent, s, maxSteps?)`        | 把 `unfold` 折叠成最终结果                                                                        |
-| `extend(agent, ...exts)`          | 套上中间件。**先出现的在内层，后出现的在外层**                                                    |
-| `mapState(agent, f)`              | 对状态做后处理的 `update` 中间件简写                                                              |
-| `mapYield(stream, f)`             | 带 map 的 `yield*`：变换每个增量，保留返回值，并传递取消                                          |
+| 函数                              | 作用                                                                                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unfold(agent, s, maxSteps = 32)` | 惰性事件流：`delta`（先 policy 后 env）、`act`（带 `obs` 和新的 `state`）、`done`。对它调用 `return()` 会一路取消到底，包括 env。超过 `maxSteps` 抛出 `MaxStepsError` |
+| `run(agent, s, maxSteps?)`        | 把 `unfold` 折叠成最终结果                                                                                                                                            |
+| `extend(agent, ...exts)`          | 套上中间件。**先出现的在内层，后出现的在外层**                                                                                                                        |
+| `mapState(agent, f)`              | 对状态做后处理的 `update` 中间件简写                                                                                                                                  |
+| `mapYield(stream, f)`             | 带 map 的 `yield*`：变换每个增量，保留返回值，并传递取消                                                                                                              |
+| `merge(streams)`                  | 同时运行多个流：增量按到达顺序产出，结果按来源顺序返回。取消它会关闭所有已启动的来源                                                                                  |
 
 一个 `Extension` 最多包含三个中间件，形状和 [LLM 插件](plugins.md#两种形状) 一样，都是 `(input, next)`。
 
 ```ts
 const logged = extend(agent, {
-  env: async (a, next) => {
+  async *env(a, next) {
     console.log('act', a)
-    return next(a)
+    return yield* next(a)
   },
 })
 ```

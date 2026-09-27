@@ -1,6 +1,6 @@
 import type { Extension, Step, Stream } from '@gaoxiang.ai/kernel'
 import type { Lens } from '@gaoxiang.ai/kernel/advanced'
-import type { AssistantMessage, AssistantMessageEvent, Message, ToolResultMessage } from '@mariozechner/pi-ai'
+import type { AssistantMessage, Message, ToolResultMessage } from '@mariozechner/pi-ai'
 import type {
   AgentAction,
   AgentState,
@@ -8,6 +8,9 @@ import type {
   Boundary,
   ModelCall,
   ModelRequest,
+  Payload,
+  RunEvent,
+  RunInfo,
   ToolContext,
   ToolRunner,
   Turn,
@@ -25,6 +28,9 @@ export interface PluginState<State> {
  * Fields are listed in the order they run within a step (RFC-0004 §4).
  * Transforms `(value, context) => value` run in plugin order; for middleware `(input, next) => output`,
  * earlier plugins are nested inside later ones.
+ *
+ * The middleware with side effects (policy, request, env, tool) are streams: `yield` adds an event to the run,
+ * `return` gives the result, `yield* next(...)` passes the inner layers' events through (RFC-0005 §3.2).
  */
 export interface PluginSpec<State = undefined> {
   name: string
@@ -39,20 +45,24 @@ export interface PluginSpec<State = undefined> {
   /** Transform of the messages sent in this request only; history is untouched. */
   context?: (messages: Message[], state: AgentState) => Message[] | Promise<Message[]>
   /** Middleware around one model call. */
-  request?: (req: ModelRequest, next: ModelCall) => Stream<AssistantMessageEvent, AssistantMessage>
+  request?: (req: ModelRequest, next: ModelCall) => Stream<Payload, AssistantMessage>
   /** Middleware around all tool calls of one model turn; turns without tool calls skip it. */
-  env?: (
-    msg: AssistantMessage,
-    next: (msg: AssistantMessage) => Promise<ToolResultMessage[]>,
-  ) => Promise<ToolResultMessage[]>
+  env?: (msg: AssistantMessage, next: EnvCall) => Stream<Payload, ToolResultMessage[]>
   /** Middleware around one tool call. */
-  tool?: (ctx: ToolContext, next: ToolRunner) => Promise<ToolResultMessage>
+  tool?: (ctx: ToolContext, next: ToolRunner) => Stream<Payload, ToolResultMessage>
   /** Middleware that writes state. Must be synchronous and pure; sees every Turn. */
   update?: (state: AgentState, turn: Turn, next: (state: AgentState, turn: Turn) => AgentState) => AgentState
   state?: PluginState<State>
+  /**
+   * Read-only: receives every event of every run of the agent, in order, from the first one. Called synchronously;
+   * the return value is ignored and anything thrown is reported as a warning, so the run is never affected.
+   */
+  observe?: (e: RunEvent, run: RunInfo) => void
 }
 
-export type PolicyStream = Stream<AssistantMessageEvent, Step<AgentAction, AssistantMessage>>
+export type PolicyStream = Stream<Payload, Step<AgentAction, AssistantMessage>>
+
+export type EnvCall = (msg: AssistantMessage) => Stream<Payload, ToolResultMessage[]>
 
 export interface Plugin<State = undefined> extends PluginSpec<State> {
   /** Returns state.init until this plugin's state has been written. */
@@ -118,7 +128,7 @@ export function assertNoConflicts(tools: AgentTool[], plugins: AnyPlugin[]): voi
   }
 }
 
-type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
+type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, Payload>
 
 /**
  * Plugin policy / env / update / state -> kernel middleware. update and state work on Turns, so this converts to and

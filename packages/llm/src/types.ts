@@ -1,10 +1,10 @@
-import type { Event, Agent as KernelAgent, Stream } from '@gaoxiang.ai/kernel'
+import type { Agent as KernelAgent, Stream } from '@gaoxiang.ai/kernel'
 import type {
   Api,
   AssistantMessage,
-  AssistantMessageEvent,
   Message,
   Model,
+  ModelThinkingLevel,
   SimpleStreamOptions,
   Static,
   Tool,
@@ -12,6 +12,7 @@ import type {
   ToolResultMessage,
   TSchema,
 } from '@mariozechner/pi-ai'
+import type { RunError } from './errors.ts'
 
 /** `plugins` is keyed by plugin name. */
 export interface AgentState {
@@ -51,6 +52,9 @@ export interface Boundary {
   idle: boolean
 }
 
+/** How hard the model thinks. The same as pi-ai's ModelThinkingLevel: 'off' included. */
+export type ThinkingLevel = ModelThinkingLevel
+
 /** Everything a model call needs; a request hook may change any field except `state`. */
 export interface ModelRequest {
   model: Model<Api>
@@ -58,28 +62,29 @@ export interface ModelRequest {
   /** Output of the context hooks, not the stored history. */
   messages: Message[]
   tools: Tool[]
-  options: SimpleStreamOptions
+  /** Mapped to the nearest level the request's model supports; model_start reports the level actually sent. */
+  thinking: ThinkingLevel
+  options: StreamOptions
   /** Read-only. */
   state: AgentState
 }
 
-export type ModelCall = (req: ModelRequest) => Stream<AssistantMessageEvent, AssistantMessage>
+/** pi-ai stream options sent with every model call; the signal belongs to the Run and the level to `thinking`. */
+export type StreamOptions = Omit<SimpleStreamOptions, 'signal' | 'reasoning'>
 
-/** Instantiated once per Run from the result of createAgent. */
-export type LLMAgent = KernelAgent<
-  AgentState,
-  AgentAction,
-  ToolResultMessage[],
-  AssistantMessage,
-  AssistantMessageEvent
->
-export type AgentEvent = Event<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, AssistantMessageEvent>
+export type ModelCall = (req: ModelRequest) => Stream<Payload, AssistantMessage>
 
-/** A pi-ai Tool (TypeBox schema) plus `run`. */
+/** Instantiated once per Run segment from the result of createAgent. */
+export type LLMAgent = KernelAgent<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, Payload>
+
+/**
+ * A pi-ai Tool (TypeBox schema) plus `run`. `run` may be an async generator: every value it yields becomes a
+ * tool_update event, and what it returns is the result.
+ */
 export type AgentTool<T extends TSchema = TSchema> = Tool<T> & {
   /** Method syntax on purpose: its parameters are bivariant, so AgentTool<SpecificSchema> fits in AgentTool[]. */
   // eslint-disable-next-line ts/method-signature-style
-  run(args: Static<T>, signal: AbortSignal): string | Promise<string>
+  run(args: Static<T>, signal: AbortSignal): string | Promise<string> | Stream<unknown, string>
 }
 
 export interface ToolContext {
@@ -88,7 +93,7 @@ export interface ToolContext {
 }
 
 /** Runs one tool call. The agent turns anything thrown into an isError result for the model (I8). */
-export type ToolRunner = (ctx: ToolContext) => Promise<ToolResultMessage>
+export type ToolRunner = (ctx: ToolContext) => Stream<Payload, ToolResultMessage>
 
 /** `cost` is in USD, as priced by the provider. */
 export interface UsageTotals {
@@ -107,6 +112,57 @@ export interface TurnTiming {
   firstTokenMs?: number
   /** Model turns only: keyed by toolCall.id. */
   toolMs?: Record<string, number>
+}
+
+/** Which model a request went to. */
+export interface ModelRef {
+  provider: string
+  id: string
+}
+
+type Empty = Record<never, never>
+
+/**
+ * Every event of a run, keyed by type (RFC-0005 §3.3). Open: a plugin adds its own events with declaration merging,
+ * named `<plugin>:<event>`:
+ *
+ *     declare module '@gaoxiang.ai/llm' {
+ *       interface Events { 'compaction:start': { tokens: number } }
+ *     }
+ *
+ * step_start, step_end, step_cancelled and run_end come from the Run; every other event is yielded by some layer.
+ */
+export interface Events {
+  step_start: Empty
+  /** The same record as each item of r.turns. */
+  step_end: Omit<TurnEvent, 't'>
+  /** The step was dropped uncommitted; `open` lists the tool calls that had started but not ended. */
+  step_cancelled: { reason: 'interrupt' | 'abort' | 'error'; open: ToolCall[] }
+  /** The request actually sent: after request plugins, with the thinking level the model supports. */
+  model_start: { model: ModelRef; thinking: ThinkingLevel }
+  thinking: { delta: string }
+  text: { delta: string }
+  /** The model finished writing this call's arguments; the tool has not started. */
+  tool_call: { call: ToolCall }
+  model_end: { message: AssistantMessage; ms: number }
+  tool_start: { call: ToolCall }
+  /** A value the tool yielded, of any type. */
+  tool_update: { call: ToolCall; data: unknown }
+  tool_end: { call: ToolCall; result: ToolResultMessage; ms: number }
+  run_end:
+    | { outcome: 'done'; result: AssistantMessage; summary: RunSummary }
+    | { outcome: 'failed'; error: RunError; summary: RunSummary }
+}
+
+/** An event without its step number: what the layers yield. */
+export type Payload = { [K in keyof Events]: { type: K } & Events[K] }[keyof Events]
+
+export type RunEvent = Payload & { t: number }
+
+/** Passed to observe along with each event, to tell runs and sessions sharing one agent apart. */
+export interface RunInfo {
+  id: string
+  session: string
 }
 
 export interface RunSummary {

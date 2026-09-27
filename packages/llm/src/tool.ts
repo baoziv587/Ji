@@ -1,5 +1,7 @@
+import type { Stream } from '@gaoxiang.ai/kernel'
 import type { ToolCall, ToolResultMessage, TSchema } from '@mariozechner/pi-ai'
 import type { AgentTool, ToolRunner } from './types.ts'
+import { mapYield } from '@gaoxiang.ai/kernel'
 import { validateToolCall } from '@mariozechner/pi-ai'
 
 /** Identity; exists so `run`'s arguments are inferred from the schema. */
@@ -15,15 +17,26 @@ export function toolError(call: ToolCall, error: unknown): ToolResultMessage {
   return resultOf(call, text, true)
 }
 
-/** Rethrows instead of converting to toolError so outer tool middleware (retry, timeout) can see the failure. */
+/**
+ * The innermost tool runner. A tool whose `run` is an async generator streams each yielded value as a tool_update;
+ * its return value is the result. Rethrows instead of converting to toolError so outer tool middleware (retry,
+ * timeout) can see the failure.
+ */
 export function toolRunner(tools: AgentTool[]): ToolRunner {
   const byName = new Map(tools.map(t => [t.name, t]))
 
-  return async ({ call, signal }) => {
+  return async function* ({ call, signal }) {
     const args = validateToolCall(tools, call)
-    const text = await byName.get(call.name)!.run(args, signal)
+    const output = byName.get(call.name)!.run(args, signal)
+    const text = isStream(output)
+      ? yield* mapYield(output, data => ({ type: 'tool_update', call, data }) as const)
+      : await output
     return toolResult(call, String(text))
   }
+}
+
+function isStream(output: unknown): output is Stream<unknown, string> {
+  return typeof output === 'object' && output !== null && Symbol.asyncIterator in output
 }
 
 function resultOf(call: ToolCall, text: string, isError: boolean): ToolResultMessage {

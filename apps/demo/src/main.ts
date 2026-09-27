@@ -1,18 +1,10 @@
 // Demo: an agent with a calc tool and a history-trimming plugin.
 //   pnpm demo                                    offline: pi-ai's built-in faux provider (streams token by token)
 //   MODEL=anthropic/claude-sonnet-4-6 pnpm demo   real: any provider/model pi-ai supports, API key read from env
-import type { Plugin } from '@gaoxiang.ai/llm'
-import type { Api, KnownProvider, Model } from '@mariozechner/pi-ai'
+import type { Api, Model, Plugin } from '@gaoxiang.ai/llm'
 import process from 'node:process'
-import { createAgent, createSession, definePlugin, textOf, tool } from '@gaoxiang.ai/llm'
-import {
-  fauxAssistantMessage,
-  fauxText,
-  fauxToolCall,
-  getModels,
-  registerFauxProvider,
-  Type,
-} from '@mariozechner/pi-ai'
+import { createAgent, createSession, definePlugin, findModel, textOf, tool, Type } from '@gaoxiang.ai/llm'
+import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 
 const calc = tool({
   name: 'calc',
@@ -78,13 +70,7 @@ console.log(
 function pickModel(): Model<Api> {
   const spec = process.env.MODEL
   if (spec) {
-    const i = spec.indexOf('/')
-    const [provider, id] = [spec.slice(0, i), spec.slice(i + 1)]
-    const m = getModels(provider as KnownProvider).find(m => m.id === id)
-    if (!m) {
-      throw new Error(`unknown model: ${spec}`)
-    }
-    return m as Model<Api>
+    return findModel(spec)
   }
 
   const faux = registerFauxProvider({ tokensPerSecond: 80 })
