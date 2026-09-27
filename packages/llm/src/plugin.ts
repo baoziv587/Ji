@@ -136,8 +136,7 @@ export type PluginList = ReadonlyArray<AnyPlugin | PluginList>
  * a helper's callback, and `before((req, { by }) => …)` would see only the helpers' bare ctx (no by, own, complete).
  */
 export function definePlugin<State>(spec: PluginSpec<State> & { state: PluginState<State> }): Plugin<State>
-export function definePlugin(spec: PluginSpec & { state?: undefined }): Plugin
-export function definePlugin<State = undefined>(spec: PluginSpec<State>): Plugin<State>
+export function definePlugin(spec: PluginSpec): Plugin
 export function definePlugin<State>(spec: PluginSpec<State>): Plugin<State> {
   const { name, state } = spec
   return { ...spec, select: pluginStateSlot(name, state?.init as State).get }
