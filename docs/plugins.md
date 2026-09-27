@@ -12,7 +12,6 @@ export const myPlugin = definePlugin({
   tools: [/* AgentTool */],
   system: prompt => `${prompt}\nBe concise.`,
   input: (messages, { state, idle, own }) => messages,
-  view: (messages, { state }) => messages,
   request: before(req => ({
     ...req,
     options: { ...req.options, temperature: 0 },
@@ -35,7 +34,6 @@ run                observe                                    every event of the
      decide        what this step does                        every step
       ├─ input     messages to insert here?                   yes: an input turn, go to record
       │                                                        none and idle: the run ends
-      ├─ view      the messages this request sends
       └─ request   one model call                             also every ctx.complete
      toolCalls     all tool calls of the model turn, at once  only turns with tool calls
       └─ toolCall  one call, in parallel with the others      every tool call
@@ -43,7 +41,7 @@ run                observe                                    every event of the
       └─ state.reduce  each plugin's own data                 as its plugin's record returns
 ```
 
-`input`, `view` and `request` run inside `decide`: a `decide` that returns `rewriteHistory(...)` or `stop(state)` without calling `next` skips them, and a rewrite goes straight to `record`. The tools do not: when `decide`'s `next` returns, the model has answered but no tool has run yet.
+`input` and `request` run inside `decide`: a `decide` that returns `rewriteHistory(...)` or `stop(state)` without calling `next` skips them, and a rewrite goes straight to `record`. The tools do not: when `decide`'s `next` returns, the model has answered but no tool has run yet.
 
 ## Hooks
 
@@ -53,8 +51,7 @@ run                observe                                    every event of the
 | `system`       | transform  | Once, at `createAgent`                               | No            | Edit the system prompt                           |
 | `decide`       | middleware | Every step                                           | Yes           | Compaction, budgets, stopping                    |
 | `input`        | transform  | Every step boundary                                  | No            | Auto-continue, reminders                         |
-| `view`         | transform  | Before each main model call                          | No            | Retrieval, windowing. History is unchanged.      |
-| `request`      | middleware | Every model call, `ctx.complete`'s too               | Yes           | Switch model, temperature, fallback              |
+| `request`      | middleware | Every model call, `ctx.complete`'s too               | Yes           | Switch model, fallback, retrieval, windowing     |
 | `toolCalls`    | middleware | Once per model turn with tool calls: the whole batch | Yes           | Run calls one at a time, approve a batch at once |
 | `toolCall`     | middleware | Every tool call, in parallel with the turn's others  | Yes           | Truncate, approve, retry, throttle updates       |
 | `record`       | pure       | Every step                                           | No            | Trim history                                     |
@@ -81,8 +78,8 @@ Change history with `record`; keep your own data with `state`. Read a plugin's s
 ## Two signatures
 
 ```text
-transform    (value, ctx) => value | Promise<value>          input, view
-middleware   (input, next, ctx) => Stream<Payload, output>   turn, request, toolCalls, toolCall
+transform    (value, ctx) => value | Promise<value>          input
+middleware   (input, next, ctx) => Stream<Payload, output>   decide, request, toolCalls, toolCall
 pure         no ctx                                          system(prompt), record({ state, turn }, next), state.reduce(own, turn)
 ```
 
@@ -130,12 +127,15 @@ IO in any hook takes the signal, so an interrupt cancels it instead of letting i
 ```ts
 const enrich = definePlugin({
   name: 'enrich',
-  async view(messages, { signal }) {
+  request: before(async (req, { by, signal }) => {
+    if (by !== undefined) return req // leave other plugins' ctx.complete calls alone
     const response = await fetch('https://example.com/context', { signal })
-    return [user(await response.text()), ...messages]
-  },
+    return { ...req, messages: [user(await response.text()), ...req.messages] }
+  }),
 })
 ```
+
+`req.messages` starts as the history, and changing it changes only what this one request sends: the history is written from the model's reply, never from `req.messages`. That makes `request: before(...)` the place for retrieval and windowing. Every `ctx.complete` goes through `request` too, so check `ctx.by` unless those calls should change as well.
 
 Never change `ctx.state` or `ctx.own` in place; return new values. With [development checks](#development-checks) on, a write like `ctx.own.count++` throws a `TypeError` at that line.
 
@@ -234,13 +234,13 @@ The plugin list reads top to bottom, outside in:
 ```text
 plugins: [a, b]
 
-transform    input / view          a first, then b
-middleware   turn / request / ...  a is outer: a sees the input first and the output last
-record       a( b( applyTurn ) )   each state.reduce runs as its layer returns: b's, then a's
-observe      a, then b             every event, in list order
+transform    input                    a first, then b
+middleware   decide / request / ...   a is outer: a sees the input first and the output last
+record       a( b( applyTurn ) )      each state.reduce runs as its layer returns: b's, then a's
+observe      a, then b                every event, in list order
 ```
 
-- **Same hook:** the same as Koa's `app.use(a); app.use(b)`. A budget that must decide before an audit logs anything is `[budget, audit]`. Moving a plugin from `view` to `request: before(...)` keeps its place relative to the others.
+- **Same hook:** the same as Koa's `app.use(a); app.use(b)`. A budget that must decide before an audit logs anything is `[budget, audit]`.
 - **Different hooks:** order is fixed by the step, so plugins that use different hooks can be listed in any order.
 - **Presets:** `plugins` accepts nested arrays. The list is flattened and each plugin object is kept once, where it first appears: `[a, [b, a]]` is `[a, b]`. Its tools, hooks, reducer and observer are registered once, so a shared plugin's state is not counted twice. Two different objects with the same name still throw `PluginConflictError`. The same holds for `agent.with(...)`.
 
@@ -334,7 +334,7 @@ They catch common mistakes; they do not prove a plugin pure. Two `Date.now()` ca
 
 ## Rules
 
-1. `record` and `state.reduce` are **synchronous and pure**. Put IO in `decide`, `input`, `view`, `request`, `toolCalls` or `toolCall`, and pass it `ctx.signal`.
+1. `record` and `state.reduce` are **synchronous and pure**. Put IO in `decide`, `input`, `request`, `toolCalls` or `toolCall`, and pass it `ctx.signal`.
 2. In the streaming hooks, consume the stream with **`return yield* next(...)`**, or use a helper. That keeps cancellation, the inner events and the return value intact.
 3. Tools **throw** for failures a retry may fix and **return `toolError(call, reason)`** for expected ones ([above](#errors-and-retries)).
 4. From `decide`, return `rewriteHistory(messages)` to replace history, or `stop(state)` to end the run with the last assistant message.
@@ -381,7 +381,7 @@ Readers match on `e.type === 'compaction:start'` without importing the plugin; a
 | Switch model, temperature or thinking                  | `request: before(...)`                           | `lowTemperature` in [`hooks.ts`](../apps/examples/src/hooks.ts)                     |
 | Fall back to another model on error                    | `request`                                        | `fallbackTo` in [`hooks.ts`](../apps/examples/src/hooks.ts)                         |
 | Rewrite streamed text for display only                 | `request: mapEvents(...)`                        | Redact secrets as they stream                                                       |
-| Add retrieval results or send only the last N messages | `view`                                           | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
+| Add retrieval results or send only the last N messages | `request: before(...)`, skipping `ctx.by` calls  | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
 | Keep going until done, add reminders                   | `input`                                          | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
 | Summarize and replace history                          | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
 | Enforce a budget or step cap                           | `decide: intercept(...)` + `stop`                | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |

@@ -60,7 +60,7 @@ export type ThinkingLevel = ModelThinkingLevel
 export interface ModelRequest {
   model: Model<Api>
   systemPrompt: string
-  /** Output of the view hooks, not the stored history. */
+  /** Starts as the stored history; request hooks may change it for this request only. */
   messages: Message[]
   tools: Tool[]
   /** Mapped to the nearest level the request's model supports; model_start reports the level actually sent. */

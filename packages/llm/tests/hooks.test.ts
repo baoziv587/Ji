@@ -78,10 +78,6 @@ describe('plugin order (§6)', () => {
           names.map(n => `input ${n}`),
         )
         expectRepeats(
-          pick(log, 'view'),
-          names.map(n => `view ${n}`),
-        )
-        expectRepeats(
           pick(log, 'observe'),
           names.map(n => `observe ${n}`),
         )
@@ -188,10 +184,6 @@ describe('ctx (§3)', () => {
         watch('input', ctx)
         return messages
       },
-      view: (messages, ctx) => {
-        watch('view', ctx)
-        return messages
-      },
       request: (req, next, ctx) => {
         watch('request', ctx)
         return next(req)
@@ -221,7 +213,7 @@ describe('ctx (§3)', () => {
       expect(new Set(step.map(s => s.state)).size).toBe(1)
     }
     expect(new Set(seen.map(s => s.hook))).toEqual(
-      new Set(['decide', 'committed', 'input', 'view', 'request', 'toolCalls', 'toolCall']),
+      new Set(['decide', 'committed', 'input', 'request', 'toolCalls', 'toolCall']),
     )
   })
 
@@ -230,7 +222,7 @@ describe('ctx (§3)', () => {
     const started = Promise.withResolvers<AbortSignal>()
     const slow = definePlugin({
       name: 'slow',
-      view: (messages, { signal }) => {
+      input: (_messages, { signal }) => {
         started.resolve(signal)
         return new Promise<Message[]>((_resolve, reject) => {
           signal.addEventListener('abort', () => reject(signal.reason))
@@ -273,6 +265,22 @@ describe('ctx (§3)', () => {
         void ctx.complete
         return next(req)
       },
+    })
+    // Without `state`, a helper's callback still gets the hook's own ctx, not just the helpers' bare { signal }
+    definePlugin({
+      name: 'stateless-helpers',
+      request: before((req, { by, own }) => {
+        expectTypeOf(by).toEqualTypeOf<string | undefined>()
+        expectTypeOf(own).toEqualTypeOf<undefined>()
+        return req
+      }),
+      decide: intercept((_state, { complete }) => {
+        expectTypeOf(complete).toBeFunction()
+        return undefined
+      }),
+    })
+    definePlugin({
+      name: 'pure-record',
       // @ts-expect-error record is pure and synchronous, so the stream helpers do not fit it
       record: before(input => input),
     })
@@ -764,10 +772,6 @@ function traced(name: string, log: string[]): Plugin<number> {
     },
     input: messages => {
       log.push(`input ${name}`)
-      return messages
-    },
-    view: messages => {
-      log.push(`view ${name}`)
       return messages
     },
     async *request(req, next) {

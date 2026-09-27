@@ -76,7 +76,6 @@ export const myPlugin = definePlugin({
   tools: [/* ... */], // 注册工具
   system: prompt => `${prompt}\nBe concise.`, // 修改 system prompt
   input: (messages, { state, idle, own }) => messages, // 这个步边界要插入的消息
-  view: (messages, { state }) => messages, // 这次请求发给模型的消息，不改历史
   request: before(req => ({ ...req, options: { ...req.options, temperature: 0 } })), // 一次模型调用
   toolCall: after(result => result), // 一次工具调用
   record: (input, next) => next(input), // 写入状态
@@ -86,7 +85,7 @@ export const myPlugin = definePlugin({
 
 钩子只有两种签名：
 
-- **变换**（`input`、`view`）：`(value, ctx) => value`，可以是异步的。多个插件按数组顺序依次执行。
+- **变换**（`input`）：`(value, ctx) => value`，可以是异步的。多个插件按数组顺序依次执行。
 - **中间件**（`decide`、`request`、`toolCalls`、`toolCall`）：`(input, next, ctx)`。调用 `next` 并返回它的结果 = 什么都不改；改参数再调用 = 改输入；改返回值 = 改输出；不调用 = 拦截；调用多次 = 重试。
 
 `system(prompt)`、`record({ state, turn }, next)`、`state.reduce(own, turn)` 是纯函数，没有 `ctx`。
@@ -103,7 +102,7 @@ decide: intercept(state => (overBudget(state) ? stop(state) : undefined)) // 超
 
 **规则。**
 
-- `record` 和 `state.reduce` 必须同步、纯（不读时钟、不发请求），否则保存后恢复的结果会不同。需要 IO 的事放在 `decide`、`input`、`view`、`request`、`toolCalls` 或 `toolCall` 里，并传入 `ctx.signal`。
+- `record` 和 `state.reduce` 必须同步、纯（不读时钟、不发请求），否则保存后恢复的结果会不同。需要 IO 的事放在 `decide`、`input`、`request`、`toolCalls` 或 `toolCall` 里，并传入 `ctx.signal`。
 - 流式中间件里消费 `next` 用 `return yield* next(...)`，这样取消能传到底层请求，返回值也不会丢。
 - 工具拦截、拒绝等预期内的失败返回 `toolError(call, reason)`；重试可能解决的失败直接抛出，外层 `toolCall` 中间件可以重试，没人处理时也会被转成错误结果交给模型。
 - 不要原地修改状态。开发时（`NODE_ENV` 为 `development` / `test`）已提交的状态会被冻结，原地修改当场抛出 `TypeError`。
@@ -122,7 +121,7 @@ decide: intercept(state => (overBudget(state) ? stop(state) : undefined)) // 超
 | 换模型、改 temperature / thinking     | `request: before(...)`                             | `hooks.ts` 的 `lowTemperature` |
 | 模型出错时换兜底模型                  | `request`                                          | `hooks.ts` 的 `fallbackTo`     |
 | 改写流式文字（只影响显示）            | `request: mapEvents(...)`                          | 输出时遮盖密钥                 |
-| 给这一次请求加检索结果、只发最近 N 条 | `view`                                             | `hooks.ts` 的 `retrieval`      |
+| 给这一次请求加检索结果、只发最近 N 条 | `request: before(...)`，跳过带 `ctx.by` 的调用     | `hooks.ts` 的 `retrieval`      |
 | 自动继续、定时提醒                    | `input`                                            | `keepGoing`                    |
 | 替换历史（压缩）                      | `decide` 里 `ctx.complete`，返回 `rewriteHistory`  | `compaction`                   |
 | 预算、步数上限                        | `decide: intercept(...)` 返回 `stop(state)`        | `budget`                       |
@@ -180,7 +179,7 @@ usageOf(chat.state) // 整段对话
 
 ### 细粒度钩子 · [`hooks.ts`](src/hooks.ts)
 
-`input` 自动继续（[`keep-going.ts`](src/plugins/keep-going.ts)，用 `ctx.own` 读取已继续的次数）、`view` 加检索结果、`request` 换兜底模型和改 temperature、`decide` 预算（[`budget.ts`](src/plugins/budget.ts)，用 `intercept`）组合在一个 agent 里。兜底模型只在还没有任何输出时才切换，这一步被取消后也不再重试。`lowTemperature` 排在 `fallbackTo` 前面，处在外层，所以第一次请求和兜底请求都用 temperature 0。
+`input` 自动继续（[`keep-going.ts`](src/plugins/keep-going.ts)，用 `ctx.own` 读取已继续的次数）、`request` 加检索结果（跳过 `ctx.complete` 发起的请求）、换兜底模型和改 temperature、`decide` 预算（[`budget.ts`](src/plugins/budget.ts)，用 `intercept`）组合在一个 agent 里。兜底模型只在还没有任何输出时才切换，这一步被取消后也不再重试。`lowTemperature` 排在 `fallbackTo` 前面，处在外层，所以第一次请求和兜底请求都用 temperature 0。
 
 `budget` 按 `usageOf(state)` 计算，看不到插件的模型调用和被压缩掉的消息，所以不是严格的费用上限。
 

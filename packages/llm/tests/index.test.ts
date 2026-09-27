@@ -326,8 +326,11 @@ describe('hooks', () => {
     expect(state.messages.map(contentOf)).toEqual(['go', 're:go', 'continue', 're:continue'])
   })
 
-  it('view: changes only this request, not the history', async () => {
-    const lastOnly = definePlugin({ name: 'last-only', view: messages => messages.slice(-1) })
+  it('request: before on req.messages changes only this request, not the history', async () => {
+    const lastOnly = definePlugin({
+      name: 'last-only',
+      request: before((req, { by }) => (by === undefined ? { ...req, messages: req.messages.slice(-1) } : req)),
+    })
     const model = fauxModel([
       callEcho('a'),
       ctx => {

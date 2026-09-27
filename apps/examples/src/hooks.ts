@@ -1,8 +1,8 @@
 // Fine-grained hooks: pnpm --filter @gaoxiang.ai/examples hooks
 //
 //   input    keep going automatically while the agent is idle but the task is unfinished (keepGoing plugin)
-//   view     add retrieval results to this one request without touching the history
-//   request  switch to a fallback model on error
+//   request  add retrieval results to this one request without touching the history; switch to a fallback model on
+//            error
 //   decide   stop once over budget (budget plugin)
 //
 // The list reads outside in: lowTemperature comes before fallback, so both the first try and the fallback run at
@@ -15,10 +15,15 @@ import { budget } from './plugins/budget.ts'
 import { keepGoing } from './plugins/keep-going.ts'
 import { pickModel, show } from './shared.ts'
 
-/** Only affects the messages sent to the model; the history never contains the retrieval results. */
+/**
+ * Only affects the messages this request sends; the history never contains the retrieval results. Requests a plugin
+ * makes with ctx.complete (ctx.by is its name) are left alone: a summary does not need the docs.
+ */
 const retrieval = definePlugin({
   name: 'retrieval',
-  view: messages => [user('[docs] The project uses pnpm and vitest.'), ...messages],
+  request: before((req, { by }) =>
+    by === undefined ? { ...req, messages: [user('[docs] The project uses pnpm and vitest.'), ...req.messages] } : req,
+  ),
 })
 
 /**

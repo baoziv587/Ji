@@ -94,7 +94,6 @@ export function createAgent(options: AgentOptions): Agent {
    *   transforms, applied in list order            runs
    *     system    system -> p1 -> p2                once, here
    *     input     offered messages -> p1 -> p2      every step boundary
-   *     view      state.messages -> p1 -> p2        every model request
    *
    *   middleware, earlier plugins wrap later ones (p1 sees the input first and the output last)
    *     decide^     p1( p2( baseAgent.policy ) )    every step
@@ -238,8 +237,8 @@ function compile(parts: Parts, rctx: RunContext): LLMAgent {
  *   input transforms( ctx.offer(boundary) )
  *     |-- messages ----> act(InputAction) ------------------------+
  *     |                                                            |
- *     |-- none, busy --> view transforms( state.messages )        |
- *     |                  -> request -> events ... message          |
+ *     |-- none, busy --> request( state.messages ) -> events ...   |
+ *     |                  ... message                               |
  *     |                  -> act(AssistantMessage)                  |
  *     |                  -> toolCalls: its tool calls, merged ---->+
  *     |                                                            v
@@ -259,7 +258,6 @@ function baseAgent(parts: Parts, rctx: RunContext, chains: Chains): LLMAgent {
   }))
 
   const inputs = plugins.flatMap(plugin => (plugin.input ? [{ plugin, run: plugin.input }] : []))
-  const views = plugins.flatMap(plugin => (plugin.view ? [{ plugin, run: plugin.view }] : []))
 
   return {
     async *policy(state) {
@@ -274,10 +272,18 @@ function baseAgent(parts: Parts, rctx: RunContext, chains: Chains): LLMAgent {
         return stop(state)
       }
 
-      const view = await applyTransforms(views, state.messages, contexts.of)
+      // The input transforms may have awaited: a step cancelled meanwhile starts no request
       rctx.signal.throwIfAborted()
 
-      const req = { model, systemPrompt, messages: view, tools: specs, thinking, options: streamOptions, state }
+      const req = {
+        model,
+        systemPrompt,
+        messages: state.messages,
+        tools: specs,
+        thinking,
+        options: streamOptions,
+        state,
+      }
       const msg = yield* request(req, { signal: rctx.signal })
       return act(msg)
     },

@@ -12,7 +12,6 @@ export const myPlugin = definePlugin({
   tools: [/* AgentTool */],
   system: prompt => `${prompt}\nBe concise.`,
   input: (messages, { state, idle, own }) => messages,
-  view: (messages, { state }) => messages,
   request: before(req => ({
     ...req,
     options: { ...req.options, temperature: 0 },
@@ -35,7 +34,6 @@ run                observe                                 这次运行的每个
      decide        决定这一步做什么                         每一步
       ├─ input     这里要插入消息吗？                        有：一个 input turn，直接到 record
       │                                                     没有且空闲：运行结束
-      ├─ view      这次请求发送的消息
       └─ request   一次模型调用                             每个 ctx.complete 也经过它
      toolCalls     这个模型回合的全部工具调用，一起          只有带工具调用的回合
       └─ toolCall  一次调用，与同回合的其他调用并行          每次工具调用
@@ -43,7 +41,7 @@ run                observe                                 这次运行的每个
       └─ state.reduce  各插件自己的数据                     所属插件的 record 层返回时
 ```
 
-`input`、`view`、`request` 都在 `decide` 里面：`decide` 不调用 `next`、直接返回 `rewriteHistory(...)` 或 `stop(state)` 时，它们都不会执行，改写历史直接进入 `record`。工具不在里面：`decide` 的 `next` 返回时，模型已经回答，但还没有任何工具执行。
+`input`、`request` 都在 `decide` 里面：`decide` 不调用 `next`、直接返回 `rewriteHistory(...)` 或 `stop(state)` 时，它们都不会执行，改写历史直接进入 `record`。工具不在里面：`decide` 的 `next` 返回时，模型已经回答，但还没有任何工具执行。
 
 ## 钩子
 
@@ -53,8 +51,7 @@ run                observe                                 这次运行的每个
 | `system`       | 变换   | `createAgent` 时执行一次                 | 否       | 修改 system prompt             |
 | `decide`       | 中间件 | 每一步                                   | 是       | 压缩、预算、结束运行           |
 | `input`        | 变换   | 每个步边界                               | 否       | 自动继续、提醒                 |
-| `view`         | 变换   | 每次调用主模型前                         | 否       | 检索、窗口截取；不改历史       |
-| `request`      | 中间件 | 每次模型调用，包括 `ctx.complete` 发起的 | 是       | 换模型、改 temperature、兜底   |
+| `request`      | 中间件 | 每次模型调用，包括 `ctx.complete` 发起的 | 是       | 换模型、兜底、检索、窗口截取   |
 | `toolCalls`    | 中间件 | 每个带工具调用的回合一次：整批调用       | 是       | 逐个执行工具调用、一次审批整批 |
 | `toolCall`     | 中间件 | 每次工具调用，与同回合的其他调用并行     | 是       | 截断、审批、重试、节流更新     |
 | `record`       | 纯函数 | 每一步                                   | 否       | 裁剪历史                       |
@@ -81,8 +78,8 @@ toolCalls( message )            看得到这一回合的全部调用
 ## 两种签名
 
 ```text
-变换      (value, ctx) => value | Promise<value>          input、view
-中间件    (input, next, ctx) => Stream<Payload, output>   turn、request、toolCalls、toolCall
+变换      (value, ctx) => value | Promise<value>          input
+中间件    (input, next, ctx) => Stream<Payload, output>   decide、request、toolCalls、toolCall
 纯函数    没有 ctx                                        system(prompt)、record({ state, turn }, next)、state.reduce(own, turn)
 ```
 
@@ -130,12 +127,15 @@ export const keepGoing = ({ isDone, maxTimes = 3, prompt = 'Keep going until the
 ```ts
 const enrich = definePlugin({
   name: 'enrich',
-  async view(messages, { signal }) {
+  request: before(async (req, { by, signal }) => {
+    if (by !== undefined) return req // 其他插件用 ctx.complete 发起的请求不动
     const response = await fetch('https://example.com/context', { signal })
-    return [user(await response.text()), ...messages]
-  },
+    return { ...req, messages: [user(await response.text()), ...req.messages] }
+  }),
 })
 ```
+
+`req.messages` 一开始就是历史；改它只改变这一次请求发送的内容，不会写进历史：写入历史的是模型的回复，从来不是 `req.messages`。所以检索、窗口截取都写成 `request: before(...)`。每个 `ctx.complete` 也经过 `request`，除非这些调用也该一起改，否则要判断 `ctx.by`。
 
 不要原地修改 `ctx.state` 或 `ctx.own`，要返回新值。打开[开发检查](#开发检查)时，`ctx.own.count++` 这样的写入会在那一行抛出 `TypeError`。
 
@@ -234,13 +234,13 @@ const compaction = definePlugin({
 ```text
 plugins: [a, b]
 
-变换      input / view          a 先处理，再交给 b
-中间件    turn / request / ...  a 在外层：a 先看到输入，最后看到输出
-record    a( b( applyTurn ) )   每个 state.reduce 在所属层返回时执行：先 b，后 a
-observe   a，然后 b             每个事件都按列表顺序
+变换      input                    a 先处理，再交给 b
+中间件    decide / request / ...   a 在外层：a 先看到输入，最后看到输出
+record    a( b( applyTurn ) )      每个 state.reduce 在所属层返回时执行：先 b，后 a
+observe   a，然后 b                每个事件都按列表顺序
 ```
 
-- **同一个钩子**：与 Koa 的 `app.use(a); app.use(b)` 相同。预算要在审计记录之前决定是否放行，就写成 `[budget, audit]`。一个插件从 `view` 改写成 `request: before(...)`，它与其他插件的相对顺序不变。
+- **同一个钩子**：与 Koa 的 `app.use(a); app.use(b)` 相同。预算要在审计记录之前决定是否放行，就写成 `[budget, audit]`。
 - **不同钩子**：顺序由一步的结构固定，所以写不同钩子的插件怎么排都行。
 - **预设**：`plugins` 可以嵌套数组。列表先展开，再按对象去重，保留第一次出现的位置：`[a, [b, a]]` 等价于 `[a, b]`。同一个插件对象的工具、钩子、reducer 和 observer 都只登记一次，状态也不会重复累计。不同对象使用同一个名字仍抛出 `PluginConflictError`。`agent.with(...)` 同样适用。
 
@@ -334,7 +334,7 @@ try {
 
 ## 规则
 
-1. `record` 和 `state.reduce` **同步且纯**。IO 放在 `decide`、`input`、`view`、`request`、`toolCalls` 或 `toolCall` 里，并把 `ctx.signal` 传下去。
+1. `record` 和 `state.reduce` **同步且纯**。IO 放在 `decide`、`input`、`request`、`toolCalls` 或 `toolCall` 里，并把 `ctx.signal` 传下去。
 2. 在流式钩子里用 **`return yield* next(...)`** 消费流，或者用辅助函数，保证取消能传下去、内层事件和返回值都不会丢。
 3. 重试可能解决的失败，工具**抛出**；预期内的失败**返回 `toolError(call, reason)`**（见[上文](#错误与重试)）。
 4. 在 `decide` 里返回 `rewriteHistory(messages)` 替换历史，返回 `stop(state)` 以最后一条助手消息结束运行。
@@ -381,7 +381,7 @@ definePlugin({
 | 换模型、改 temperature / thinking | `request: before(...)`                           | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature`                     |
 | 模型出错时换兜底模型              | `request`                                        | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`                         |
 | 改写流式文字（只影响显示）        | `request: mapEvents(...)`                        | 输出时遮盖密钥                                                                         |
-| 给请求加检索结果、只发最近 N 条   | `view`                                           | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
+| 给请求加检索结果、只发最近 N 条   | `request: before(...)`，跳过带 `ctx.by` 的调用   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
 | 任务没完成就自动继续、定时提醒    | `input`                                          | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
 | 写摘要并替换历史                  | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
 | 预算、步数上限                    | `decide: intercept(...)` + `stop`                | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |

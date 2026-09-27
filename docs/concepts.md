@@ -31,8 +31,7 @@ A **step boundary** is the moment between two steps when no model output is stre
 ```
 decide ───┬─ ① input    messages to insert here?  yes → record them, step ends
           │             none and agent idle?       → run finishes
-          ├─ ② view     messages to send this time (history unchanged)
-          └─ ③ request  call the model, stream deltas
+          └─ ② request  call the model, stream deltas (request hooks may change what it sends; history unchanged)
 toolCalls ─ tool calls of this turn, run in parallel → toolCall (per call)
 record ──── append the turn to history → each plugin's state.reduce
 ```
@@ -56,7 +55,7 @@ The final answer is recorded before the run ends, so it also goes through `recor
 The design relies on these rules. Breaking one leads to subtle bugs, not a crash.
 
 1. **`record` and `state.reduce` are synchronous and pure.** They must not read clocks or make requests. That is why a saved state reproduces exactly. Development checks freeze committed state and run each `state.reduce` twice to catch the common mistakes ([details](plugins.md#development-checks)).
-2. **Do IO in `decide`, `input`, `view`, `request`, `toolCalls` or `toolCall`, with `ctx.signal`.** For example, compaction writes its summary in `decide` with `ctx.complete`, then hands the replacement to `record` via `rewriteHistory`.
+2. **Do IO in `decide`, `input`, `request`, `toolCalls` or `toolCall`, with `ctx.signal`.** For example, compaction writes its summary in `decide` with `ctx.complete`, then hands the replacement to `record` via `rewriteHistory`.
 3. **Expected tool failures are results; retryable ones are exceptions.** Return `toolError(call, reason)` for a refusal; throw for a failure a retry may fix, so outer `toolCall` middleware can see it. Anything still thrown is converted to an error result for the model.
 4. **Cancellation and events flow through `yield*`.** In stream middleware (`decide`, `request`, `toolCalls`, `toolCall`), write `return yield* next(...)`, or use `before` / `after` / `intercept` / `mapEvents`, so aborts reach the HTTP request and the tools, inner events reach the run, and the return value isn't lost.
 5. **An interrupted step is never recorded.** State only advances on completed steps.

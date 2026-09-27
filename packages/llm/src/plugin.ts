@@ -20,7 +20,7 @@ import { actionOf, isModelAction, turnOf } from './turn.ts'
 /**
  * Fields are listed in the order they run within a step (RFC-0004 §4). Two shapes (RFC-0006 §3):
  *
- *   transform    (value, ctx) => value | Promise<value>           input, view: plugins run in list order
+ *   transform    (value, ctx) => value | Promise<value>           input: plugins run in list order
  *   middleware   (input, next, ctx) => Stream<Payload, output>    decide, request, toolCalls, toolCall: earlier plugins
  *                                                                  are outer, so they see the input first
  *
@@ -41,9 +41,11 @@ export interface PluginSpec<State = undefined> {
   decide?: (state: AgentState, next: DecideNext, ctx: DecideContext<State>) => DecideStream
   /** Transform of the messages to insert at this boundary; starts with the queued messages deliverable now. */
   input?: (messages: Message[], ctx: InputContext<State>) => Message[] | Promise<Message[]>
-  /** Transform of the messages sent in this request only; history is untouched. */
-  view?: (messages: Message[], ctx: HookContext<State>) => Message[] | Promise<Message[]>
-  /** Middleware around one model call, the main model's and every ctx.complete alike (ctx.by tells them apart). */
+  /**
+   * Middleware around one model call, the main model's and every ctx.complete alike (ctx.by tells them apart).
+   * Changing req.messages changes only what this request sends, never the history: `before` it for retrieval or
+   * windowing, and leave requests with a ctx.by alone unless they should change too.
+   */
   request?: (req: ModelRequest, next: ModelCall, ctx: RequestContext<State>) => Stream<Payload, AssistantMessage>
   /** Middleware around all tool calls of one model turn; turns without tool calls, the final answer included, skip it. */
   toolCalls?: (
@@ -129,7 +131,14 @@ export type AnyPlugin = Plugin<any>
 /** May nest, so several plugins can ship as one preset; nesting does not change the order. */
 export type PluginList = ReadonlyArray<AnyPlugin | PluginList>
 
-export function definePlugin<State = undefined>(spec: PluginSpec<State>): Plugin<State> {
+/**
+ * Overloads, so a plugin without `state` gets concrete ctx types: otherwise State would still be open while TS types
+ * a helper's callback, and `before((req, { by }) => …)` would see only the helpers' bare ctx (no by, own, complete).
+ */
+export function definePlugin<State>(spec: PluginSpec<State> & { state: PluginState<State> }): Plugin<State>
+export function definePlugin(spec: PluginSpec & { state?: undefined }): Plugin
+export function definePlugin<State = undefined>(spec: PluginSpec<State>): Plugin<State>
+export function definePlugin<State>(spec: PluginSpec<State>): Plugin<State> {
   const { name, state } = spec
   return { ...spec, select: pluginStateSlot(name, state?.init as State).get }
 }
