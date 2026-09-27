@@ -1,11 +1,12 @@
 import type { Turn, TurnEvent } from '@gaoxiang.ai/llm'
 import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, ToolCall } from '@mariozechner/pi-ai'
-import { createAgent, createSession, textOf, tool, toolResult, user } from '@gaoxiang.ai/llm'
+import { callsOf, createAgent, createSession, textOf, tool, toolResult, user } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { budget } from '../src/plugins/budget.ts'
 import { compaction, cutIndex, SUMMARY_PREFIX } from '../src/plugins/compaction.ts'
 import { keepGoing } from '../src/plugins/keep-going.ts'
+import { sequentialTools } from '../src/plugins/sequential-tools.ts'
 import { truncate, truncateToolResults } from '../src/plugins/truncate-tool-results.ts'
 
 function fauxModel(script: FauxResponseStep[]): Model<Api> {
@@ -181,5 +182,50 @@ describe('budget', () => {
     const r = createSession(agent).send('go')
     expect((await r.summary).turns).toBe(1)
     expect((await r.result).stopReason).toBe('toolUse')
+  })
+})
+
+describe('sequentialTools', () => {
+  /** Logs when each call starts and ends, and yields to the event loop in between so parallel calls overlap. */
+  function slowTool(log: string[]) {
+    return tool({
+      name: 'slow',
+      description: 'takes a moment',
+      parameters: Type.Object({ id: Type.String() }),
+      run: async ({ id }) => {
+        log.push(`start ${id}`)
+        await new Promise(resolve => setImmediate(resolve))
+        log.push(`end ${id}`)
+        return `done ${id}`
+      },
+    })
+  }
+  const callBoth = (): AssistantMessage =>
+    fauxAssistantMessage([fauxToolCall('slow', { id: 'a' }), fauxToolCall('slow', { id: 'b' })], {
+      stopReason: 'toolUse',
+    })
+
+  it('runs the calls of a turn in parallel without it', async () => {
+    const log: string[] = []
+    const model = fauxModel([callBoth(), fauxAssistantMessage('answer')])
+
+    await createSession(createAgent({ model, tools: [slowTool(log)] })).send('go').result
+    expect(log).toEqual(['start a', 'start b', 'end a', 'end b'])
+  })
+
+  it('runs them one at a time, keeping the results in call order and the model message whole', async () => {
+    const log: string[] = []
+    const model = fauxModel([callBoth(), fauxAssistantMessage('answer')])
+    const agent = createAgent({ model, tools: [slowTool(log)], plugins: [sequentialTools()] })
+
+    const state = await createSession(agent).send('go').state
+    expect(log).toEqual(['start a', 'end a', 'start b', 'end b'])
+
+    const [, asked, ...results] = state.messages
+    expect(asked.role === 'assistant' && callsOf(asked).length).toBe(2)
+    expect(results.slice(0, 2)).toMatchObject([
+      { role: 'toolResult', content: [{ type: 'text', text: 'done a' }] },
+      { role: 'toolResult', content: [{ type: 'text', text: 'done b' }] },
+    ])
   })
 })

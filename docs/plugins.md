@@ -2,7 +2,7 @@
 
 **English** · [简体中文](zh-CN/plugins.md)
 
-A plugin is a named set of hooks. Each hook runs at a fixed point in a step (see [Concepts](concepts.md#what-happens-in-one-step)).
+A plugin is a named set of hooks into the agent loop. It has the same shape as a Rollup or Vite plugin: an object with a `name`, whose fields are hooks called at fixed points of a pipeline. Here the pipeline is the agent loop, so choosing a hook means choosing where in the loop your code runs, and how often.
 
 ```ts
 import { after, before, definePlugin } from '@gaoxiang.ai/llm'
@@ -24,21 +24,57 @@ export const myPlugin = definePlugin({
 })
 ```
 
-## Hooks, in execution order
+## The agent loop
 
-| Hook        | Shape      | Runs                                             | Typical use                                                             |
-| ----------- | ---------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
-| `tools`     | list       | At `createAgent`                                 | Register tools                                                          |
-| `system`    | transform  | Once, at `createAgent`                           | Edit the system prompt                                                  |
-| `turn`      | middleware | Decides each step's turn                         | Compaction, budgets, stopping                                           |
-| `input`     | transform  | At each boundary                                 | Auto-continue, reminders                                                |
-| `view`      | transform  | Before each model call                           | Retrieval, windowing. History is unchanged.                             |
-| `request`   | middleware | Each model call (a stream), `ctx.complete`'s too | Switch model, temperature, fallback                                     |
-| `toolCalls` | middleware | All tool calls of one turn (a stream)            | Batch approval. Skipped for turns without tool calls, final answer too. |
-| `toolCall`  | middleware | Each tool call (a stream)                        | Truncate, approve, retry, throttle updates                              |
-| `record`    | middleware | Recording every Turn                             | Trim history. Synchronous and pure.                                     |
-| `state`     | reducer    | As its plugin's `record` layer returns           | The plugin's own data. Synchronous and pure.                            |
-| `observe`   | observer   | Every event of every run                         | Logs, traces, metrics. Read-only and synchronous.                       |
+Every hook, where it sits and how often it runs. A run repeats steps until the agent is idle and nothing is queued:
+
+```text
+createAgent        tools, system                              once
+run                observe                                    every event of the run, in order
+ └─ step
+     turn          decides this step's turn                   every step
+      ├─ input     messages to insert here?                   yes: an input turn, go to record
+      │                                                        none and idle: the run ends
+      ├─ view      the messages this request sends
+      └─ request   one model call                             also every ctx.complete
+     toolCalls     all tool calls of the model turn, at once  only turns with tool calls
+      └─ toolCall  one call, in parallel with the others      every tool call
+     record        writes the turn into history               every step
+      └─ state.reduce  each plugin's own data                 as its plugin's record returns
+```
+
+`input`, `view` and `request` run inside `turn`: a `turn` that returns `rewriteHistory(...)` or `stop(state)` without calling `next` skips them, and a rewrite goes straight to `record`.
+
+## Hooks
+
+| Hook           | Kind       | Runs                                                 | Yields events | Typical use                                      |
+| -------------- | ---------- | ---------------------------------------------------- | ------------- | ------------------------------------------------ |
+| `tools`        | list       | At `createAgent`                                     | —             | Register tools                                   |
+| `system`       | transform  | Once, at `createAgent`                               | No            | Edit the system prompt                           |
+| `turn`         | middleware | Every step                                           | Yes           | Compaction, budgets, stopping                    |
+| `input`        | transform  | Every step boundary                                  | No            | Auto-continue, reminders                         |
+| `view`         | transform  | Before each main model call                          | No            | Retrieval, windowing. History is unchanged.      |
+| `request`      | middleware | Every model call, `ctx.complete`'s too               | Yes           | Switch model, temperature, fallback              |
+| `toolCalls`    | middleware | Once per model turn with tool calls: the whole batch | Yes           | Run calls one at a time, approve a batch at once |
+| `toolCall`     | middleware | Every tool call, in parallel with the turn's others  | Yes           | Truncate, approve, retry, throttle updates       |
+| `record`       | pure       | Every step                                           | No            | Trim history                                     |
+| `state.reduce` | pure       | Every step, as its plugin's `record` layer returns   | No            | The plugin's own data                            |
+| `observe`      | observer   | Every event of every run                             | No            | Logs, traces, metrics. Read-only.                |
+
+**Kind** says how the hook composes: a transform passes a value down the plugin list, a middleware wraps the layers inside it (`next`), a pure hook is a synchronous function with no `ctx` (it must not do IO), and an observer only watches. **Yields events** says whether the hook can add its own events to the run ([Events from plugins](#events-from-plugins)).
+
+### One call or the whole batch
+
+The names follow one rule: a singular hook wraps one of something, a plural hook wraps the batch. `toolCall` and `toolCalls` sit on either side of the point where a turn's calls start running together:
+
+```text
+toolCalls( message )            sees every call of the turn
+  └─ run them all at once       the calls start together here
+       ├─ toolCall( call a )    sees only its own call
+       └─ toolCall( call b )
+```
+
+Anything about a single call (its arguments, its result, whether it may run) belongs in `toolCall`. Anything about the calls together belongs in `toolCalls`, because by the time a `toolCall` runs, the calls have already been started side by side and none of them knows about the others: running them one at a time, approving all of them in one prompt, refusing a turn that makes too many calls. [`sequential-tools.ts`](../apps/examples/src/plugins/sequential-tools.ts) hands the calls to `next` one by one; a message holding a single call is a batch of one.
 
 Change history with `record`; keep your own data with `state`. Read a plugin's state from outside with `myPlugin.select(state)`, which returns `init` until the plugin has written. Inside its own hooks, `ctx.own` is the same value.
 
@@ -339,6 +375,8 @@ Readers match on `e.type === 'compaction:start'` without importing the plugin; a
 | Change tool arguments or results                       | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../apps/examples/src/plugins/truncate-tool-results.ts) |
 | Approve or block a tool call                           | `toolCall: intercept(...)`                       | Return `toolError(call, reason)` to block                                           |
 | Retry a tool                                           | `toolCall`                                       | [Errors and retries](#errors-and-retries)                                           |
+| Run a turn's tool calls one at a time                  | `toolCalls`                                      | [`sequential-tools.ts`](../apps/examples/src/plugins/sequential-tools.ts)           |
+| Approve all of a turn's tool calls at once             | `toolCalls: intercept(...)`                      | Return one `toolError` per call of `callsOf(message)` to refuse                     |
 | Time out a tool                                        | Inside the tool's `run`                          | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                |
 | Switch model, temperature or thinking                  | `request: before(...)`                           | `lowTemperature` in [`hooks.ts`](../apps/examples/src/hooks.ts)                     |
 | Fall back to another model on error                    | `request`                                        | `fallbackTo` in [`hooks.ts`](../apps/examples/src/hooks.ts)                         |

@@ -118,6 +118,7 @@ turn: intercept(state => (overBudget(state) ? stop(state) : undefined)) // 超�
 | 修改工具参数、结果                    | `toolCall: before(...)` / `toolCall: after(...)`   | `truncateToolResults`          |
 | 审批、拦截                            | `toolCall: intercept(...)`                         | 返回 `toolError` 即拦截        |
 | 重试                                  | `toolCall`                                         | 只重试可以安全重复的调用       |
+| 一个回合的工具调用逐个执行            | `toolCalls`                                        | `sequentialTools`              |
 | 换模型、改 temperature / thinking     | `request: before(...)`                             | `hooks.ts` 的 `lowTemperature` |
 | 模型出错时换兜底模型                  | `request`                                          | `hooks.ts` 的 `fallbackTo`     |
 | 改写流式文字（只影响显示）            | `request: mapEvents(...)`                          | 输出时遮盖密钥                 |
@@ -147,6 +148,14 @@ truncateToolResults({ maxChars: 8_000 })
 ```
 
 工具结果的文本超过 `maxChars` 时，保留开头约 70% 和结尾约 20%。只改工具的输出，所以写成 `toolCall: after(...)`。原始长度写在 `result.details.truncated.originalChars`：`details` 只保存在历史里，不会发给模型。
+
+### 工具调用逐个执行 · [`sequential-tools.ts`](src/plugins/sequential-tools.ts)
+
+```ts
+sequentialTools()
+```
+
+默认情况下，一个回合的工具调用同时开始；装上它以后改为一个接一个执行，适合会写同一批文件的工具。这件事只能在 `toolCalls` 里做：`toolCall` 运行时，这批调用已经并排启动了，每个 `toolCall` 只看得到自己那一次。`toolCalls` 看得到整批，于是把调用逐个交给 `next`，每次只放一个调用。写进历史的仍是模型原来那条含全部调用的消息，工具结果也按调用顺序排列。
 
 ### 记录耗时和费用 · [`metrics.ts`](src/metrics.ts)
 

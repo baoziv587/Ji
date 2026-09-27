@@ -2,7 +2,7 @@
 
 [English](../plugins.md) · **简体中文**
 
-插件是一组有名字的钩子，每个钩子在一步中的固定位置执行（见 [核心概念](concepts.md#一步里发生了什么)）。
+插件是一组挂在 agent loop 上、有名字的钩子。它和 Rollup、Vite 的插件是同一种形状：一个带 `name` 的对象，字段是在流程固定位置被调用的钩子。这里的流程就是 agent loop，所以选哪个钩子，就是选你的代码在 loop 的哪个位置运行、多久运行一次。
 
 ```ts
 import { after, before, definePlugin } from '@gaoxiang.ai/llm'
@@ -24,21 +24,57 @@ export const myPlugin = definePlugin({
 })
 ```
 
-## 钩子，按执行顺序
+## agent loop
 
-| 钩子        | 形状    | 执行时机                                       | 典型用途                                           |
-| ----------- | ------- | ---------------------------------------------- | -------------------------------------------------- |
-| `tools`     | 列表    | `createAgent` 时                               | 注册工具                                           |
-| `system`    | 变换    | `createAgent` 时执行一次                       | 修改 system prompt                                 |
-| `turn`      | 中间件  | 决定每一步的 turn                              | 压缩、预算、结束运行                               |
-| `input`     | 变换    | 每个步边界                                     | 自动继续、提醒                                     |
-| `view`      | 变换    | 每次调用模型前                                 | 检索、窗口截取；不改历史                           |
-| `request`   | 中间件  | 每次模型调用（流），包括 `ctx.complete` 发起的 | 换模型、改 temperature、兜底                       |
-| `toolCalls` | 中间件  | 一个回合的全部工具调用（流）                   | 批量审批；没有工具调用的回合（包括最终回答）不经过 |
-| `toolCall`  | 中间件  | 每次工具调用（流）                             | 截断、审批、重试、节流更新                         |
-| `record`    | 中间件  | 写入每一条 Turn                                | 裁剪历史；必须同步、纯                             |
-| `state`     | reducer | 所属插件的 `record` 层返回时                   | 插件自己的数据；必须同步、纯                       |
-| `observe`   | 观察者  | 每次运行的每个事件                             | 日志、追踪、指标。只读、同步                       |
+每个钩子的位置和运行频率。一次运行会反复执行步骤，直到 agent 空闲、也没有排队的消息：
+
+```text
+createAgent        tools、system                           一次
+run                observe                                 这次运行的每个事件，按顺序
+ └─ step
+     turn          决定这一步的 turn                        每一步
+      ├─ input     这里要插入消息吗？                        有：一个 input turn，直接到 record
+      │                                                     没有且空闲：运行结束
+      ├─ view      这次请求发送的消息
+      └─ request   一次模型调用                             每个 ctx.complete 也经过它
+     toolCalls     这个模型回合的全部工具调用，一起          只有带工具调用的回合
+      └─ toolCall  一次调用，与同回合的其他调用并行          每次工具调用
+     record        把这一步的 turn 写入历史                  每一步
+      └─ state.reduce  各插件自己的数据                     所属插件的 record 层返回时
+```
+
+`input`、`view`、`request` 都在 `turn` 里面：`turn` 不调用 `next`、直接返回 `rewriteHistory(...)` 或 `stop(state)` 时，它们都不会执行，改写历史直接进入 `record`。
+
+## 钩子
+
+| 钩子           | 类型   | 运行时机                                 | 能发事件 | 典型用途                       |
+| -------------- | ------ | ---------------------------------------- | -------- | ------------------------------ |
+| `tools`        | 列表   | `createAgent` 时                         | —        | 注册工具                       |
+| `system`       | 变换   | `createAgent` 时执行一次                 | 否       | 修改 system prompt             |
+| `turn`         | 中间件 | 每一步                                   | 是       | 压缩、预算、结束运行           |
+| `input`        | 变换   | 每个步边界                               | 否       | 自动继续、提醒                 |
+| `view`         | 变换   | 每次调用主模型前                         | 否       | 检索、窗口截取；不改历史       |
+| `request`      | 中间件 | 每次模型调用，包括 `ctx.complete` 发起的 | 是       | 换模型、改 temperature、兜底   |
+| `toolCalls`    | 中间件 | 每个带工具调用的回合一次：整批调用       | 是       | 逐个执行工具调用、一次审批整批 |
+| `toolCall`     | 中间件 | 每次工具调用，与同回合的其他调用并行     | 是       | 截断、审批、重试、节流更新     |
+| `record`       | 纯函数 | 每一步                                   | 否       | 裁剪历史                       |
+| `state.reduce` | 纯函数 | 每一步，所属插件的 `record` 层返回时     | 否       | 插件自己的数据                 |
+| `observe`      | 观察者 | 每次运行的每个事件                       | 否       | 日志、追踪、指标。只读         |
+
+**类型**说明钩子怎么组合：变换把一个值沿插件列表依次传下去；中间件包住它里面的各层（`next`）；纯函数是同步函数，没有 `ctx`，不能做 IO；观察者只看不改。**能发事件**说明这个钩子能不能往运行里追加自己的事件（见[插件发出的事件](#插件发出的事件)）。
+
+### 一次调用，还是一整批
+
+命名遵循一条规则：单数的钩子包住一次，复数的钩子包住一整批。`toolCall` 和 `toolCalls` 分别位于"这一回合的调用开始一起执行"这个点的两侧：
+
+```text
+toolCalls( message )            看得到这一回合的全部调用
+  └─ 一起开始执行               调用在这里同时启动
+       ├─ toolCall( call a )    只看得到自己这一次
+       └─ toolCall( call b )
+```
+
+关于单次调用的事（它的参数、它的结果、它能不能执行）放在 `toolCall`。关于这批调用整体的事放在 `toolCalls`，比如逐个执行、在一次确认里审批全部调用、拒绝调用次数过多的回合。原因是 `toolCall` 运行时，这批调用已经并排启动，彼此都不知道对方存在。[`sequential-tools.ts`](../../apps/examples/src/plugins/sequential-tools.ts) 把调用一个一个交给 `next`：只含一次调用的消息，就是只有一个调用的一批。
 
 改历史用 `record`，存自己的数据用 `state`。在插件外部用 `myPlugin.select(state)` 读取插件状态，插件还没写入时返回 `init`；在插件自己的钩子里，`ctx.own` 就是同一个值。
 
@@ -339,6 +375,8 @@ definePlugin({
 | 修改工具参数或结果                | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../../apps/examples/src/plugins/truncate-tool-results.ts) |
 | 审批、拦截工具调用                | `toolCall: intercept(...)`                       | 返回 `toolError(call, reason)` 即拦截                                                  |
 | 重试工具                          | `toolCall`                                       | [错误与重试](#错误与重试)                                                              |
+| 一个回合的工具调用逐个执行        | `toolCalls`                                      | [`sequential-tools.ts`](../../apps/examples/src/plugins/sequential-tools.ts)           |
+| 一次审批一个回合的全部工具调用    | `toolCalls: intercept(...)`                      | 拒绝时为 `callsOf(message)` 的每个调用返回一个 `toolError`                             |
 | 工具超时                          | 在工具的 `run` 里                                | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                   |
 | 换模型、改 temperature / thinking | `request: before(...)`                           | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature`                     |
 | 模型出错时换兜底模型              | `request`                                        | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`                         |
