@@ -40,15 +40,15 @@ agent.model.hasEnvKey // 此刻是否设置了 DEEPSEEK_API_KEY
 
 所有成员共享同一次执行，可以同时读取多个。
 
-| 成员               | 类型                        | 说明                                                                                               |
-| ------------------ | --------------------------- | -------------------------------------------------------------------------------------------------- |
-| `r.text`           | `AsyncIterable<string>`     | 文字增量，从开始读取的那一刻算起                                                                   |
-| `r.turns`          | `AsyncIterable<TurnEvent>`  | 每步一条：`turn`、`state`、`timing`、到这一步为止的 `summary`。**无论何时开始读，都从第 0 步开始** |
-| `r` 本身           | `AsyncIterable<RunEvent>`   | 这次运行的全部事件，按顺序，每个事件一个 `type`（[见下文](#事件)）                                 |
-| `r.result`         | `Promise<AssistantMessage>` | 最终回答                                                                                           |
-| `r.state`          | `Promise<AgentState>`       | 最终状态                                                                                           |
-| `r.summary`        | `Promise<RunSummary>`       | 模型回合数、token、费用、模型和工具耗时，以及每个工具的调用 / 出错次数和耗时                       |
-| `r.abort(reason?)` |                             | 取消运行。尚未送达的消息留在会话里                                                                 |
+| 成员               | 类型                        | 说明                                                                                                 |
+| ------------------ | --------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `r.text`           | `AsyncIterable<string>`     | 文字增量，从开始读取的那一刻算起                                                                     |
+| `r.turns`          | `AsyncIterable<TurnEvent>`  | 每步一条：`turn`、`state`、`timing`、到这一步为止的 `summary`。**无论何时开始读，都从第 0 步开始**   |
+| `r` 本身           | `AsyncIterable<RunEvent>`   | 这次运行的全部事件，按顺序，每个事件一个 `type`（[见下文](#事件)）                                   |
+| `r.result`         | `Promise<AssistantMessage>` | 最终回答                                                                                             |
+| `r.state`          | `Promise<AgentState>`       | 最终状态                                                                                             |
+| `r.summary`        | `Promise<RunSummary>`       | 模型回合数、token、费用（含插件发起的模型调用）、模型和工具耗时，以及每个工具的调用 / 出错次数和耗时 |
+| `r.abort(reason?)` |                             | 取消运行。尚未送达的消息留在会话里                                                                   |
 
 运行被取消或出错时，`result`、`state`、`summary` 以 `RunError` reject。它带有 `kind`（`'aborted'`、`'max_steps'`、`'provider'`、`'internal'`）、出错的步 `t`、可用来恢复的最后写入的 `state`，原始错误在 `cause` 里。
 
@@ -69,20 +69,23 @@ await printing
 
 读 `r` 得到一条扁平的事件流，按 `e.type` 判别即可。每个事件还带有步号 `t`。
 
-| 事件                      | 什么时候                                                              |
-| ------------------------- | --------------------------------------------------------------------- |
-| `step_start` / `step_end` | 一步开始 / 写入状态。`step_end` 与 `r.turns` 的每一项相同             |
-| `step_cancelled`          | 一步在写入前被中断或取消。`open` 列出仍在运行的工具调用               |
-| `model_start`             | 请求发出：实际使用的模型和思考档位                                    |
-| `thinking` / `text`       | 模型的输出，字段是 `delta`                                            |
-| `tool_call`               | 模型写完了一次调用的参数。**工具还没开始执行**                        |
-| `model_end`               | 完整的消息，带用量和 `ms`                                             |
-| `tool_start` / `tool_end` | 工具真正开始 / 得到结果，带 `ms`。并行的调用按完成顺序结束            |
-| `tool_update`             | 工具 yield 的一个值（见下文）                                         |
-| `run_end`                 | 运行结束：`outcome` 为 `'done'` 带结果，或为 `'failed'` 带 `RunError` |
-| `<插件名>:<事件>`         | 插件 yield 的事件（[编写插件](plugins.md#插件发出的事件)）            |
+| 事件                      | 什么时候                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `step_start` / `step_end` | 一步开始 / 写入状态。`step_end` 与 `r.turns` 的每一项相同                      |
+| `step_cancelled`          | 一步在写入前被中断或取消。`open` 列出仍在运行的工具调用                        |
+| `model_start`             | 请求发出：实际使用的模型和思考档位，以及 `by`（见下文）                        |
+| `thinking` / `text`       | 主模型的输出，字段是 `delta`                                                   |
+| `tool_call`               | 模型写完了一次调用的参数。**工具还没开始执行**                                 |
+| `model_end`               | 调用成功：完整的消息，带用量和 `ms`                                            |
+| `model_error`             | 调用失败：`error`、服务商报告的 `usage`（如果有）和 `ms`。request 插件可能重试 |
+| `tool_start` / `tool_end` | 工具真正开始 / 得到结果，带 `ms`。并行的调用按完成顺序结束                     |
+| `tool_update`             | 工具 yield 的一个值（见下文）                                                  |
+| `run_end`                 | 运行结束：`outcome` 为 `'done'` 带结果，或为 `'failed'` 带 `RunError`          |
+| `<插件名>:<事件>`         | 插件 yield 的事件（[编写插件](plugins.md#插件发出的事件)）                     |
 
-每个 `tool_start` 都会被它的 `tool_end` 或这一步的 `step_cancelled` 关闭，界面上不会留下一直转的 spinner。
+每个 `tool_start` 都会被它的 `tool_end` 或这一步的 `step_cancelled` 关闭，界面上不会留下一直转的 spinner。同样，每个 `model_start` 恰好被一个 `model_end`、`model_error` 或 `step_cancelled` 关闭；同一时刻至多有一次模型调用在进行，所以按出现顺序就能配对。
+
+**`by`**：插件可以用 [`ctx.complete`](plugins.md#调用模型ctxcomplete) 自己调用模型，比如写摘要。这些调用的 `model_start`、`model_end`、`model_error` 带 `by: '<插件名>'`，主模型的调用没有 `by`。它们的 `thinking`、`text`、`tool_call` 不进入流，所以 `r.text` 始终只有主模型的回答。
 
 ```ts
 for await (const e of r) {
@@ -121,7 +124,7 @@ const runTests = tool({
 })
 ```
 
-**日志与追踪**：`for await` 循环抛错或提前退出会取消整次运行，而且它只能看到一次运行。日志、追踪、指标请用插件的只读钩子 `observe`：它从第一个事件起收到这个 agent 每次运行的全部事件，抛出的异常只会作为警告报告，不影响运行。现成的插件在 [`plugins/`](../../plugins)：`@gaoxiang.ai/plugin-otel`、`@gaoxiang.ai/plugin-jsonl`。
+**日志与追踪**：`for await` 循环抛错或提前退出会取消整次运行，而且它只能看到一次运行。日志、追踪、指标请用插件的只读钩子 `observe`：它从第一个事件起收到这个 agent 每次运行的全部事件，抛出的异常只会作为警告报告，不影响运行。`observe` 是同步的，不会被等待：要异步导出，就在 `observe` 里入队，运行结束后再 flush（[示例](plugins.md#observer-是同步的)）。现成的插件在 [`plugins/`](../../plugins)：`@gaoxiang.ai/plugin-otel`、`@gaoxiang.ai/plugin-jsonl`。
 
 ## 取消
 
@@ -175,4 +178,7 @@ const { turns, usage, modelMs, toolMs, tools } = await r.summary // 这次运行
 usageOf(chat.state) // 整段对话
 ```
 
-`timing` 包含 `ms`；模型回合还有 `modelMs`、`firstTokenMs`，以及按工具调用 id 记录的 `toolMs`，都由事件算出（所以 `toolMs[id]` 等于该调用的 `tool_end.ms`）。summary 里的 `toolMs` 是各次调用耗时之和，并行调用会重叠，所以可能大于实际经过的时间。`usageOf` 只计算仍在历史里的消息，压缩掉的消息不再计入。
+`timing` 包含 `ms`；模型回合还有 `modelMs`、`firstTokenMs`，以及按工具调用 id 记录的 `toolMs`，都由事件算出（所以 `toolMs[id]` 等于该调用的 `tool_end.ms`）。summary 里的 `toolMs` 是各次调用耗时之和，并行调用会重叠，所以可能大于实际经过的时间。`r.summary.usage` 和 `usageOf` 统计的东西不同，两者不必相等：
+
+- `r.summary.usage` 累加这次运行发布的每个 `model_end` 和 `model_error` 的用量，包括插件 `ctx.complete` 的调用。一步之后即使被取消、`stop` 或改写历史，已经花掉的用量也不会撤销。被中断而没有终态事件的调用拿不到用量，不计入。
+- `usageOf(state)` 累加仍在历史里的主模型消息。插件的调用和被压缩掉的消息都不在内。

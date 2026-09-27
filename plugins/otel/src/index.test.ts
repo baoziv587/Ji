@@ -93,6 +93,50 @@ describe('otel', () => {
     expect(span?.parent).toBe(tracer.roots()[0])
   })
 
+  it('should nest a plugin model call under its span and close a failed attempt as an error', async () => {
+    // Arrange
+    const tracer = fakeTracer()
+    const compaction = definePlugin({
+      name: 'compaction',
+      async *turn(state, next, { complete }) {
+        if (state.messages.length === 1) {
+          yield { type: 'compaction:start', tokens: 100 }
+          yield* complete({ messages: state.messages })
+          yield { type: 'compaction:end', before: 100, after: 10 }
+        }
+        return yield* next(state)
+      },
+    })
+    const fallback = definePlugin({
+      name: 'fallback',
+      async *request(req, next) {
+        try {
+          return yield* next(req)
+        } catch {
+          return yield* next(req)
+        }
+      },
+    })
+    const model = faux([
+      fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' }),
+      fauxAssistantMessage('summary'),
+      fauxAssistantMessage('answer'),
+    ])
+    const plugins = [fallback, compaction, otel({ tracer, context: tracer.context })]
+
+    // Act
+    await createSession(createAgent({ model, plugins })).send('go').result
+
+    // Assert
+    const span = tracer.spans.find(s => s.name === 'compaction')!
+    const [failed, retried] = tracer.childrenOf(span)
+    expect(tracer.childrenOf(span).map(s => s.attributes['pi.plugin'])).toEqual(['compaction', 'compaction'])
+    expect(failed).toMatchObject({ ended: 1, status: { code: 2 }, attributes: { 'error.type': 'ModelCallError' } })
+    expect(retried).toMatchObject({ ended: 1, status: undefined })
+    expect(tracer.childrenOf(tracer.roots()[0]).map(s => s.name)).toEqual(['compaction', 'chat faux-1'])
+    expect(tracer.spans.every(s => s.ended === 1)).toBe(true)
+  })
+
   it('should record tool updates as span events, at most one per interval', async () => {
     // Arrange
     const tracer = fakeTracer()

@@ -20,7 +20,7 @@ import {
   createAgent,
   createSession,
   definePlugin,
-  mapDeltas,
+  mapEvents,
   PluginConflictError,
   rewriteHistory,
   RunError,
@@ -88,9 +88,9 @@ function gate(): { wait: () => Promise<void>; open: () => void; started: Promise
 function tracer(name: string, log: string[]): PluginSpec {
   return {
     name,
-    async *tool(ctx, next) {
+    async *toolCall(call, next) {
       log.push(`${name}>`)
-      const result = yield* next(ctx)
+      const result = yield* next(call)
       log.push(`<${name}`)
       return result
     },
@@ -171,10 +171,10 @@ describe('basic run', () => {
 })
 
 describe('plugin middleware', () => {
-  it('later plugins in the array wrap earlier ones', async () => {
+  it('earlier plugins in the array wrap later ones', async () => {
     const log: string[] = []
     const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
-    const plugins = [definePlugin(tracer('inner', log)), definePlugin(tracer('outer', log))]
+    const plugins = [definePlugin(tracer('outer', log)), definePlugin(tracer('inner', log))]
 
     await createSession(createAgent({ model, tools: [echo], plugins })).send('go').result
     expect(log).toEqual(['outer>', 'inner>', '<inner', '<outer'])
@@ -191,7 +191,7 @@ describe('plugin middleware', () => {
     })
     const deny = definePlugin({
       name: 'deny',
-      async *tool({ call }) {
+      async *toolCall(call) {
         return toolError(call, 'denied')
       },
     })
@@ -210,7 +210,7 @@ describe('plugin middleware', () => {
   it('errors thrown by middleware become isError results and the agent keeps running (I8)', async () => {
     const boom = definePlugin({
       name: 'boom',
-      async *tool() {
+      async *toolCall() {
         throw new Error('middleware failed')
       },
     })
@@ -326,8 +326,8 @@ describe('hooks', () => {
     expect(state.messages.map(contentOf)).toEqual(['go', 're:go', 'continue', 're:continue'])
   })
 
-  it('context: changes only this request, not the history', async () => {
-    const lastOnly = definePlugin({ name: 'last-only', context: messages => messages.slice(-1) })
+  it('view: changes only this request, not the history', async () => {
+    const lastOnly = definePlugin({ name: 'last-only', view: messages => messages.slice(-1) })
     const model = fauxModel([
       callEcho('a'),
       ctx => {
@@ -356,10 +356,10 @@ describe('hooks', () => {
     expect(textOf(await r.result)).toBe('replaced')
   })
 
-  it('request: mapDeltas changes only the streamed deltas; the stored message stays as the model wrote it', async () => {
+  it('request: mapEvents changes only the streamed events; the stored message stays as the model wrote it', async () => {
     const shout = definePlugin({
       name: 'shout',
-      request: mapDeltas(e => (e.type === 'text' ? { ...e, delta: e.delta.toUpperCase() } : e)),
+      request: mapEvents(e => (e.type === 'text' ? { ...e, delta: e.delta.toUpperCase() } : e)),
     })
     const model = fauxModel([fauxAssistantMessage('quiet reply')])
     const r = createSession(createAgent({ model, plugins: [shout] })).send('go')
@@ -368,7 +368,7 @@ describe('hooks', () => {
     expect(textOf(await r.result)).toBe('quiet reply')
   })
 
-  it('request: breaking out of r.text still aborts the model call through mapDeltas', async () => {
+  it('request: breaking out of r.text still aborts the model call through mapEvents', async () => {
     let seen: AbortSignal | undefined
     const model = fauxModel(
       [
@@ -379,7 +379,7 @@ describe('hooks', () => {
       ],
       { tokensPerSecond: 20 },
     )
-    const identity = definePlugin({ name: 'identity', request: mapDeltas(e => e) })
+    const identity = definePlugin({ name: 'identity', request: mapEvents(e => e) })
     const r = createSession(createAgent({ model, plugins: [identity] })).send('go')
 
     const text = r.text[Symbol.asyncIterator]()
@@ -390,10 +390,10 @@ describe('hooks', () => {
     expect(seen?.aborted).toBe(true)
   })
 
-  it('tool: after changes only the output', async () => {
+  it('toolCall: after changes only the output', async () => {
     const redact = definePlugin({
       name: 'redact',
-      tool: after(result => ({ ...result, content: [{ type: 'text', text: '***' }] })),
+      toolCall: after(result => ({ ...result, content: [{ type: 'text', text: '***' }] })),
     })
     const model = fauxModel([
       callEcho('secret'),
@@ -406,13 +406,13 @@ describe('hooks', () => {
     await createSession(createAgent({ model, tools: [echo], plugins: [redact] })).send('go').result
   })
 
-  it('update sees every Turn', async () => {
+  it('record sees every Turn', async () => {
     const seen: Turn['kind'][] = []
     const spy = definePlugin({
       name: 'spy',
-      update: (state, turn, next) => {
-        seen.push(turn.kind)
-        return next(state, turn)
+      record: (input, next) => {
+        seen.push(input.turn.kind)
+        return next(input)
       },
     })
     const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
@@ -478,8 +478,8 @@ describe('thinking levels', () => {
 })
 
 describe('rewriteHistory', () => {
-  it('turn returning rewriteHistory replaces the history; env is skipped, update and state see the rewrite', async () => {
-    let envCalls = 0
+  it('turn returning rewriteHistory replaces the history; toolCalls is skipped, record and state see the rewrite', async () => {
+    let batches = 0
     const seen: Turn['kind'][] = []
     const compact = definePlugin({
       name: 'compact',
@@ -489,13 +489,13 @@ describe('rewriteHistory', () => {
         }
         return yield* next(state)
       },
-      env: (msg, next) => {
-        envCalls++
-        return next(msg)
+      toolCalls: (message, next) => {
+        batches++
+        return next(message)
       },
-      update: (s, turn, next) => {
-        seen.push(turn.kind)
-        return next(s, turn)
+      record: (input, next) => {
+        seen.push(input.turn.kind)
+        return next(input)
       },
       state: { init: 0, reduce: (n, turn) => (turn.kind === 'rewrite' ? n + 1 : n) },
     })
@@ -511,7 +511,7 @@ describe('rewriteHistory', () => {
     const state = await r.state
 
     expect(state.messages.map(contentOf)).toEqual(['summary', 'ok'])
-    expect([envCalls, compact.select(state), (await r.summary).rewrites]).toEqual([1, 1, 1])
+    expect([batches, compact.select(state), (await r.summary).rewrites]).toEqual([1, 1, 1])
     expect(seen).toEqual(['input', 'model', 'rewrite', 'model'])
   })
 })

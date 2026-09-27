@@ -47,7 +47,7 @@ All members share one execution, so you can read several at once.
 | `r` itself         | `AsyncIterable<RunEvent>`   | Every event of the run in order, one `type` each ([below](#events))                                |
 | `r.result`         | `Promise<AssistantMessage>` | Final answer                                                                                       |
 | `r.state`          | `Promise<AgentState>`       | Final state                                                                                        |
-| `r.summary`        | `Promise<RunSummary>`       | Model turns, tokens, cost, model/tool time, per-tool calls/errors/ms                               |
+| `r.summary`        | `Promise<RunSummary>`       | Model turns, tokens, cost (plugin model calls included), model/tool time, per-tool calls/errors/ms |
 | `r.abort(reason?)` |                             | Cancels the run. Undelivered messages stay in the session.                                         |
 
 `result`, `state` and `summary` reject with a `RunError` if the run is aborted or fails. It carries `kind` (`'aborted'`, `'max_steps'`, `'provider'`, `'internal'`), the step `t`, the last committed `state` to resume from, and the original error as `cause`.
@@ -73,16 +73,19 @@ Reading `r` gives one flat stream; switch on `e.type`. Each event also has the s
 | ------------------------- | ---------------------------------------------------------------------------------------------- |
 | `step_start` / `step_end` | A step begins / is recorded. `step_end` is the same record as `r.turns`.                       |
 | `step_cancelled`          | A step was interrupted or aborted before being recorded. `open` lists the calls still running. |
-| `model_start`             | A request is sent: the model and the thinking level actually used                              |
-| `thinking` / `text`       | The model's output, as `delta`                                                                 |
+| `model_start`             | A request is sent: the model and the thinking level actually used, and `by` (below)            |
+| `thinking` / `text`       | The main model's output, as `delta`                                                            |
 | `tool_call`               | The model finished writing a call's arguments. **The tool has not started.**                   |
-| `model_end`               | The complete message, with usage and `ms`                                                      |
+| `model_end`               | The call succeeded: the complete message, with usage and `ms`                                  |
+| `model_error`             | The call failed: `error`, the provider's `usage` if any, and `ms`. A request plugin may retry. |
 | `tool_start` / `tool_end` | A call really starts / has its result, with `ms`. Parallel calls end in completion order.      |
 | `tool_update`             | A value the tool yielded (below)                                                               |
 | `run_end`                 | The run is over: `outcome` is `'done'` with the result, or `'failed'` with the `RunError`      |
 | `<plugin>:<event>`        | Whatever a plugin yields ([Writing Plugins](plugins.md#events-from-plugins))                   |
 
-Every `tool_start` is closed by its `tool_end` or by the step's `step_cancelled`, so a UI never keeps a spinner forever.
+Every `tool_start` is closed by its `tool_end` or by the step's `step_cancelled`, so a UI never keeps a spinner forever. Likewise every `model_start` is closed by exactly one `model_end`, `model_error` or `step_cancelled`, and at most one model call is open at a time, so they pair up in order.
+
+**`by`.** A plugin may call a model itself with [`ctx.complete`](plugins.md#calling-a-model-ctxcomplete), for a summary, say. Those calls' `model_start`, `model_end` and `model_error` carry `by: '<plugin name>'`; the main model's have no `by`. Their `thinking`, `text` and `tool_call` are not streamed, so `r.text` is only ever the main answer.
 
 ```ts
 for await (const e of r) {
@@ -121,7 +124,7 @@ const runTests = tool({
 })
 ```
 
-**Logging and tracing.** A `for await` loop that throws or leaves early aborts the run, and it sees only one run. For logs, traces and metrics use a plugin's read-only `observe` hook instead: it gets every event of every run of the agent from the first one, and what it throws is reported as a warning without touching the run. Ready-made: `@gaoxiang.ai/plugin-otel` and `@gaoxiang.ai/plugin-jsonl` in [`plugins/`](../plugins).
+**Logging and tracing.** A `for await` loop that throws or leaves early aborts the run, and it sees only one run. For logs, traces and metrics use a plugin's read-only `observe` hook instead: it gets every event of every run of the agent from the first one, and what it throws is reported as a warning without touching the run. `observe` is synchronous and never awaited: to export asynchronously, enqueue in `observe` and flush after the run ([example](plugins.md#observers-are-synchronous)). Ready-made: `@gaoxiang.ai/plugin-otel` and `@gaoxiang.ai/plugin-jsonl` in [`plugins/`](../plugins).
 
 ## Cancellation
 
@@ -175,4 +178,7 @@ const { turns, usage, modelMs, toolMs, tools } = await r.summary // this run
 usageOf(chat.state) // whole conversation
 ```
 
-`timing` includes `ms` and, for model turns, `modelMs`, `firstTokenMs` and `toolMs` keyed by tool call id, all computed from the events (so `toolMs[id]` equals that call's `tool_end.ms`). `toolMs` in the summary adds up parallel calls, so it can exceed wall time. `usageOf` counts only messages still in history, so compacted messages drop out.
+`timing` includes `ms` and, for model turns, `modelMs`, `firstTokenMs` and `toolMs` keyed by tool call id, all computed from the events (so `toolMs[id]` equals that call's `tool_end.ms`). `toolMs` in the summary adds up parallel calls, so it can exceed wall time. `r.summary.usage` and `usageOf` count different things, so they need not agree:
+
+- `r.summary.usage` sums the usage of every `model_end` and `model_error` published in this run, plugin `ctx.complete` calls included. A step that is later cancelled, stopped or rewritten keeps what it already spent. A call cut off by an interrupt reports no usage, so it is not counted.
+- `usageOf(state)` sums the main model's messages still in history. Plugin calls and compacted messages drop out.

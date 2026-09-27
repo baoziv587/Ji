@@ -1,12 +1,15 @@
 // Fine-grained hooks: pnpm --filter @gaoxiang.ai/examples hooks
 //
 //   input    keep going automatically while the agent is idle but the task is unfinished (keepGoing plugin)
-//   context  add retrieval results to this one request without touching the history
+//   view     add retrieval results to this one request without touching the history
 //   request  switch to a fallback model on error
 //   turn     stop once over budget (budget plugin)
-import type { Plugin } from '@gaoxiang.ai/llm'
+//
+// The list reads outside in: lowTemperature comes before fallback, so both the first try and the fallback run at
+// temperature 0.
+import type { AssistantMessage, ModelRequest, Plugin, RequestContext } from '@gaoxiang.ai/llm'
 import type { Api, Model } from '@mariozechner/pi-ai'
-import { before, createAgent, createSession, definePlugin, textOf, user } from '@gaoxiang.ai/llm'
+import { before, createAgent, createSession, definePlugin, mapEvents, textOf, user } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxText } from '@mariozechner/pi-ai'
 import { budget } from './plugins/budget.ts'
 import { keepGoing } from './plugins/keep-going.ts'
@@ -15,20 +18,31 @@ import { pickModel, show } from './shared.ts'
 /** Only affects the messages sent to the model; the history never contains the retrieval results. */
 const retrieval = definePlugin({
   name: 'retrieval',
-  context: messages => [user('[docs] The project uses pnpm and vitest.'), ...messages],
+  view: messages => [user('[docs] The project uses pnpm and vitest.'), ...messages],
 })
 
 /**
- * Retries on the fallback model when the main one fails. Retrying is only safe before any output has
- * streamed; after that the user has already seen a partial reply.
+ * Retries on the fallback model when a call fails. Only before any output has streamed: after that the user has
+ * already seen part of a reply, and a second answer would be appended to it. A cancelled step is never retried.
  */
 function fallbackTo(fallback: Model<Api>): Plugin {
   return definePlugin({
     name: 'fallback',
-    async *request(req, next) {
+    async *request(req, next, ctx) {
+      let streamed = false
+      const noteOutput = mapEvents<ModelRequest, AssistantMessage, RequestContext>(e => {
+        streamed ||= (e.type === 'text' && e.delta !== '') || e.type === 'tool_call'
+        return e
+      })
+
       try {
-        return yield* next(req)
+        return yield* noteOutput(req, next, ctx)
       } catch (error) {
+        ctx.signal.throwIfAborted()
+        if (streamed) {
+          throw error
+        }
+
         console.log(`\n  [request] ${String(error)} → fallback`)
         return yield* next({ ...req, model: fallback })
       }

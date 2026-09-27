@@ -1,13 +1,14 @@
-// summaryReducer and usageOf are pure, so they are tested with hand-built turns and exact numbers.
+// summaryReducer, usageOf and addUsage are pure, so they are tested with hand-built turns and exact numbers.
 // Timing and cost cannot be asserted exactly through the faux provider (timings vary, cost is always 0).
-import type { AssistantMessage, ToolCall } from '@mariozechner/pi-ai'
+import type { AssistantMessage, ToolCall, Usage } from '@mariozechner/pi-ai'
 import type { TimedTurn } from './summary.ts'
-import type { RunSummary } from './types.ts'
+import type { RunSummary, UsageTotals } from './types.ts'
 import { resultOf } from '@gaoxiang.ai/kernel/reduce'
 import { fauxAssistantMessage } from '@mariozechner/pi-ai'
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { user } from './message.ts'
-import { summaryReducer, usageOf } from './summary.ts'
+import { addUsage, NO_USAGE, summaryReducer, usageOf } from './summary.ts'
 import { toolError, toolResult } from './tool.ts'
 
 function assistant(input: number, output: number, cost: number): AssistantMessage {
@@ -24,11 +25,20 @@ function assistant(input: number, output: number, cost: number): AssistantMessag
   }
 }
 
-function summarize(turns: TimedTurn[]): RunSummary {
+function summarize(turns: TimedTurn[]): Omit<RunSummary, 'usage'> {
   return resultOf(summaryReducer, turns.reduce(summaryReducer.reduce, summaryReducer.init))
 }
 
 const call = (id: string, name: string): ToolCall => ({ type: 'toolCall', id, name, arguments: {} })
+
+// Integer costs keep the sums exact, so any split must agree to the last digit
+const usage: fc.Arbitrary<Usage> = fc
+  .record({ input: fc.nat(), output: fc.nat(), cacheRead: fc.nat(), cacheWrite: fc.nat(), cost: fc.nat() })
+  .map(u => ({
+    ...u,
+    totalTokens: u.input + u.output,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: u.cost },
+  }))
 
 describe('usageOf', () => {
   it('sums every usage field over assistant messages and skips other roles', () => {
@@ -44,6 +54,25 @@ describe('usageOf', () => {
       cacheWrite: 0,
       cost: 0,
     })
+  })
+})
+
+describe('addUsage', () => {
+  it('should always make the total of a sequence the same however it is split', () => {
+    fc.assert(
+      fc.property(fc.array(usage), fc.nat(), (usages, cut) => {
+        // Arrange
+        const at = usages.length === 0 ? 0 : cut % usages.length
+        const sum = (list: Usage[], from: UsageTotals): UsageTotals => list.reduce(addUsage, from)
+
+        // Act
+        const whole = sum(usages, NO_USAGE)
+        const split = sum(usages.slice(at), sum(usages.slice(0, at), NO_USAGE))
+
+        // Assert
+        expect(split).toEqual(whole)
+      }),
+    )
   })
 })
 
@@ -68,7 +97,6 @@ describe('summaryReducer', () => {
   it('counts each kind of step and sums timings and tool stats exactly', () => {
     expect(summarize(turns)).toEqual({
       turns: 2,
-      usage: { input: 150, output: 30, cacheRead: 2, cacheWrite: 4, cost: 0.75 },
       modelMs: 150,
       toolMs: 50,
       tools: { echo: { calls: 1, errors: 0, ms: 30 }, fail: { calls: 1, errors: 1, ms: 20 } },
@@ -77,14 +105,13 @@ describe('summaryReducer', () => {
     })
   })
 
-  it('uses the same usage reducer as usageOf, so the two agree on the model turns (promise 5)', () => {
-    expect(summarize(turns).usage).toEqual(usageOf({ messages: [withTools, final], plugins: {} }))
+  it('leaves usage to the model events (RFC-0006 §5.5)', () => {
+    expect(summarize(turns)).not.toHaveProperty('usage')
   })
 
   it('is all zeros before any step', () => {
     expect(summarize([])).toEqual({
       turns: 0,
-      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 },
       modelMs: 0,
       toolMs: 0,
       tools: {},

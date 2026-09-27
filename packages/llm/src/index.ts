@@ -9,16 +9,24 @@
 export { type Agent, type AgentOptions, createAgent } from './agent.ts'
 export { RunError, type RunErrorKind } from './errors.ts'
 export { callsOf, textOf, user } from './message.ts'
-export { after, before, mapDeltas, type Middleware } from './middleware.ts'
+export { after, before, type Cancellable, intercept, mapEvents, type Middleware } from './middleware.ts'
 export { findModel, listModels, type ModelInfo, UnknownModelError, UnsupportedThinkingError } from './models.ts'
 export {
+  type CallOptions,
+  type CompleteRequest,
   definePlugin,
-  type EnvCall,
+  type HookContext,
+  type InputContext,
   type Plugin,
   PluginConflictError,
   type PluginList,
   type PluginSpec,
   type PluginState,
+  type RecordInput,
+  type RequestContext,
+  type ToolCallsRunner,
+  type TurnContext,
+  type TurnNext,
   type TurnStream,
 } from './plugin.ts'
 export type { Run } from './run.ts'
@@ -44,7 +52,6 @@ export type {
   RunSummary,
   StreamOptions,
   ThinkingLevel,
-  ToolContext,
   ToolRunner,
   Turn,
   TurnEvent,
@@ -56,4 +63,13 @@ export type { Stream } from '@gaoxiang.ai/kernel'
 
 // What writing an agent needs from pi-ai, so tools, events and models come from one import
 export { Type } from '@mariozechner/pi-ai'
-export type { Api, AssistantMessage, Message, Model, ToolCall, ToolResultMessage, TSchema } from '@mariozechner/pi-ai'
+export type {
+  Api,
+  AssistantMessage,
+  Message,
+  Model,
+  ToolCall,
+  ToolResultMessage,
+  TSchema,
+  Usage,
+} from '@mariozechner/pi-ai'

@@ -1,6 +1,6 @@
 // @gaoxiang.ai/plugin-throttle-updates: at most one tool_update per call every `ms` (RFC-0005 §3.5)
 //
-//   A tool middleware is a stream transform, so throttling is a filter over what next yields. Only tool_update
+//   A toolCall middleware is a stream transform, so throttling is a filter over what next yields. Only tool_update
 //   events are dropped; tool_start, tool_end, plugin events and the result pass through untouched.
 
 import type { Payload, Plugin, Stream } from '@gaoxiang.ai/llm'
@@ -17,7 +17,7 @@ export interface ThrottleOptions {
 export function throttleUpdates({ ms = 100, now = () => performance.now() }: ThrottleOptions = {}): Plugin {
   return definePlugin({
     name: 'throttle-updates',
-    tool: (ctx, next) => dropUpdatesWithin(next(ctx), ms, now),
+    toolCall: (call, next) => dropUpdatesWithin(next(call), ms, now),
   })
 }
 

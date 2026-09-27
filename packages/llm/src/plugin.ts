@@ -1,36 +1,31 @@
 import type { Extension, Step, Stream } from '@gaoxiang.ai/kernel'
 import type { Lens } from '@gaoxiang.ai/kernel/advanced'
-import type { AssistantMessage, Message, ToolResultMessage } from '@mariozechner/pi-ai'
+import type { AssistantMessage, Message, ToolCall, ToolResultMessage } from '@mariozechner/pi-ai'
 import type {
   AgentAction,
   AgentState,
   AgentTool,
-  Boundary,
   ModelCall,
   ModelRequest,
   Payload,
   RunEvent,
   RunInfo,
-  ToolContext,
   ToolRunner,
   Turn,
 } from './types.ts'
+import { sameData, warn } from './diagnostics.ts'
 import { callsOf } from './message.ts'
 import { actionOf, isModelAction, turnOf } from './turn.ts'
 
-/** A pure reducer run after each step's update; its result is stored in AgentState.plugins[name]. */
-export interface PluginState<State> {
-  init: State
-  reduce: (own: State, turn: Turn) => State
-}
-
 /**
- * Fields are listed in the order they run within a step (RFC-0004 §4).
- * Transforms `(value, context) => value` run in plugin order; for middleware `(input, next) => output`,
- * earlier plugins are nested inside later ones.
+ * Fields are listed in the order they run within a step (RFC-0004 §4). Two shapes (RFC-0006 §3):
  *
- * The middleware with side effects (turn, request, env, tool) are streams: `yield` adds an event to the run,
- * `return` gives the result, `yield* next(...)` passes the inner layers' events through (RFC-0005 §3.2).
+ *   transform    (value, ctx) => value | Promise<value>           input, view: plugins run in list order
+ *   middleware   (input, next, ctx) => Stream<Payload, output>    turn, request, toolCalls, toolCall: earlier plugins
+ *                                                                  are outer, so they see the input first
+ *
+ * The middleware are streams: `yield` adds an event to the run, `return` gives the result, `yield* next(...)` passes
+ * the inner layers' events through (RFC-0005 §3.2). system, record and state.reduce are pure and get no ctx.
  */
 export interface PluginSpec<State = undefined> {
   name: string
@@ -40,35 +35,90 @@ export interface PluginSpec<State = undefined> {
   system?: (prompt: string) => string
   /**
    * Middleware that decides this step's turn: insert messages, call the model, or return rewriteHistory(...) to replace
-   * history or stop(state) to end. The turn's tool calls run afterwards, in env.
+   * history or stop(state) to end. ctx.complete calls a model of the plugin's own. The tool calls run afterwards.
    */
-  turn?: (state: AgentState, next: (state: AgentState) => TurnStream) => TurnStream
+  turn?: (state: AgentState, next: TurnNext, ctx: TurnContext<State>) => TurnStream
   /** Transform of the messages to insert at this boundary; starts with the queued messages deliverable now. */
-  input?: (messages: Message[], boundary: Boundary) => Message[] | Promise<Message[]>
+  input?: (messages: Message[], ctx: InputContext<State>) => Message[] | Promise<Message[]>
   /** Transform of the messages sent in this request only; history is untouched. */
-  context?: (messages: Message[], state: AgentState) => Message[] | Promise<Message[]>
-  /** Middleware around one model call. */
-  request?: (req: ModelRequest, next: ModelCall) => Stream<Payload, AssistantMessage>
-  /** Middleware around all tool calls of one model turn; turns without tool calls skip it. */
-  env?: (msg: AssistantMessage, next: EnvCall) => Stream<Payload, ToolResultMessage[]>
-  /** Middleware around one tool call. */
-  tool?: (ctx: ToolContext, next: ToolRunner) => Stream<Payload, ToolResultMessage>
-  /** Middleware that writes state. Must be synchronous and pure; sees every Turn. */
-  update?: (state: AgentState, turn: Turn, next: (state: AgentState, turn: Turn) => AgentState) => AgentState
+  view?: (messages: Message[], ctx: HookContext<State>) => Message[] | Promise<Message[]>
+  /** Middleware around one model call, the main model's and every ctx.complete alike (ctx.by tells them apart). */
+  request?: (req: ModelRequest, next: ModelCall, ctx: RequestContext<State>) => Stream<Payload, AssistantMessage>
+  /** Middleware around all tool calls of one model turn; turns without tool calls, the final answer included, skip it. */
+  toolCalls?: (
+    message: AssistantMessage,
+    next: ToolCallsRunner,
+    ctx: HookContext<State>,
+  ) => Stream<Payload, ToolResultMessage[]>
+  /** Middleware around one tool call. Throw for failures a retry may fix; return toolError(...) for expected ones. */
+  toolCall?: (call: ToolCall, next: ToolRunner, ctx: HookContext<State>) => Stream<Payload, ToolResultMessage>
+  /** Middleware that writes history. Must be synchronous and pure; sees every Turn. */
+  record?: (input: RecordInput, next: (input: RecordInput) => AgentState) => AgentState
   state?: PluginState<State>
   /**
-   * Read-only: receives every event of every run of the agent, in order, from the first one. Called synchronously;
-   * the return value is ignored and anything thrown is reported as a warning, so the run is never affected.
+   * Read-only: receives every event of every run of the agent, in order, from the first one. Called synchronously and
+   * never awaited; anything thrown, or a promise returned, is reported as a warning, so the run is never affected.
    */
   observe?: (e: RunEvent, run: RunInfo) => void
 }
 
+/** A pure reducer run after each step's record; its result is stored in AgentState.plugins[name]. */
+export interface PluginState<State> {
+  init: State
+  reduce: (own: State, turn: Turn) => State
+}
+
+/** What every hook with a ctx gets. One snapshot per step: all hooks of a step see the same values. */
+export interface HookContext<State = undefined> {
+  /** The state committed before this step started. */
+  readonly state: AgentState
+  /** This plugin's own state: plugin.select(ctx.state). */
+  readonly own: State
+  /** Fires when this step is interrupted or the run is aborted. Pass it to any IO the hook starts. */
+  readonly signal: AbortSignal
+}
+
+export interface InputContext<State = undefined> extends HookContext<State> {
+  /** History is empty, or its last message is an assistant message without tool calls. */
+  readonly idle: boolean
+}
+
+export interface TurnContext<State = undefined> extends HookContext<State> {
+  /**
+   * Calls a model through the agent's request chain, so fallback and other request plugins apply. Its model events
+   * carry `by: <plugin name>` and its usage counts in r.summary; its thinking, text and tool calls are not streamed.
+   * One call at a time: running several at once is not supported.
+   */
+  complete: (req: CompleteRequest, options?: CallOptions) => Stream<Payload, AssistantMessage>
+}
+
+/** No `complete` here: it would go through this very hook again. */
+export interface RequestContext<State = undefined> extends HookContext<State> {
+  /** The plugin whose ctx.complete made this request; undefined for the main model. */
+  readonly by?: string
+}
+
+/** Only messages are required. model, thinking and options default to the agent's; systemPrompt and tools to empty. */
+export type CompleteRequest = Pick<ModelRequest, 'messages'> & Partial<Omit<ModelRequest, 'messages' | 'state'>>
+
+export interface CallOptions {
+  /** Merged with the step's signal: it can cut this one call short, never outlive a cancelled step. */
+  signal?: AbortSignal
+}
+
+export interface RecordInput {
+  state: AgentState
+  turn: Turn
+}
+
 export type TurnStream = Stream<Payload, Step<AgentAction, AssistantMessage>>
 
-export type EnvCall = (msg: AssistantMessage) => Stream<Payload, ToolResultMessage[]>
+export type TurnNext = (state: AgentState) => TurnStream
+
+export type ToolCallsRunner = (message: AssistantMessage) => Stream<Payload, ToolResultMessage[]>
 
 export interface Plugin<State = undefined> extends PluginSpec<State> {
-  /** Returns state.init until this plugin's state has been written. */
+  /** Returns state.init until this plugin's state has been written. Inside its own hooks, ctx.own is the same. */
   select: (s: AgentState) => State
 }
 
@@ -118,8 +168,12 @@ export class PluginConflictError extends Error {
   }
 }
 
-export function flattenPlugins(list: PluginList): AnyPlugin[] {
-  return list.flatMap(item => (Array.isArray(item) ? flattenPlugins(item) : [item as AnyPlugin]))
+/**
+ * Flattens nested presets and keeps each plugin object once, where it first appears (RFC-0006 §6.1):
+ * [a, [b, a]] is [a, b]. Only the same object counts as the same plugin; two objects sharing a name still conflict.
+ */
+export function pluginsOf(list: PluginList): AnyPlugin[] {
+  return [...new Set(flatten(list))]
 }
 
 /** Only distinct objects sharing a name conflict; registering the same object twice is fine. */
@@ -131,36 +185,76 @@ export function assertNoConflicts(tools: AgentTool[], plugins: AnyPlugin[]): voi
   }
 }
 
+/** Builds the ctx of each hook for the step in progress. */
+export interface HookContexts {
+  of: (plugin: AnyPlugin) => HookContext<unknown>
+  turn: (plugin: AnyPlugin) => TurnContext<unknown>
+}
+
 type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, Payload>
 
 /**
- * Plugin turn / env / update / state -> kernel middleware (turn wraps the kernel's policy). update and state work on Turns, so this converts to and
- * from the kernel's (action, obs); state.reduce runs on the result of this plugin's update, inside its own layer.
+ * Plugin turn / toolCalls / record / state -> kernel middleware (turn wraps the kernel's policy, toolCalls its env).
+ * record and state work on Turns, so this converts to and from the kernel's (action, obs); state.reduce runs on the
+ * result of this plugin's record, inside its own layer.
+ *
+ * With `checkDeterminism`, state.reduce runs twice on the same input; if the results differ, the plugin gets one
+ * DeterminismWarning and the first result is kept (RFC-0006 §8).
  */
-export function extensionOf(plugin: AnyPlugin): LLMExtension {
-  const { name, turn, env, update, state } = plugin
-  const ext: LLMExtension = { policy: turn }
+export function extensionOf(plugin: AnyPlugin, contexts: HookContexts, checkDeterminism: boolean): LLMExtension {
+  const { name, turn, toolCalls, record, state } = plugin
+  const ext: LLMExtension = {}
 
-  if (env) {
-    ext.env = (action, next) => (hasToolCalls(action) ? env(action, next) : next(action))
+  if (turn) {
+    ext.policy = (s, next) => turn(s, next, contexts.turn(plugin))
   }
 
-  if (update || state) {
+  if (toolCalls) {
+    ext.env = (action, next) => (hasToolCalls(action) ? toolCalls(action, next, contexts.of(plugin)) : next(action))
+  }
+
+  if (record || state) {
     const slot = state ? pluginStateSlot(name, state.init) : undefined
 
     ext.update = (s, action, results, next) => {
-      const turn = turnOf(action, results)
-      const inner = (s2: AgentState, turn2: Turn): AgentState => next(s2, ...actionOf(turn2))
-      const updated = update ? update(s, turn, inner) : inner(s, turn)
+      const input = { state: s, turn: turnOf(action, results) }
+      const inner = ({ state: s2, turn: turn2 }: RecordInput): AgentState => next(s2, ...actionOf(turn2))
+      const updated = record ? record(input, inner) : inner(input)
 
       if (!state || !slot) {
         return updated
       }
-      return slot.set(updated, state.reduce(slot.get(updated), turn))
+
+      const own = slot.get(updated)
+      const reduced = state.reduce(own, input.turn)
+      if (checkDeterminism) {
+        checkReduce(plugin, reduced, state.reduce(own, input.turn))
+      }
+      return slot.set(updated, reduced)
     }
   }
 
   return ext
+}
+
+/** Plugins already warned about; each gets at most one DeterminismWarning. */
+const unstable = new WeakSet<AnyPlugin>()
+
+function checkReduce(plugin: AnyPlugin, first: unknown, again: unknown): void {
+  if (sameData(first, again) || unstable.has(plugin)) {
+    return
+  }
+
+  unstable.add(plugin)
+  warn(
+    `state.reduce of plugin "${plugin.name}" returned different results for the same input; it must be pure. ` +
+      'The first result was kept.',
+    'DeterminismWarning',
+  )
+}
+
+function flatten(list: PluginList): AnyPlugin[] {
+  return list.flatMap(item => (Array.isArray(item) ? flatten(item) : [item as AnyPlugin]))
 }
 
 function hasToolCalls(action: AgentAction): action is AssistantMessage {

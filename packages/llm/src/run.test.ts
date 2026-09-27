@@ -129,7 +129,7 @@ describe('run events', () => {
     // Arrange
     const deny = definePlugin({
       name: 'deny',
-      async *tool({ call }) {
+      async *toolCall(call) {
         return toolError(call, 'denied')
       },
     })
@@ -148,9 +148,9 @@ describe('run events', () => {
     // Arrange
     const wrap = definePlugin({
       name: 'wrap',
-      async *tool(ctx, next) {
+      async *toolCall(call, next) {
         yield { type: 'wrap:before' }
-        const result = yield* next(ctx)
+        const result = yield* next(call)
         yield { type: 'wrap:after' }
         return result
       },

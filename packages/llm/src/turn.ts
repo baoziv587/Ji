@@ -6,8 +6,8 @@ import { lastAssistant } from './message.ts'
 
 /**
  * Return from a turn middleware to replace the whole history with `messages`.
- * Do any IO needed to build them (e.g. a summarizing model call) in the turn middleware; the replacement itself happens in
- * update, so it stays replayable.
+ * Do any IO needed to build them (e.g. a summarizing ctx.complete) in the turn middleware; the replacement itself
+ * happens in record, so it stays replayable.
  */
 export function rewriteHistory(messages: Message[]): Step<RewriteAction, never> {
   return act({ kind: 'rewrite', messages })

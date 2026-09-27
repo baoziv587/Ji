@@ -11,15 +11,17 @@ import type {
   RunSummary,
   TurnEvent,
   TurnTiming,
+  UsageTotals,
 } from './types.ts'
 import { randomUUID } from 'node:crypto'
 import { performance } from 'node:perf_hooks'
 import { MaxStepsError, unfold } from '@gaoxiang.ai/kernel'
 import { resultOf } from '@gaoxiang.ai/kernel/reduce'
-import { instantiate, observe } from './agent.ts'
+import { checks, instantiate, observe } from './agent.ts'
+import { deepFreeze } from './diagnostics.ts'
 import { ModelCallError, RunError } from './errors.ts'
 import { isIdle } from './message.ts'
-import { summaryReducer } from './summary.ts'
+import { addUsage, NO_USAGE, summaryReducer } from './summary.ts'
 import { turnOf } from './turn.ts'
 
 /**
@@ -79,6 +81,8 @@ export class AgentRun implements Run {
   private end: RunEnd | undefined
 
   private acc = summaryReducer.init
+  /** Folded from model_end and model_error as they are published, so no later step outcome can take it back. */
+  private usage: UsageTotals = NO_USAGE
   private steps = 0
   /** The step in progress, folded from the payloads it has published so far. */
   private step = openStep(performance.now())
@@ -93,6 +97,9 @@ export class AgentRun implements Run {
     this.host = host
     this.info = { id: randomUUID(), session: host.id }
     this.observe = host.agent[observe]
+    if (host.agent[checks]) {
+      deepFreeze(host.state)
+    }
 
     this.result = this.outcome.promise.then(o => o.result)
     this.state = this.outcome.promise.then(o => o.state)
@@ -276,7 +283,7 @@ export class AgentRun implements Run {
     const turn = turnOf(action, results)
     const timing = timingOf(this.step, now, turn.kind === 'model')
 
-    this.host.state = state
+    this.host.state = this.host.agent[checks] ? deepFreeze(state) : state
     this.acc = summaryReducer.reduce(this.acc, { turn, timing })
     const record: TurnEvent = { t: this.steps, turn, state, timing, summary: this.summarySoFar }
     this.log.push(record)
@@ -308,11 +315,11 @@ export class AgentRun implements Run {
   }
 
   private get summarySoFar(): RunSummary {
-    return resultOf(summaryReducer, this.acc)
+    return { ...resultOf(summaryReducer, this.acc), usage: this.usage }
   }
 
   /*
-   *   deltas, step_end --publishInStep--> fold into this.step, then publish
+   *   deltas, step_end --publishInStep--> fold into this.step and usage, then publish
    *   every event --------publish-------> observe (every plugin, isolated)
    *                                    +-> a buffer per live reader --> for await (run), run.text
    *   commit ---------------------------> log[] --> run.turns (replays from log[0])
@@ -325,6 +332,7 @@ export class AgentRun implements Run {
       this.publish({ type: 'step_start' })
     }
     this.step = scanStep(this.step, payload, performance.now())
+    this.usage = scanUsage(this.usage, payload)
     this.publish(payload)
   }
 
@@ -429,7 +437,8 @@ function scanStep(step: OpenStep, payload: Payload, at: number): OpenStep {
     case 'tool_call':
       return s.firstToken === undefined ? { ...s, firstToken: at } : s
     case 'model_end':
-      return { ...s, modelEnd: at }
+      // A plugin's ctx.complete does not count toward the main model's time
+      return payload.by === undefined ? { ...s, modelEnd: at } : s
     case 'tool_start':
       return { ...s, open: new Map(s.open).set(payload.call.id, payload.call) }
     case 'tool_end': {
@@ -440,6 +449,17 @@ function scanStep(step: OpenStep, payload: Payload, at: number): OpenStep {
     default:
       return s
   }
+}
+
+/** r.summary.usage is a fold over the model events (RFC-0006 §5.5): every attempt that reported usage counts once. */
+function scanUsage(total: UsageTotals, payload: Payload): UsageTotals {
+  if (payload.type === 'model_end') {
+    return addUsage(total, payload.message.usage)
+  }
+  if (payload.type === 'model_error' && payload.usage !== undefined) {
+    return addUsage(total, payload.usage)
+  }
+  return total
 }
 
 function timingOf(step: OpenStep, at: number, model: boolean): TurnTiming {

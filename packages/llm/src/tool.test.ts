@@ -8,14 +8,15 @@ import { describe, expect, it } from 'vitest'
 import { tool, toolRunner } from './tool.ts'
 
 const call: ToolCall = { type: 'toolCall', id: 'call-1', name: 'count', arguments: {} }
+const signal = new AbortController().signal
 
 describe('toolRunner', () => {
   it('should turn what a plain tool returns into a result, with no update', async () => {
     // Arrange
-    const run = toolRunner([counting(async () => 'three')])
+    const run = toolRunner([counting(async () => 'three')], signal)
 
     // Act
-    const { deltas, result } = await drain(run({ call, signal: new AbortController().signal }))
+    const { deltas, result } = await drain(run(call))
 
     // Assert
     expect(deltas).toEqual([])
@@ -24,16 +25,19 @@ describe('toolRunner', () => {
 
   it('should stream each value a generator tool yields as a tool_update and return what it returns', async () => {
     // Arrange
-    const run = toolRunner([
-      counting(async function* () {
-        yield 1
-        yield 'two'
-        return 'counted'
-      }),
-    ])
+    const run = toolRunner(
+      [
+        counting(async function* () {
+          yield 1
+          yield 'two'
+          return 'counted'
+        }),
+      ],
+      signal,
+    )
 
     // Act
-    const { deltas, result } = await drain(run({ call, signal: new AbortController().signal }))
+    const { deltas, result } = await drain(run(call))
 
     // Assert
     expect(deltas).toEqual([
@@ -45,15 +49,18 @@ describe('toolRunner', () => {
 
   it('should rethrow what the tool throws, so outer middleware can retry or report it', async () => {
     // Arrange
-    const run = toolRunner([
-      counting(async function* () {
-        yield 1
-        throw new Error('count failed')
-      }),
-    ])
+    const run = toolRunner(
+      [
+        counting(async function* () {
+          yield 1
+          throw new Error('count failed')
+        }),
+      ],
+      signal,
+    )
 
     // Act
-    const outcome = drain(run({ call, signal: new AbortController().signal }))
+    const outcome = drain(run(call))
 
     // Assert
     await expect(outcome).rejects.toThrow('count failed')
@@ -63,15 +70,18 @@ describe('toolRunner', () => {
     await fc.assert(
       fc.asyncProperty(fc.array(fc.anything()), async values => {
         // Arrange
-        const run = toolRunner([
-          counting(async function* () {
-            yield* values
-            return 'done'
-          }),
-        ])
+        const run = toolRunner(
+          [
+            counting(async function* () {
+              yield* values
+              return 'done'
+            }),
+          ],
+          signal,
+        )
 
         // Act
-        const { deltas } = await drain(run({ call, signal: new AbortController().signal }))
+        const { deltas } = await drain(run(call))
 
         // Assert
         expect(deltas.map(d => d.type === 'tool_update' && d.data)).toEqual(values)
@@ -82,18 +92,21 @@ describe('toolRunner', () => {
   it('should run the finally block of a generator tool when the stream is cancelled', async () => {
     // Arrange
     let closed = false
-    const run = toolRunner([
-      counting(async function* () {
-        try {
-          yield 1
-          yield 2
-          return 'never'
-        } finally {
-          closed = true
-        }
-      }),
-    ])
-    const stream = run({ call, signal: new AbortController().signal })
+    const run = toolRunner(
+      [
+        counting(async function* () {
+          try {
+            yield 1
+            yield 2
+            return 'never'
+          } finally {
+            closed = true
+          }
+        }),
+      ],
+      signal,
+    )
+    const stream = run(call)
 
     // Act
     await stream.next()

@@ -11,6 +11,7 @@ import type {
   ToolCall,
   ToolResultMessage,
   TSchema,
+  Usage,
 } from '@mariozechner/pi-ai'
 import type { RunError } from './errors.ts'
 
@@ -21,7 +22,7 @@ export interface AgentState {
 }
 
 /**
- * One record per step. update, plugin state.reduce and Run.turns all see the same sequence (I13).
+ * One record per step. record, plugin state.reduce and Run.turns all see the same sequence (I13).
  * The final answer is a 'model' turn with `results: []`.
  */
 export type Turn =
@@ -59,7 +60,7 @@ export type ThinkingLevel = ModelThinkingLevel
 export interface ModelRequest {
   model: Model<Api>
   systemPrompt: string
-  /** Output of the context hooks, not the stored history. */
+  /** Output of the view hooks, not the stored history. */
   messages: Message[]
   tools: Tool[]
   /** Mapped to the nearest level the request's model supports; model_start reports the level actually sent. */
@@ -69,7 +70,7 @@ export interface ModelRequest {
   state: AgentState
 }
 
-/** pi-ai stream options sent with every model call; the signal belongs to the Run and the level to `thinking`. */
+/** pi-ai stream options sent with every model call; the signal belongs to the step and the level to `thinking`. */
 export type StreamOptions = Omit<SimpleStreamOptions, 'signal' | 'reasoning'>
 
 export type ModelCall = (req: ModelRequest) => Stream<Payload, AssistantMessage>
@@ -87,13 +88,8 @@ export type AgentTool<T extends TSchema = TSchema> = Tool<T> & {
   run(args: Static<T>, signal: AbortSignal): string | Promise<string> | Stream<unknown, string>
 }
 
-export interface ToolContext {
-  call: ToolCall
-  signal: AbortSignal
-}
-
 /** Runs one tool call. The agent turns anything thrown into an isError result for the model (I8). */
-export type ToolRunner = (ctx: ToolContext) => Stream<Payload, ToolResultMessage>
+export type ToolRunner = (call: ToolCall) => Stream<Payload, ToolResultMessage>
 
 /** `cost` is in USD, as priced by the provider. */
 export interface UsageTotals {
@@ -138,13 +134,20 @@ export interface Events {
   step_end: Omit<TurnEvent, 't'>
   /** The step was dropped uncommitted; `open` lists the tool calls that had started but not ended. */
   step_cancelled: { reason: 'interrupt' | 'abort' | 'error'; open: ToolCall[] }
-  /** The request actually sent: after request plugins, with the thinking level the model supports. */
-  model_start: { model: ModelRef; thinking: ThinkingLevel }
+  /**
+   * The request actually sent: after request plugins, with the thinking level the model supports. Each model_start is
+   * closed by exactly one model_end, model_error or step_cancelled; at most one is open at a time (RFC-0006 §5.4).
+   * `by` names the plugin whose ctx.complete made the call; the main model's calls have none.
+   */
+  model_start: { model: ModelRef; thinking: ThinkingLevel; by?: string }
+  /** Main model only: a plugin's ctx.complete does not stream its content. */
   thinking: { delta: string }
   text: { delta: string }
   /** The model finished writing this call's arguments; the tool has not started. */
   tool_call: { call: ToolCall }
-  model_end: { message: AssistantMessage; ms: number }
+  model_end: { message: AssistantMessage; ms: number; by?: string }
+  /** The provider reported a failure; a request plugin may still retry. `usage` is what the provider billed, if any. */
+  model_error: { error: Error; usage?: Usage; ms: number; by?: string }
   tool_start: { call: ToolCall }
   /** A value the tool yielded, of any type. */
   tool_update: { call: ToolCall; data: unknown }
@@ -168,6 +171,10 @@ export interface RunInfo {
 export interface RunSummary {
   /** Number of model turns. */
   turns: number
+  /**
+   * Summed over every model_end and model_error published, plugin calls included; a step that is later cancelled,
+   * stopped or rewritten keeps what it already spent. So it can exceed the usageOf difference of the history.
+   */
   usage: UsageTotals
   modelMs: number
   /** Sum over tool calls; parallel calls overlap, so this can exceed wall-clock time. */

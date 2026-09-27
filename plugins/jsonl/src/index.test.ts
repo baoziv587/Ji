@@ -1,5 +1,5 @@
 import type { Api, Model } from '@gaoxiang.ai/llm'
-import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, definePlugin, tool, Type } from '@gaoxiang.ai/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
 import { jsonl } from './index.ts'
@@ -20,6 +20,41 @@ describe('jsonl', () => {
     expect(records.map(r => r.type)).toEqual(events.map(e => e.type))
     expect(new Set(records.map(r => r.run)).size).toBe(1)
     expect(records.every(r => typeof r.session === 'string')).toBe(true)
+  })
+
+  it('should keep the plugin a model call was made by, and the error of a failed one', async () => {
+    // Arrange
+    const lines: string[] = []
+    const helper = definePlugin({
+      name: 'helper',
+      async *turn(state, next, { complete }) {
+        if (state.messages.length === 1) {
+          yield* complete({ messages: state.messages })
+        }
+        return yield* next(state)
+      },
+    })
+    const model = faux([
+      fauxAssistantMessage('help'),
+      fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'down' }),
+    ])
+    const agent = createAgent({ model, plugins: [helper, jsonl(l => lines.push(l))] })
+
+    // Act
+    await createSession(agent)
+      .send('go')
+      .result.catch(() => {})
+
+    // Assert
+    const records = lines.map(line => JSON.parse(line) as Record<string, unknown>)
+    const models = records.filter(r => String(r.type).startsWith('model_'))
+    expect(models.map(r => [r.type, r.by])).toEqual([
+      ['model_start', 'helper'],
+      ['model_end', 'helper'],
+      ['model_start', undefined],
+      ['model_error', undefined],
+    ])
+    expect(models.at(-1)).toMatchObject({ error: { name: 'ModelCallError', message: expect.stringContaining('down') } })
   })
 
   it('should leave the state out of step_end unless asked for', async () => {

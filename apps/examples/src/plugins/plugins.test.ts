@@ -62,11 +62,12 @@ describe('compaction', () => {
     const agent = createAgent({
       model,
       tools: [echo],
-      plugins: [compaction({ model, maxTokens: 400, keepRecent: 2 })],
+      plugins: [compaction({ maxTokens: 400, keepRecent: 2 })],
     })
 
     const r = createSession(agent).send('go')
-    const [turns, state] = await Promise.all([collect(r.turns), r.state])
+    const text = collect(r.text)
+    const [events, turns, state] = await Promise.all([collect(r), collect(r.turns), r.state])
 
     expect(kinds(turns).filter(k => k === 'rewrite')).toHaveLength(1)
     expect(state.messages[0]).toMatchObject({
@@ -74,6 +75,37 @@ describe('compaction', () => {
       content: `${SUMMARY_PREFIX}\nthe summary`,
     })
     expect(state.messages[1].role).toBe('assistant')
+    // The summary is a ctx.complete call: tagged model events, framed by the plugin's own, no streamed text
+    expect(events.flatMap(e => (e.type.startsWith('compaction:') || 'by' in e ? [e.type] : []))).toEqual([
+      'compaction:start',
+      'model_start',
+      'model_end',
+      'compaction:end',
+    ])
+    expect((await text).join('')).not.toContain('the summary')
+  })
+
+  it('keeps the long history for this step when the summary runs out of time', async () => {
+    const big = 'x'.repeat(2_000)
+    const stalls: FauxResponseStep = async (_ctx, options) => {
+      await new Promise(resolve => options?.signal?.addEventListener('abort', resolve))
+      return fauxAssistantMessage('too late')
+    }
+    // The history stays long, so the idle step that ends the run tries (and times out) once more
+    const model = fauxModel([callEcho(big), callEcho('b'), stalls, fauxAssistantMessage('answer'), stalls])
+    const agent = createAgent({
+      model,
+      tools: [echo],
+      plugins: [compaction({ maxTokens: 400, keepRecent: 2, timeoutMs: 10 })],
+    })
+
+    const r = createSession(agent).send('go')
+    const [events, result] = await Promise.all([collect(r), r.result])
+
+    expect(textOf(result)).toBe('answer')
+    expect((await r.summary).rewrites).toBe(0)
+    expect(events.find(e => e.type === 'compaction:end')).toMatchObject({ before: expect.any(Number) })
+    expect(events.find(e => e.type === 'model_error')).toMatchObject({ by: 'compaction' })
   })
 
   it('does not compact under the limit', async () => {
@@ -81,7 +113,7 @@ describe('compaction', () => {
     const agent = createAgent({
       model,
       tools: [echo],
-      plugins: [compaction({ model, maxTokens: 10_000 })],
+      plugins: [compaction({ maxTokens: 10_000 })],
     })
 
     expect((await createSession(agent).send('go').summary).rewrites).toBe(0)

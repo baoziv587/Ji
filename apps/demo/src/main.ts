@@ -20,12 +20,12 @@ const calc = tool({
   },
 })
 
-/** Update middleware that keeps the first message and the most recent n - 1. It runs on every Turn. */
+/** Record middleware that keeps the first message and the most recent n - 1. It runs on every Turn. */
 function keepLast(n: number): Plugin {
   return definePlugin({
     name: 'keep-last',
-    update: (state, turn, next) => {
-      const updated = next(state, turn)
+    record: (input, next) => {
+      const updated = next(input)
       const { messages } = updated
       if (messages.length <= n) {
         return updated

@@ -4,9 +4,10 @@
 //   createAgent({ model, plugins: [otel({ tracer: trace.getTracer('agent'), context: { active: context.active, setSpan: trace.setSpan } })] })
 //
 //   invoke_agent                     first event of the run … run_end
-//   ├─ chat deepseek-v4-flash        model_start … model_end
+//   ├─ chat deepseek-v4-flash        model_start … model_end or model_error
 //   ├─ execute_tool calc             tool_start … tool_end        (parallel calls overlap)
 //   ├─ compaction                    compaction:start … compaction:end   (any plugin's :start / :end pair)
+//   │  └─ chat deepseek-v4-flash     a model call the plugin made through ctx.complete (model_start by: 'compaction')
 //   └─ chat deepseek-v4-flash
 //
 // Only observe: it never changes the run and sees the same events whatever the plugin order. It depends on the shape
@@ -64,7 +65,8 @@ interface RunSpans<Ctx, S extends SpanLike> {
   root: S
   /** Context the children start in: inside the root span. */
   inside: Ctx | undefined
-  model: S | undefined
+  /** The model attempt in progress; a run has at most one at a time. */
+  model: { span: S; id: string } | undefined
   tools: Map<string, S>
   /** Open `<plugin>:start` spans, by plugin prefix. */
   plugins: Map<string, S>
@@ -105,31 +107,56 @@ export function otel<Ctx, S extends SpanLike>(options: OtelOptions<Ctx, S>): Plu
     return spans
   }
 
-  function child(spans: RunSpans<Ctx, S>, name: string, attributes: Attributes): S {
-    return tracer.startSpan(name, { attributes }, spans.inside)
+  /** Starts a span inside the run's root, or inside `parent` when the context API is there to nest it. */
+  function child(spans: RunSpans<Ctx, S>, name: string, attributes: Attributes, parent?: S): S {
+    const inside =
+      context && parent && spans.inside !== undefined ? context.setSpan(spans.inside, parent) : spans.inside
+    return tracer.startSpan(name, { attributes }, inside)
   }
 
   function onEvent(e: RunEvent, spans: RunSpans<Ctx, S>): void {
     switch (e.type) {
-      case 'model_start':
-        spans.model = child(spans, `chat ${e.model.id}`, {
+      case 'model_start': {
+        const attributes: Attributes = {
           'gen_ai.operation.name': 'chat',
           'gen_ai.provider.name': e.model.provider,
           'gen_ai.request.model': e.model.id,
           'pi.thinking': e.thinking,
-        })
+        }
+        if (e.by !== undefined) {
+          attributes['pi.plugin'] = e.by
+        }
+
+        const parent = e.by === undefined ? undefined : spans.plugins.get(e.by)
+        spans.model = { span: child(spans, `chat ${e.model.id}`, attributes, parent), id: e.model.id }
         break
+      }
       case 'model_end':
-        spans.model?.setAttributes({
+        spans.model?.span.setAttributes({
           'gen_ai.response.model': e.message.model,
           'gen_ai.response.finish_reasons': [e.message.stopReason],
           'gen_ai.usage.input_tokens': e.message.usage.input,
           'gen_ai.usage.output_tokens': e.message.usage.output,
         })
-        spans.model?.end()
+        spans.model?.span.end()
         spans.model = undefined
-        metrics?.model(e.message, e.ms)
+        metrics?.model(e.message.model, e.ms, e.message.usage)
         break
+      case 'model_error': {
+        const attributes: Attributes = { 'error.type': e.error.name }
+        if (e.usage !== undefined) {
+          attributes['gen_ai.usage.input_tokens'] = e.usage.input
+          attributes['gen_ai.usage.output_tokens'] = e.usage.output
+        }
+
+        const span = spans.model?.span
+        span?.setAttributes(attributes)
+        span?.setStatus({ code: ERROR, message: e.error.message })
+        span?.end()
+        metrics?.model(spans.model?.id ?? 'unknown', e.ms, e.usage, e.error.name)
+        spans.model = undefined
+        break
+      }
       case 'tool_start':
         spans.tools.set(
           e.call.id,
@@ -213,7 +240,7 @@ export function otel<Ctx, S extends SpanLike>(options: OtelOptions<Ctx, S>): Plu
 
 /** Spans still open when their step is cancelled or the run ends: marked as cancelled and ended. */
 function endChildren<S extends SpanLike>(spans: RunSpans<unknown, S>, reason: string): void {
-  const open = [spans.model, ...spans.tools.values(), ...spans.plugins.values()]
+  const open = [spans.model?.span, ...spans.tools.values(), ...spans.plugins.values()]
   for (const span of open) {
     span?.setAttributes({ 'error.type': 'cancelled' })
     span?.setStatus({ code: ERROR, message: reason })
@@ -225,8 +252,14 @@ function endChildren<S extends SpanLike>(spans: RunSpans<unknown, S>, reason: st
   spans.lastUpdate.clear()
 }
 
+interface TokenUsage {
+  input: number
+  output: number
+}
+
 function instruments(meter: MeterLike): {
-  model: (message: { model: string; usage: { input: number; output: number } }, ms: number) => void
+  /** A failed attempt reports its error type, and its tokens only if the provider billed any. */
+  model: (model: string, ms: number, usage: TokenUsage | undefined, errorType?: string) => void
   tool: (name: string, ms: number, isError: boolean) => void
 } {
   const duration = meter.createHistogram('gen_ai.client.operation.duration', {
@@ -239,11 +272,14 @@ function instruments(meter: MeterLike): {
   })
 
   return {
-    model: (message, ms) => {
-      const base = { 'gen_ai.operation.name': 'chat', 'gen_ai.request.model': message.model }
-      duration.record(ms / 1000, base)
-      tokens.record(message.usage.input, { ...base, 'gen_ai.token.type': 'input' })
-      tokens.record(message.usage.output, { ...base, 'gen_ai.token.type': 'output' })
+    model: (model, ms, usage, errorType) => {
+      const base = { 'gen_ai.operation.name': 'chat', 'gen_ai.request.model': model }
+      duration.record(ms / 1000, errorType === undefined ? base : { ...base, 'error.type': errorType })
+
+      if (usage !== undefined) {
+        tokens.record(usage.input, { ...base, 'gen_ai.token.type': 'input' })
+        tokens.record(usage.output, { ...base, 'gen_ai.token.type': 'output' })
+      }
     },
     tool: (name, ms, isError) => {
       duration.record(ms / 1000, {

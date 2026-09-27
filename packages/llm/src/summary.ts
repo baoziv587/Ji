@@ -1,23 +1,31 @@
 import type { Reducer } from '@gaoxiang.ai/kernel/reduce'
-import type { AssistantMessage, Usage } from '@mariozechner/pi-ai'
+import type { Usage } from '@mariozechner/pi-ai'
 import type { AgentState, RunSummary, Turn, TurnTiming, UsageTotals } from './types.ts'
-import { combine, filterInput, mapInput } from '@gaoxiang.ai/kernel/reduce'
+import { combine, filterInput } from '@gaoxiang.ai/kernel/reduce'
 import { isAssistant } from './message.ts'
 
 // Declared first: the reducers below read them at module initialization.
-const NO_USAGE: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }
+export const NO_USAGE: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }
 const NO_TOOLS: RunSummary['tools'] = {}
 const count: Reducer<unknown, number> = sum(() => 1)
 
-/** Usage of assistant messages. usageOf and Run.summary share it, so the two always agree (promise 5). */
-const usage: Reducer<AssistantMessage, UsageTotals> = {
-  init: NO_USAGE,
-  reduce: (total, message) => addUsage(total, message.usage),
+/**
+ * Sums usage over the main model's messages kept in history. Plugin model calls and messages replaced by a history
+ * rewrite are not there, so this can be less than what r.summary.usage reports.
+ */
+export function usageOf(state: AgentState): UsageTotals {
+  return state.messages.filter(isAssistant).reduce((total, message) => addUsage(total, message.usage), NO_USAGE)
 }
 
-/** Sums usage over the assistant messages in state; messages replaced by a history rewrite no longer count. */
-export function usageOf(state: AgentState): UsageTotals {
-  return state.messages.filter(isAssistant).reduce(usage.reduce, usage.init)
+/** Adds one model call's usage to a total; Run.summary folds it over the model events. */
+export function addUsage(total: UsageTotals, u: Usage): UsageTotals {
+  return {
+    input: total.input + u.input,
+    output: total.output + u.output,
+    cacheRead: total.cacheRead + u.cacheRead,
+    cacheWrite: total.cacheWrite + u.cacheWrite,
+    cost: total.cost + u.cost.total,
+  }
 }
 
 export interface TimedTurn {
@@ -26,15 +34,12 @@ export interface TimedTurn {
 }
 
 /**
- * Run.summary: each field says which steps count (`on(kind, …)`) and what each one adds.
- * A new field is one more line here.
+ * Run.summary, except usage: each field says which committed steps count (`on(kind, …)`) and what each one adds.
+ * A new field is one more line here. Usage is folded from the model events instead, since spending does not wait for
+ * a step to commit (RFC-0006 §5.5).
  */
-export const summaryReducer: Reducer<TimedTurn, RunSummary> = combine({
+export const summaryReducer: Reducer<TimedTurn, Omit<RunSummary, 'usage'>> = combine({
   turns: on('model', count),
-  usage: on(
-    'model',
-    mapInput(usage, ({ turn }) => turn.message),
-  ),
   modelMs: sum(({ timing }) => timing.modelMs ?? 0),
   toolMs: sum(({ timing }) => Object.values(timing.toolMs ?? {}).reduce((a, b) => a + b, 0)),
   tools: on('model', { init: NO_TOOLS, reduce: addToolStats }),
@@ -59,16 +64,6 @@ function on<K extends Turn['kind'], Acc, Out>(
 
 function sum<In>(amount: (input: In) => number): Reducer<In, number> {
   return { init: 0, reduce: (n, input) => n + amount(input) }
-}
-
-function addUsage(total: UsageTotals, u: Usage): UsageTotals {
-  return {
-    input: total.input + u.input,
-    output: total.output + u.output,
-    cacheRead: total.cacheRead + u.cacheRead,
-    cacheWrite: total.cacheWrite + u.cacheWrite,
-    cost: total.cost + u.cost.total,
-  }
 }
 
 function addToolStats(stats: RunSummary['tools'], { turn, timing }: TimedTurnOf<'model'>): RunSummary['tools'] {

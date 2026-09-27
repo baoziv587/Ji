@@ -18,7 +18,7 @@ const agent = createAgent({
   model,
   system: 'Be concise.',
   tools: [readFile],
-  plugins: [compaction({ model, maxTokens: 100_000 })],
+  plugins: [compaction({ maxTokens: 100_000 })],
 })
 const chat = createSession(agent)
 
