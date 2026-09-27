@@ -1,6 +1,6 @@
 # 内核 API
 
-[English](../kernel.md) · **简体中文**
+[English](../kernel.md) · **简体中文** · [文档导航](README.md)
 
 `@gaoxiang.ai/kernel` 零依赖，与 LLM 无关。写非 LLM 的 agent、或者搭新的一层时直接使用；其他情况下，[`@gaoxiang.ai/llm`](sessions-and-runs.md) 已经把它包装好了。
 
@@ -9,6 +9,27 @@
 | `@gaoxiang.ai/kernel`          | `Agent`、`Extension`、`unfold`、`run`、`extend`、`mapState`、`mapYield`、`merge`、`act`、`done`、`MaxStepsError` |
 | `@gaoxiang.ai/kernel/advanced` | 改变类型参数的变换：`withState` / `focus`、`widen` / `liftWiden`                                                 |
 | `@gaoxiang.ai/kernel/reduce`   | 可组合的 reducer：`combine`、`mapInput`、`filterInput`、`mapResult`、`reduce`、`scan`                            |
+
+## 先跑一个最小循环
+
+下面的 agent 从 `0` 数到 `3`。`policy` 决定下一步，`env` 执行动作，`update` 保存结果。`run` 消费整个循环并返回 `3`：
+
+```ts
+import type { Agent } from '@gaoxiang.ai/kernel'
+import { act, done, run } from '@gaoxiang.ai/kernel'
+
+const counter: Agent<number, number, number, number> = {
+  async *policy(state) {
+    return state < 3 ? act(state + 1) : done(state)
+  },
+  async *env(action) {
+    return action
+  },
+  update: (_state, _action, observation) => observation,
+}
+
+console.log(await run(counter, 0)) // 3
+```
 
 ## 核心
 
@@ -31,7 +52,7 @@ policy 先产出任意多个增量 `D`，然后返回 `act(action)` 继续，或
 | `mapYield(stream, f)`             | 带 map 的 `yield*`：变换每个增量，保留返回值，并传递取消                                                                                                              |
 | `merge(streams)`                  | 同时运行多个流：增量按到达顺序产出，结果按来源顺序返回。取消它会关闭所有已启动的来源                                                                                  |
 
-一个 `Extension` 最多包含三个中间件，形状和 [LLM 插件](plugins.md#两种形状) 一样，都是 `(input, next)`。
+一个 `Extension` 最多包含三个中间件，形状和 [LLM 插件](plugins.md#钩子签名) 一样，都是 `(input, next)`。
 
 ```ts
 const logged = extend(agent, {
@@ -70,3 +91,7 @@ interface Reducer<In, Acc, Out = Acc> {
 ```
 
 `combine({ a: r1, b: r2 })` 一次遍历同时计算多个 reducer；`scan` 逐个输出中间结果。`@gaoxiang.ai/llm` 就是这样实现 `Run.summary` 和插件状态的。和 `update` 一样，`reduce` 必须同步且纯。
+
+## 继续阅读
+
+[核心概念](concepts.md) · [编写 LLM 插件](plugins.md) · [文档导航](README.md)

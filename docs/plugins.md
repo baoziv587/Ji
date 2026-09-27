@@ -1,27 +1,90 @@
 # Writing Plugins
 
-**English** · [简体中文](zh-CN/plugins.md)
+**English** · [简体中文](zh-CN/plugins.md) · [Documentation index](README.md)
 
-A plugin is a named set of hooks into the agent loop. It has the same shape as a Rollup or Vite plugin: an object with a `name`, whose fields are hooks called at fixed points of a pipeline. Here the pipeline is the agent loop, so choosing a hook means choosing where in the loop your code runs, and how often.
+A plugin is a named object containing only the behavior you want to change. Pick a hook, then use `before`, `after` or `intercept`. Write middleware directly when you need to control the full execution.
+
+## Your first plugin
+
+This plugin sets the temperature before each model call. Once added to `plugins`, it applies to both the main model and calls made by other plugins:
 
 ```ts
-import { after, before, definePlugin } from '@gaoxiang.ai/llm'
+import { before, createAgent, definePlugin } from '@gaoxiang.ai/llm'
 
-export const myPlugin = definePlugin({
-  name: 'my-plugin', // required, unique
-  tools: [/* AgentTool */],
-  system: prompt => `${prompt}\nBe concise.`,
-  input: (messages, { state, idle, own }) => messages,
+const temperature = definePlugin({
+  name: 'temperature',
   request: before(req => ({
     ...req,
     options: { ...req.options, temperature: 0 },
   })),
-  toolCall: after(result => result),
-  record: (input, next) => next(input),
-  state: { init: 0, reduce: (n, turn) => n + 1 },
-  observe: (e, run) => log(run.id, e.type),
 })
+
+const agent = createAgent({ model, plugins: [temperature] })
 ```
+
+`model` is your selected model. Plugin names must be unique; the hook determines the helper’s input and output types. This plugin changes request options without changing conversation history.
+
+Read the helpers below, then [choose a hook for your task](#which-hook). For composition, see [Ordering](#ordering); for state and cancellation, see [`ctx`](#ctx).
+
+## Helpers: no generator needed
+
+| I want to...                              | Write             | Needs a generator |
+| ----------------------------------------- | ----------------- | ----------------- |
+| Change the input                          | `before(f)`       | No                |
+| Change the result                         | `after(g)`        | No                |
+| Intercept when a condition holds          | `intercept(f)`    | No                |
+| Change each event (what readers see only) | `mapEvents(f)`    | No                |
+| Yield my own events, retry, call a model  | `async function*` | Yes               |
+
+```text
+before(f)     f(input, ctx)         => input | Promise<input>
+after(g)      g(output, input, ctx) => output | Promise<output>
+intercept(f)  f(input, ctx)         => output | undefined | Promise<output | undefined>
+mapEvents(f)  f(event, input, ctx)  => event
+```
+
+`intercept` makes a returned value the result without calling `next`, and lets the input through when it returns `undefined`. None of the four streaming hooks can produce `undefined`, so it never means anything else.
+
+```ts
+// budget: stop once over the limit
+decide: intercept(state => (overBudget(state) ? stop(state) : undefined))
+
+// approval: a refused call gets an error result for the model
+toolCall: intercept(async (call, { signal }) =>
+  (await askApproval(call, { signal })) ? undefined : toolError(call, 'User denied this call'),
+)
+```
+
+- `before`, `after` and `intercept` may be async. Once the callback settles they check `ctx.signal`: after the step is cancelled, `next` never starts and no late result is returned. They cannot stop the callback itself, so pass `ctx.signal` to its IO.
+- `after` forwards events untouched and maps only the final result. `mapEvents` maps each event one to one, synchronously, and leaves the result alone. Events only reach readers of the run, so to redact both the streamed text and the stored message, use both.
+- The helpers are for the four streaming hooks only. `record` is a plain function: `record: (input, next) => trim(next(input))`.
+
+## Which hook?
+
+| I want to...                                           | Use                                              | Example                                                                             |
+| ------------------------------------------------------ | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Change tool arguments or results                       | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../apps/examples/src/plugins/truncate-tool-results.ts) |
+| Approve or block a tool call                           | `toolCall: intercept(...)`                       | Return `toolError(call, reason)` to block                                           |
+| Retry a tool                                           | `toolCall`                                       | [Errors and retries](#errors-and-retries)                                           |
+| Run a turn's tool calls one at a time                  | `toolCalls`                                      | [`sequential-tools.ts`](../apps/examples/src/plugins/sequential-tools.ts)           |
+| Approve all of a turn's tool calls at once             | `toolCalls: intercept(...)`                      | Return one `toolError` per call of `callsOf(message)` to refuse                     |
+| Time out a tool                                        | Inside the tool's `run`                          | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                |
+| Switch model, temperature or thinking                  | `request: before(...)`                           | `lowTemperature` in [`hooks.ts`](../apps/examples/src/hooks.ts)                     |
+| Fall back to another model on error                    | `request`                                        | `fallbackTo` in [`hooks.ts`](../apps/examples/src/hooks.ts)                         |
+| Rewrite streamed text for display only                 | `request: mapEvents(...)`                        | Redact secrets as they stream                                                       |
+| Add retrieval results or send only the last N messages | `request: before(...)`, skipping `ctx.by` calls  | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
+| Keep going until done, add reminders                   | `input`                                          | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
+| Summarize and replace history                          | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
+| Enforce a budget or step cap                           | `decide: intercept(...)` + `stop`                | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |
+| Trim history (no model call)                           | `record`                                         | `keepLast` in [`apps/demo`](../apps/demo/src/main.ts)                               |
+| Keep your own counters                                 | `state: { init, reduce }`, read with `ctx.own`   | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
+| Measure time, tokens or cost                           | No plugin: `r.summary`, `r.turns`, `usageOf`     | [`metrics.ts`](../apps/examples/src/metrics.ts)                                     |
+| Log, trace or count what happens                       | `observe`                                        | [`plugins/otel`](../plugins/otel), [`plugins/jsonl`](../plugins/jsonl)              |
+| Show what a long step is doing                         | `yield` in `decide`, `request` or `toolCall`     | [Events from plugins](#events-from-plugins)                                         |
+
+`budget` counts with `usageOf(state)`, which only sees the main model's messages still in history, so it is not a hard cap on spending: `ctx.complete` calls and compacted messages are left out ([Sessions & Runs](sessions-and-runs.md#metrics-without-plugins)).
+
+The plugins under [`apps/examples/src/plugins`](../apps/examples/src/plugins) are meant to be copied and adapted. The packages under [`plugins/`](../plugins) are reusable workspace packages: `otel`, `jsonl` and `throttle-updates`. They are not published to npm yet.
 
 ## The agent loop
 
@@ -75,7 +138,7 @@ Anything about a single call (its arguments, its result, whether it may run) bel
 
 Change history with `record`; keep your own data with `state`. Read a plugin's state from outside with `myPlugin.select(state)`, which returns `init` until the plugin has written. Inside its own hooks, `ctx.own` is the same value.
 
-## Two signatures
+## Hook signatures
 
 ```text
 transform    (value, ctx) => value | Promise<value>          input
@@ -139,38 +202,24 @@ const enrich = definePlugin({
 
 Never change `ctx.state` or `ctx.own` in place; return new values. With [development checks](#development-checks) on, a write like `ctx.own.count++` throws a `TypeError` at that line.
 
-## Helpers: no generator needed
+## Ordering
 
-| I want to...                              | Write             | Needs a generator |
-| ----------------------------------------- | ----------------- | ----------------- |
-| Change the input                          | `before(f)`       | No                |
-| Change the result                         | `after(g)`        | No                |
-| Intercept when a condition holds          | `intercept(f)`    | No                |
-| Change each event (what readers see only) | `mapEvents(f)`    | No                |
-| Yield my own events, retry, call a model  | `async function*` | Yes               |
+The plugin list reads top to bottom, outside in:
 
 ```text
-before(f)     f(input, ctx)         => input | Promise<input>
-after(g)      g(output, input, ctx) => output | Promise<output>
-intercept(f)  f(input, ctx)         => output | undefined | Promise<output | undefined>
-mapEvents(f)  f(event, input, ctx)  => event
+plugins: [a, b]
+
+transform    input                    a first, then b
+middleware   decide / request / ...   a is outer: a sees the input first and the output last
+record       a( b( applyTurn ) )      each state.reduce runs as its layer returns: b's, then a's
+observe      a, then b                every event, in list order
 ```
 
-`intercept` makes a returned value the result without calling `next`, and lets the input through when it returns `undefined`. None of the four streaming hooks can produce `undefined`, so it never means anything else.
+- **Same hook:** the same as Koa's `app.use(a); app.use(b)`. A budget that must decide before an audit logs anything is `[budget, audit]`.
+- **Different hooks:** order is fixed by the step, so plugins that use different hooks can be listed in any order.
+- **Presets:** `plugins` accepts nested arrays. The list is flattened and each plugin object is kept once, where it first appears: `[a, [b, a]]` is `[a, b]`. Its tools, hooks, reducer and observer are registered once, so a shared plugin's state is not counted twice. Two different objects with the same name still throw `PluginConflictError`. The same holds for `agent.with(...)`.
 
-```ts
-// budget: stop once over the limit
-decide: intercept(state => (overBudget(state) ? stop(state) : undefined))
-
-// approval: a refused call gets an error result for the model
-toolCall: intercept(async (call, { signal }) =>
-  (await askApproval(call, { signal })) ? undefined : toolError(call, 'User denied this call'),
-)
-```
-
-- `before`, `after` and `intercept` may be async. Once the callback settles they check `ctx.signal`: after the step is cancelled, `next` never starts and no late result is returned. They cannot stop the callback itself, so pass `ctx.signal` to its IO.
-- `after` forwards events untouched and maps only the final result. `mapEvents` maps each event one to one, synchronously, and leaves the result alone. Events only reach readers of the run, so to redact both the streamed text and the stored message, use both.
-- The helpers are for the four streaming hooks only. `record` is a plain function: `record: (input, next) => trim(next(input))`.
+The kernel's `extend(base, m1, m2)` puts `m2` outside; the LLM layer reverses the list before calling it ([Kernel API](kernel.md)).
 
 ## Calling a model: `ctx.complete`
 
@@ -227,25 +276,6 @@ const compaction = definePlugin({
 
 The full version, which keeps tool calls paired with their results, is [`compaction.ts`](../apps/examples/src/plugins/compaction.ts).
 
-## Ordering
-
-The plugin list reads top to bottom, outside in:
-
-```text
-plugins: [a, b]
-
-transform    input                    a first, then b
-middleware   decide / request / ...   a is outer: a sees the input first and the output last
-record       a( b( applyTurn ) )      each state.reduce runs as its layer returns: b's, then a's
-observe      a, then b                every event, in list order
-```
-
-- **Same hook:** the same as Koa's `app.use(a); app.use(b)`. A budget that must decide before an audit logs anything is `[budget, audit]`.
-- **Different hooks:** order is fixed by the step, so plugins that use different hooks can be listed in any order.
-- **Presets:** `plugins` accepts nested arrays. The list is flattened and each plugin object is kept once, where it first appears: `[a, [b, a]]` is `[a, b]`. Its tools, hooks, reducer and observer are registered once, so a shared plugin's state is not counted twice. Two different objects with the same name still throw `PluginConflictError`. The same holds for `agent.with(...)`.
-
-The kernel's `extend(base, m1, m2)` puts `m2` outside; the LLM layer reverses the list before calling it ([Kernel API](kernel.md)).
-
 ## Errors and retries
 
 | Case                                                 | What to do                                                                                                                      |
@@ -278,7 +308,34 @@ const retryReads = definePlugin({
 })
 ```
 
-Both attempts' events stay in the run.
+Every attempt’s events stay in the run.
+
+## Events from plugins
+
+A plugin yields an event from any stream hook, and registers its type with declaration merging, named `<plugin>:<event>`:
+
+```ts
+declare module '@gaoxiang.ai/llm' {
+  interface Events {
+    'compaction:start': { tokens: number }
+    'compaction:end': { before: number; after: number }
+  }
+}
+
+definePlugin({
+  name: 'compaction',
+  async *decide(state, next, { complete }) {
+    if (count(state.messages) < limit) return yield* next(state)
+    yield { type: 'compaction:start', tokens: count(state.messages) }
+    const reply = yield* complete({ systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] })
+    const messages = [user(textOf(reply))]
+    yield { type: 'compaction:end', before: count(state.messages), after: count(messages) }
+    return rewriteHistory(messages)
+  },
+})
+```
+
+Readers match on `e.type === 'compaction:start'` without importing the plugin; another plugin that reads it declares the same shape. The event appears exactly where it was yielded: before `next`'s events if yielded before `next`. Events report what happened. To change behavior based on what another plugin did, read the `Turn`s in `state.reduce` (a compaction is a `rewrite` turn, whoever did it), since events are neither saved nor replayed.
 
 ## Observers are synchronous
 
@@ -341,60 +398,6 @@ They catch common mistakes; they do not prove a plugin pure. Two `Date.now()` ca
 5. Never change state in place: return new values.
 6. Plugins don't import each other. They share what every plugin can read: `Turn`s, the messages, and event names with their shapes.
 
-## Events from plugins
-
-A plugin yields an event from any stream hook, and registers its type with declaration merging, named `<plugin>:<event>`:
-
-```ts
-declare module '@gaoxiang.ai/llm' {
-  interface Events {
-    'compaction:start': { tokens: number }
-    'compaction:end': { before: number; after: number }
-  }
-}
-
-definePlugin({
-  name: 'compaction',
-  async *decide(state, next, { complete }) {
-    if (count(state.messages) < limit) return yield* next(state)
-    yield { type: 'compaction:start', tokens: count(state.messages) }
-    const reply = yield* complete({ systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] })
-    const messages = [user(textOf(reply))]
-    yield { type: 'compaction:end', before: count(state.messages), after: count(messages) }
-    return rewriteHistory(messages)
-  },
-})
-```
-
-Readers match on `e.type === 'compaction:start'` without importing the plugin; another plugin that reads it declares the same shape. The event appears exactly where it was yielded: before `next`'s events if yielded before `next`. Events report what happened. To change behavior based on what another plugin did, read the `Turn`s in `state.reduce` (a compaction is a `rewrite` turn, whoever did it), since events are neither saved nor replayed.
-
-## Which hook?
-
-| I want to...                                           | Use                                              | Example                                                                             |
-| ------------------------------------------------------ | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| Change tool arguments or results                       | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../apps/examples/src/plugins/truncate-tool-results.ts) |
-| Approve or block a tool call                           | `toolCall: intercept(...)`                       | Return `toolError(call, reason)` to block                                           |
-| Retry a tool                                           | `toolCall`                                       | [Errors and retries](#errors-and-retries)                                           |
-| Run a turn's tool calls one at a time                  | `toolCalls`                                      | [`sequential-tools.ts`](../apps/examples/src/plugins/sequential-tools.ts)           |
-| Approve all of a turn's tool calls at once             | `toolCalls: intercept(...)`                      | Return one `toolError` per call of `callsOf(message)` to refuse                     |
-| Time out a tool                                        | Inside the tool's `run`                          | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                |
-| Switch model, temperature or thinking                  | `request: before(...)`                           | `lowTemperature` in [`hooks.ts`](../apps/examples/src/hooks.ts)                     |
-| Fall back to another model on error                    | `request`                                        | `fallbackTo` in [`hooks.ts`](../apps/examples/src/hooks.ts)                         |
-| Rewrite streamed text for display only                 | `request: mapEvents(...)`                        | Redact secrets as they stream                                                       |
-| Add retrieval results or send only the last N messages | `request: before(...)`, skipping `ctx.by` calls  | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
-| Keep going until done, add reminders                   | `input`                                          | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
-| Summarize and replace history                          | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
-| Enforce a budget or step cap                           | `decide: intercept(...)` + `stop`                | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |
-| Trim history (no model call)                           | `record`                                         | `keepLast` in [`apps/demo`](../apps/demo/src/main.ts)                               |
-| Keep your own counters                                 | `state: { init, reduce }`, read with `ctx.own`   | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
-| Measure time, tokens or cost                           | No plugin: `r.summary`, `r.turns`, `usageOf`     | [`metrics.ts`](../apps/examples/src/metrics.ts)                                     |
-| Log, trace or count what happens                       | `observe`                                        | [`plugins/otel`](../plugins/otel), [`plugins/jsonl`](../plugins/jsonl)              |
-| Show what a long step is doing                         | `yield` in `decide`, `request` or `toolCall`     | [Events from plugins](#events-from-plugins)                                         |
-
-`budget` counts with `usageOf(state)`, which only sees the main model's messages still in history, so it is not a hard cap on spending: `ctx.complete` calls and compacted messages are left out ([Sessions & Runs](sessions-and-runs.md#metrics-without-plugins)).
-
-The plugins under [`apps/examples/src/plugins`](../apps/examples/src/plugins) are meant to be copied and adapted. The packages under [`plugins/`](../plugins) are meant to be installed: `otel`, `jsonl` and `throttle-updates`.
-
 ## Tools
 
 ```ts
@@ -409,3 +412,7 @@ const calc = tool({
 ```
 
 Arguments are validated against the schema before `run`. Tool calls in a single turn run in parallel; their events interleave and their results keep the call order. A `run` written as an async generator reports progress: see [tool updates](sessions-and-runs.md#events).
+
+## Next
+
+[Sessions & Runs](sessions-and-runs.md) · [Concepts](concepts.md) · [Documentation index](README.md)

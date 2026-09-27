@@ -1,6 +1,6 @@
 # Kernel API
 
-**English** · [简体中文](zh-CN/kernel.md)
+**English** · [简体中文](zh-CN/kernel.md) · [Documentation index](README.md)
 
 `@gaoxiang.ai/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@gaoxiang.ai/llm`](sessions-and-runs.md) wraps it for you.
 
@@ -9,6 +9,27 @@
 | `@gaoxiang.ai/kernel`          | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `merge`, `act`, `done`, `MaxStepsError` |
 | `@gaoxiang.ai/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden`                                           |
 | `@gaoxiang.ai/kernel/reduce`   | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan`                         |
+
+## Run a minimal loop
+
+This agent counts from `0` to `3`. `policy` chooses the next action, `env` executes it, and `update` records the result. `run` consumes the loop and returns `3`:
+
+```ts
+import type { Agent } from '@gaoxiang.ai/kernel'
+import { act, done, run } from '@gaoxiang.ai/kernel'
+
+const counter: Agent<number, number, number, number> = {
+  async *policy(state) {
+    return state < 3 ? act(state + 1) : done(state)
+  },
+  async *env(action) {
+    return action
+  },
+  update: (_state, _action, observation) => observation,
+}
+
+console.log(await run(counter, 0)) // 3
+```
 
 ## Core
 
@@ -31,7 +52,7 @@ A policy yields any number of deltas `D`, then returns `act(action)` to continue
 | `mapYield(stream, f)`             | `yield*` with a map applied to each delta. Keeps the return value and propagates cancellation.                                                                                                                  |
 | `merge(streams)`                  | Runs streams at once: deltas in arrival order, results in source order. Cancelling it closes every source that started.                                                                                         |
 
-An `Extension` has up to three middlewares with the same `(input, next)` shape as [LLM plugins](plugins.md#two-shapes).
+An `Extension` has up to three middlewares with the same `(input, next)` shape as [LLM plugins](plugins.md#hook-signatures).
 
 ```ts
 const logged = extend(agent, {
@@ -70,3 +91,7 @@ interface Reducer<In, Acc, Out = Acc> {
 ```
 
 `combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@gaoxiang.ai/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.
+
+## Next
+
+[Concepts](concepts.md) · [Writing LLM plugins](plugins.md) · [Documentation index](README.md)

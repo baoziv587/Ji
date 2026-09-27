@@ -1,6 +1,25 @@
 # 会话与运行
 
-[English](../sessions-and-runs.md) · **简体中文**
+[English](../sessions-and-runs.md) · **简体中文** · [文档导航](README.md)
+
+先完成一次对话，再按需要添加事件显示、运行中插话和状态恢复。以下示例假设你已选好 `model`，并配置了所需的 API key。
+
+## 发送并读取回答
+
+```ts
+import { createAgent, createSession } from '@gaoxiang.ai/llm'
+
+const agent = createAgent({ model, system: 'Be concise.' })
+const chat = createSession(agent)
+const r = chat.send('Hello')
+
+for await (const chunk of r.text) process.stdout.write(chunk)
+console.log(await r.summary)
+```
+
+`send` 返回 Run；文字通过 `r.text` 逐段到达，运行结束后 `r.summary` 给出统计。只要最终回答时，可以直接 `await chat.send('Hello').result`。
+
+提前退出任何流式循环都会取消整次运行；[取消与恢复](#取消)说明如何处理。
 
 ## 三个对象
 
@@ -18,23 +37,6 @@ const r = chat.send('hi')
 - **Agent**：模型 + 工具 + 插件。它没有状态，一个 agent 可以服务多个会话。配置错误在这里就暴露，而不是等到第一次请求：模型不存在抛出 `UnknownModelError`（带最接近的候选），思考档位不受支持抛出 `UnsupportedThinkingError`（列出支持的档位），工具或插件重名抛出 `PluginConflictError`，并一次列出全部冲突。
 - **Session**：持有 `state`（最后写入的状态）和 `pending`（尚未送达的消息）。方法是 `send` 和 `use`。
 - **Run**：从第一步开始，到 agent 空闲、并且没有可送达的消息为止。
-
-## 模型与思考档位
-
-`model` 写成 pi-ai 目录里的 `'provider/id'`，其他情况（自定义 `baseUrl`、faux provider）传 pi-ai 的 `Model` 对象。模型支持什么，agent 自己知道，不需要再去问 pi-ai：
-
-```ts
-const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'high' })
-agent.model.thinkingLevels // ['off', 'high', 'xhigh']
-agent.thinking // 'high'
-agent.model.hasEnvKey // 此刻是否设置了 DEEPSEEK_API_KEY
-```
-
-`thinking` 取 `'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`，默认 `'off'`；对总是思考的模型，默认取它最轻的档位。模型不支持的档位在 `createAgent` 时就报错，不会被悄悄换掉。创建 agent 之前（比如做模型选择界面）用 `findModel(spec)`、`listModels(provider?)` 拿到同样的信息。
-
-- **对话中途换档**：`chat.use(agent.with({ thinking: 'xhigh' }))`。`with` 返回一个新 agent，原来的不变；`use` 在下一个步边界生效，状态、排队的消息和正在进行的运行都保留。
-- **按请求改**：写一个 `request: before(req => ({ ...req, thinking: 'xhigh' }))` 插件。插件也可能换了模型，所以这里的档位会映射到这次请求的模型支持的最近一档，实际发出的档位在 `model_start` 里报告。
-- **API key**：库不替你检查，因为 key 也可能来自 `apiKey` 或 request 插件。在用户准备发送时检查 `agent.model.hasEnvKey`，而不是一开始就拦住。
 
 ## 读取一次运行
 
@@ -64,6 +66,99 @@ for await (const { t, turn, timing, summary } of r.turns) {
 }
 await printing
 ```
+
+## 取消
+
+- 提前退出任何 `for await`（`break` 或抛出异常）都会**取消整次运行**。
+- `r.abort()` 是显式的取消。
+- 取消信号会传到正在进行的模型请求和正在执行的工具。工具通过 `run(args, signal)` 拿到它。
+
+取消会停止后续执行，但不会撤销已经完成的工具副作用。当前未完成步骤不会写入状态；已经显示的文字也需要由界面自行标记为已中断。工具必须使用收到的 `signal` 才能及时停止它启动的 IO。
+
+出错后，从最后写入的状态继续：
+
+```ts
+import { RunError } from '@gaoxiang.ai/llm'
+
+try {
+  await chat.send('Continue the task').result
+} catch (error) {
+  if (!(error instanceof RunError)) throw error
+  console.error(error.kind, error.message)
+  const recovered = createSession(agent, { state: error.state })
+  // Save recovered.state or send a new instruction when ready.
+}
+```
+
+恢复状态不会自动重试失败的步骤。原会话中尚未送达的消息仍在 `chat.pending`，它们不属于状态快照；新会话不会自动带上这些消息。
+
+## 在 agent 工作时插话
+
+运行进行中调用 `send`，消息会并入**同一次运行**，返回同一个 `Run`。`when` 决定消息在哪个步边界插入：
+
+| `when`                  | 名称      | 送达时机                                       |
+| ----------------------- | --------- | ---------------------------------------------- |
+| `'idle'`（默认）        | follow-up | agent 回答完之后                               |
+| `'step'`                | steer     | 下一个步边界，例如当前工具执行完之后           |
+| `'now'`                 | interrupt | 立即取消当前这一步，未完成步骤的输出不写入历史 |
+| `(boundary) => boolean` | 自定义    | 条件为真的步边界                               |
+
+```ts
+chat.send('改用 vitest', { when: 'step' })
+chat.send('然后更新 changelog') // follow-up
+chat.send('停，先列大纲', { when: 'now' })
+```
+
+**送达规则**：每个步边界上，按发送顺序检查等待中的消息，条件成立就插入。每插入一条，agent 就不再空闲，所以多条 follow-up 会逐条处理，效果和每次等上一次运行结束后再 `send` 相同。
+
+## 保存与恢复
+
+`chat.state` 是最后写入的 JSON 快照：`{ messages, plugins }`。成功运行后的快照用 `await r.state` 获取；快照不包含尚未送达的消息。
+
+```ts
+const saved = JSON.stringify(chat.state)
+const chat2 = createSession(agent, { state: JSON.parse(saved) })
+// 也可以直接从消息列表开始：
+createSession(agent, { state: messages })
+```
+
+保存和恢复之间可以更换插件列表。没有保存过状态的插件从它的 `init` 开始。
+
+## 模型与思考档位
+
+`model` 写成 pi-ai 目录里的 `'provider/id'`，其他情况（自定义 `baseUrl`、faux provider）传 pi-ai 的 `Model` 对象。模型支持什么，agent 自己知道，不需要再去问 pi-ai：
+
+```ts
+const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'high' })
+agent.model.thinkingLevels // ['off', 'high', 'xhigh']
+agent.thinking // 'high'
+agent.model.hasEnvKey // 此刻是否设置了 DEEPSEEK_API_KEY
+```
+
+`thinking` 取 `'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`，默认 `'off'`；对总是思考的模型，默认取它最轻的档位。模型不支持的档位在 `createAgent` 时就报错，不会被悄悄换掉。创建 agent 之前（比如做模型选择界面）用 `findModel(spec)`、`listModels(provider?)` 拿到同样的信息。
+
+- **对话中途换档**：`chat.use(agent.with({ thinking: 'xhigh' }))`。`with` 返回一个新 agent，原来的不变；`use` 在下一个步边界生效，状态、排队的消息和正在进行的运行都保留。
+- **按请求改**：写一个 `request: before(req => ({ ...req, thinking: 'xhigh' }))` 插件。插件也可能换了模型，所以这里的档位会映射到这次请求的模型支持的最近一档，实际发出的档位在 `model_start` 里报告。
+- **API key**：库不替你检查，因为 key 也可能来自 `apiKey` 或 request 插件。在用户准备发送时检查 `agent.model.hasEnvKey`，而不是一开始就拦住。
+
+## 上限
+
+`maxSteps`（默认 64）限制一次运行的步数。插入消息、结束运行各占一步。超出上限时运行失败。
+
+## 统计，不需要插件
+
+```ts
+for await (const { timing, summary } of r.turns) {
+  // 每一步的耗时，以及到目前为止的累计
+}
+const { turns, usage, modelMs, toolMs, tools } = await r.summary // 这次运行
+usageOf(chat.state) // 整段对话
+```
+
+`timing` 包含 `ms`；模型回合还有 `modelMs`、`firstTokenMs`，以及按工具调用 id 记录的 `toolMs`，都由事件算出（所以 `toolMs[id]` 等于该调用的 `tool_end.ms`）。summary 里的 `toolMs` 是各次调用耗时之和，并行调用会重叠，所以可能大于实际经过的时间。`r.summary.usage` 和 `usageOf` 统计的东西不同，两者不必相等：
+
+- `r.summary.usage` 累加这次运行发布的每个 `model_end` 和 `model_error` 的用量，包括插件 `ctx.complete` 的调用。一步之后即使被取消、`stop` 或改写历史，已经花掉的用量也不会撤销。被中断而没有终态事件的调用拿不到用量，不计入。
+- `usageOf(state)` 累加仍在历史里的主模型消息。插件的调用和被压缩掉的消息都不在内。
 
 ## 事件
 
@@ -126,59 +221,6 @@ const runTests = tool({
 
 **日志与追踪**：`for await` 循环抛错或提前退出会取消整次运行，而且它只能看到一次运行。日志、追踪、指标请用插件的只读钩子 `observe`：它从第一个事件起收到这个 agent 每次运行的全部事件，抛出的异常只会作为警告报告，不影响运行。`observe` 是同步的，不会被等待：要异步导出，就在 `observe` 里入队，运行结束后再 flush（[示例](plugins.md#observer-是同步的)）。现成的插件在 [`plugins/`](../../plugins)：`@gaoxiang.ai/plugin-otel`、`@gaoxiang.ai/plugin-jsonl`。
 
-## 取消
+## 继续阅读
 
-- 提前退出任何 `for await`（`break` 或抛出异常）都会**取消整次运行**。
-- `r.abort()` 是显式的取消。
-- 取消信号会传到正在进行的模型请求和正在执行的工具。工具通过 `run(args, signal)` 拿到它。
-
-## 在 agent 工作时插话
-
-运行进行中调用 `send`，消息会并入**同一次运行**，返回同一个 `Run`。`when` 决定消息在哪个步边界插入：
-
-| `when`                  | 名称      | 送达时机                               |
-| ----------------------- | --------- | -------------------------------------- |
-| `'idle'`（默认）        | follow-up | agent 回答完之后                       |
-| `'step'`                | steer     | 下一个步边界，例如当前工具执行完之后   |
-| `'now'`                 | interrupt | 立即取消当前这一步，已输出的部分被丢弃 |
-| `(boundary) => boolean` | 自定义    | 条件为真的步边界                       |
-
-```ts
-chat.send('改用 vitest', { when: 'step' })
-chat.send('然后更新 changelog') // follow-up
-chat.send('停，先列大纲', { when: 'now' })
-```
-
-**送达规则**：每个步边界上，按发送顺序检查等待中的消息，条件成立就插入。每插入一条，agent 就不再空闲，所以多条 follow-up 会逐条处理，效果和每次等上一次运行结束后再 `send` 相同。
-
-## 保存与恢复
-
-`chat.state` 和 `r.state` 是普通的 JSON：`{ messages, plugins }`。
-
-```ts
-const saved = JSON.stringify(chat.state)
-const chat2 = createSession(agent, { state: JSON.parse(saved) })
-// 也可以直接从消息列表开始：
-createSession(agent, { state: messages })
-```
-
-保存和恢复之间可以更换插件列表。没有保存过状态的插件从它的 `init` 开始。
-
-## 上限
-
-`maxSteps`（默认 64）限制一次运行的步数。插入消息、结束运行各占一步。超出上限时运行失败。
-
-## 统计，不需要插件
-
-```ts
-for await (const { timing, summary } of r.turns) {
-  // 每一步的耗时，以及到目前为止的累计
-}
-const { turns, usage, modelMs, toolMs, tools } = await r.summary // 这次运行
-usageOf(chat.state) // 整段对话
-```
-
-`timing` 包含 `ms`；模型回合还有 `modelMs`、`firstTokenMs`，以及按工具调用 id 记录的 `toolMs`，都由事件算出（所以 `toolMs[id]` 等于该调用的 `tool_end.ms`）。summary 里的 `toolMs` 是各次调用耗时之和，并行调用会重叠，所以可能大于实际经过的时间。`r.summary.usage` 和 `usageOf` 统计的东西不同，两者不必相等：
-
-- `r.summary.usage` 累加这次运行发布的每个 `model_end` 和 `model_error` 的用量，包括插件 `ctx.complete` 的调用。一步之后即使被取消、`stop` 或改写历史，已经花掉的用量也不会撤销。被中断而没有终态事件的调用拿不到用量，不计入。
-- `usageOf(state)` 累加仍在历史里的主模型消息。插件的调用和被压缩掉的消息都不在内。
+[编写插件](plugins.md) · [核心概念](concepts.md) · [文档导航](README.md)

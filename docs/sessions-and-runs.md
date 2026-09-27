@@ -1,6 +1,25 @@
 # Sessions & Runs
 
-**English** · [简体中文](zh-CN/sessions-and-runs.md)
+**English** · [简体中文](zh-CN/sessions-and-runs.md) · [Documentation index](README.md)
+
+Start with one conversation, then add event handling, interjections and persistence as needed. These examples assume you have selected a `model` and configured its API key.
+
+## Send and read an answer
+
+```ts
+import { createAgent, createSession } from '@gaoxiang.ai/llm'
+
+const agent = createAgent({ model, system: 'Be concise.' })
+const chat = createSession(agent)
+const r = chat.send('Hello')
+
+for await (const chunk of r.text) process.stdout.write(chunk)
+console.log(await r.summary)
+```
+
+`send` returns a Run. Text arrives through `r.text`; `r.summary` resolves with usage when execution finishes. For only the final answer, use `await chat.send('Hello').result`.
+
+Leaving any stream loop early cancels the whole run; see [Cancellation](#cancellation) for recovery.
 
 ## The objects
 
@@ -18,23 +37,6 @@ const r = chat.send('hi')
 - **Agent**: model + tools + plugins. It has no state, so one agent can serve many sessions. Mistakes surface here, not at the first request: an unknown model throws `UnknownModelError` (with the closest match), an unsupported thinking level throws `UnsupportedThinkingError` (with the supported ones), and duplicate tool or plugin names throw `PluginConflictError`, which lists every conflict.
 - **Session**: holds `state` (last recorded state) and `pending` (undelivered messages). Its methods are `send` and `use`.
 - **Run**: runs from the first step until the agent is idle and no deliverable messages remain.
-
-## Model and thinking level
-
-`model` is a `'provider/id'` from pi-ai's catalog, or a pi-ai `Model` object for anything else (a custom `baseUrl`, the faux provider). The agent knows what the model accepts, so you never need pi-ai to ask:
-
-```ts
-const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'high' })
-agent.model.thinkingLevels // ['off', 'high', 'xhigh']
-agent.thinking // 'high'
-agent.model.hasEnvKey // is DEEPSEEK_API_KEY set right now?
-```
-
-`thinking` is `'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`. It defaults to `'off'`, or to the lightest level for a model that always thinks. A level the model does not accept throws at `createAgent`; nothing is mapped silently. `findModel(spec)` and `listModels(provider?)` give the same information before you build an agent, for a model picker.
-
-- **Mid-conversation:** `chat.use(agent.with({ thinking: 'xhigh' }))`. `with` returns a new agent and leaves the old one as it is; `use` switches at the next step boundary and keeps the state, the queued messages and the run in progress.
-- **Per request:** a `request: before(req => ({ ...req, thinking: 'xhigh' }))` plugin. A plugin may also switch the model, so this level is mapped to the nearest one the request's model supports, and the level actually sent is reported in `model_start`.
-- **API key:** nothing checks it for you, since a key can also come from `apiKey` or a request plugin. Check `agent.model.hasEnvKey` when the user is about to send, not before.
 
 ## Reading a run
 
@@ -64,6 +66,99 @@ for await (const { t, turn, timing, summary } of r.turns) {
 }
 await printing
 ```
+
+## Cancellation
+
+- Leaving any `for await` early, by `break` or by throwing, **aborts the whole run**.
+- `r.abort()` does the same explicitly.
+- The abort signal reaches both the in-flight model request and the running tools. Tools get it as `run(args, signal)`.
+
+Cancellation stops further execution; it does not undo tool side effects that already happened. The unfinished step is not committed. Mark any text already displayed as interrupted in your UI. Tools must pass their `signal` to IO so that work can stop promptly.
+
+Recover from the last committed state after a failure:
+
+```ts
+import { RunError } from '@gaoxiang.ai/llm'
+
+try {
+  await chat.send('Continue the task').result
+} catch (error) {
+  if (!(error instanceof RunError)) throw error
+  console.error(error.kind, error.message)
+  const recovered = createSession(agent, { state: error.state })
+  // Save recovered.state or send a new instruction when ready.
+}
+```
+
+Restoring state does not automatically retry the failed step. Undelivered messages remain in the original session’s `chat.pending`; they are outside the snapshot and are not copied into the new session.
+
+## Interjecting while the agent works
+
+`send` while a run is active merges the message into **that same run** and returns the same `Run`. `when` picks the step boundary where the message is inserted:
+
+| `when`                  | Name      | Delivered                                                                     |
+| ----------------------- | --------- | ----------------------------------------------------------------------------- |
+| `'idle'` (default)      | follow-up | When the agent has finished answering                                         |
+| `'step'`                | steer     | At the next step boundary, e.g. right after the current tools finish          |
+| `'now'`                 | interrupt | Cancels the current step now. Its partial output is not committed to history. |
+| `(boundary) => boolean` | custom    | Whenever your predicate is true                                               |
+
+```ts
+chat.send('use vitest instead', { when: 'step' })
+chat.send('then update the changelog') // follow-up
+chat.send('stop, outline first', { when: 'now' })
+```
+
+**Delivery rule:** at each boundary, pending messages are checked in send order, and each one whose condition holds is inserted. After each insertion the agent is no longer idle, so several follow-ups are handled one by one. That gives the same result as awaiting each run before the next `send`.
+
+## Save and restore
+
+`chat.state` is the latest committed JSON snapshot: `{ messages, plugins }`. Use `await r.state` for the snapshot after a successful run. Pending messages are not included.
+
+```ts
+const saved = JSON.stringify(chat.state)
+const chat2 = createSession(agent, { state: JSON.parse(saved) })
+// or start from a bare message list:
+createSession(agent, { state: messages })
+```
+
+The plugin list can change between save and restore. A plugin with no saved state starts from its `init`.
+
+## Model and thinking level
+
+`model` is a `'provider/id'` from pi-ai's catalog, or a pi-ai `Model` object for anything else (a custom `baseUrl`, the faux provider). The agent knows what the model accepts, so you never need pi-ai to ask:
+
+```ts
+const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'high' })
+agent.model.thinkingLevels // ['off', 'high', 'xhigh']
+agent.thinking // 'high'
+agent.model.hasEnvKey // is DEEPSEEK_API_KEY set right now?
+```
+
+`thinking` is `'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`. It defaults to `'off'`, or to the lightest level for a model that always thinks. A level the model does not accept throws at `createAgent`; nothing is mapped silently. `findModel(spec)` and `listModels(provider?)` give the same information before you build an agent, for a model picker.
+
+- **Mid-conversation:** `chat.use(agent.with({ thinking: 'xhigh' }))`. `with` returns a new agent and leaves the old one as it is; `use` switches at the next step boundary and keeps the state, the queued messages and the run in progress.
+- **Per request:** a `request: before(req => ({ ...req, thinking: 'xhigh' }))` plugin. A plugin may also switch the model, so this level is mapped to the nearest one the request's model supports, and the level actually sent is reported in `model_start`.
+- **API key:** nothing checks it for you, since a key can also come from `apiKey` or a request plugin. Check `agent.model.hasEnvKey` when the user is about to send, not before.
+
+## Limits
+
+`maxSteps` (default 64) caps the steps in one run. Inserting messages and finishing each count as a step. A run that exceeds the limit fails.
+
+## Metrics without plugins
+
+```ts
+for await (const { timing, summary } of r.turns) {
+  // per step + running totals
+}
+const { turns, usage, modelMs, toolMs, tools } = await r.summary // this run
+usageOf(chat.state) // whole conversation
+```
+
+`timing` includes `ms` and, for model turns, `modelMs`, `firstTokenMs` and `toolMs` keyed by tool call id, all computed from the events (so `toolMs[id]` equals that call's `tool_end.ms`). `toolMs` in the summary adds up parallel calls, so it can exceed wall time. `r.summary.usage` and `usageOf` count different things, so they need not agree:
+
+- `r.summary.usage` sums the usage of every `model_end` and `model_error` published in this run, plugin `ctx.complete` calls included. A step that is later cancelled, stopped or rewritten keeps what it already spent. A call cut off by an interrupt reports no usage, so it is not counted.
+- `usageOf(state)` sums the main model's messages still in history. Plugin calls and compacted messages drop out.
 
 ## Events
 
@@ -126,59 +221,6 @@ const runTests = tool({
 
 **Logging and tracing.** A `for await` loop that throws or leaves early aborts the run, and it sees only one run. For logs, traces and metrics use a plugin's read-only `observe` hook instead: it gets every event of every run of the agent from the first one, and what it throws is reported as a warning without touching the run. `observe` is synchronous and never awaited: to export asynchronously, enqueue in `observe` and flush after the run ([example](plugins.md#observers-are-synchronous)). Ready-made: `@gaoxiang.ai/plugin-otel` and `@gaoxiang.ai/plugin-jsonl` in [`plugins/`](../plugins).
 
-## Cancellation
+## Next
 
-- Leaving any `for await` early, by `break` or by throwing, **aborts the whole run**.
-- `r.abort()` does the same explicitly.
-- The abort signal reaches both the in-flight model request and the running tools. Tools get it as `run(args, signal)`.
-
-## Interjecting while the agent works
-
-`send` while a run is active merges the message into **that same run** and returns the same `Run`. `when` picks the step boundary where the message is inserted:
-
-| `when`                  | Name      | Delivered                                                            |
-| ----------------------- | --------- | -------------------------------------------------------------------- |
-| `'idle'` (default)      | follow-up | When the agent has finished answering                                |
-| `'step'`                | steer     | At the next step boundary, e.g. right after the current tools finish |
-| `'now'`                 | interrupt | Cancels the current step now. Its partial output is discarded.       |
-| `(boundary) => boolean` | custom    | Whenever your predicate is true                                      |
-
-```ts
-chat.send('use vitest instead', { when: 'step' })
-chat.send('then update the changelog') // follow-up
-chat.send('stop, outline first', { when: 'now' })
-```
-
-**Delivery rule:** at each boundary, pending messages are checked in send order, and each one whose condition holds is inserted. After each insertion the agent is no longer idle, so several follow-ups are handled one by one. That gives the same result as awaiting each run before the next `send`.
-
-## Save and restore
-
-`chat.state` and `r.state` are plain JSON: `{ messages, plugins }`.
-
-```ts
-const saved = JSON.stringify(chat.state)
-const chat2 = createSession(agent, { state: JSON.parse(saved) })
-// or start from a bare message list:
-createSession(agent, { state: messages })
-```
-
-The plugin list can change between save and restore. A plugin with no saved state starts from its `init`.
-
-## Limits
-
-`maxSteps` (default 64) caps the steps in one run. Inserting messages and finishing each count as a step. A run that exceeds the limit fails.
-
-## Metrics without plugins
-
-```ts
-for await (const { timing, summary } of r.turns) {
-  // per step + running totals
-}
-const { turns, usage, modelMs, toolMs, tools } = await r.summary // this run
-usageOf(chat.state) // whole conversation
-```
-
-`timing` includes `ms` and, for model turns, `modelMs`, `firstTokenMs` and `toolMs` keyed by tool call id, all computed from the events (so `toolMs[id]` equals that call's `tool_end.ms`). `toolMs` in the summary adds up parallel calls, so it can exceed wall time. `r.summary.usage` and `usageOf` count different things, so they need not agree:
-
-- `r.summary.usage` sums the usage of every `model_end` and `model_error` published in this run, plugin `ctx.complete` calls included. A step that is later cancelled, stopped or rewritten keeps what it already spent. A call cut off by an interrupt reports no usage, so it is not counted.
-- `usageOf(state)` sums the main model's messages still in history. Plugin calls and compacted messages drop out.
+[Writing Plugins](plugins.md) · [Concepts](concepts.md) · [Documentation index](README.md)

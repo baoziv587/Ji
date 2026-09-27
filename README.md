@@ -2,115 +2,147 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
-> **JI** (_jí_, 极) means _limit_, as in 极限: the core is kept to the smallest set of pieces, and an agent repeats one step until it reaches its result.
+**A small, extensible TypeScript runtime for LLM agents.**
 
-> [!WARNING]
-> JI is still in development. The API may change, and the packages are not published to npm yet.
+JI handles model calls, tools and conversation state. Add behavior through plugins; stream answers and read usage from the same Run.
 
-A small core for building LLM agents, plus a ready-to-use agent.
+> In development. APIs may change; packages are not published to npm yet.
 
-Every agent step comes down to three functions: **decide**, **act** and **record**. Everything else, such as shortening long history, retries, spending limits, redirecting the agent and usage stats, is a plugin wrapped around one of them. Recording has no side effects, so a conversation's state is plain JSON that you can save, load and run again.
+## Highlights
+
+- **Consistent hooks.** `before` changes input, `after` changes the result, `intercept` returns early. The same helpers wrap `decide`, `request`, `toolCalls` and `toolCall`.
+- **Compaction is a plugin.** Summarize older messages with `ctx.complete`, then commit the new history with `rewriteHistory`. Existing request plugins, cancellation and usage tracking still apply. [Implementation →](apps/examples/src/plugins/compaction.ts)
+- **Control while running.** Queue messages, steer at the next step or interrupt immediately. Save conversation and plugin state together as JSON.
+- **Built-in visibility.** Stream text, inspect each step and read tokens, cost and timing without extra plugins.
+
+**The hook chooses where; the helper chooses how.** Three independent plugins change requests, transform tool results and block calls:
+
+```ts
+import { after, before, definePlugin, intercept, toolError } from '@gaoxiang.ai/llm'
+
+const lowTemperature = definePlugin({
+  name: 'low-temperature',
+  request: before(req => ({ ...req, options: { ...req.options, temperature: 0 } })),
+})
+
+const trimOutput = definePlugin({
+  name: 'trim-output',
+  toolCall: after(result => ({
+    ...result,
+    content: result.content.map(part => (part.type === 'text' ? { ...part, text: part.text.slice(0, 2_000) } : part)),
+  })),
+})
+
+const blockShell = definePlugin({
+  name: 'block-shell',
+  toolCall: intercept(call => (call.name === 'shell' ? toolError(call, 'Shell access is disabled.') : undefined)),
+})
+
+const toolPlugins = [trimOutput, blockShell]
+```
+
+Reuse plugins individually or group them into array presets. On the same hook, the list wraps outside in; `intercept` returns `undefined` to continue. For retries, sequential execution or custom events, write `(input, next, ctx)` middleware and delegate with `yield* next(input)`.
+
+### Compact context with middleware
+
+The core flow below uses helpers for token estimates, tool-call pairing and transcript formatting from the [full implementation](apps/examples/src/plugins/compaction.ts).
+
+```ts
+import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
+
+const compactHistory = definePlugin({
+  name: 'compaction',
+  async *decide(state, next, { complete }) {
+    const { messages } = state
+    const cut = cutIndex(messages, 6)
+    if (estimateTokens(messages) <= 100_000 || cut < 2) return yield* next(state)
+
+    const summary = yield* complete({
+      systemPrompt: 'Summarize facts, decisions, open tasks and important tool results.',
+      messages: [user(transcript(messages.slice(0, cut)))],
+    })
+    return rewriteHistory([user(textOf(summary)), ...messages.slice(cut)])
+  },
+})
+```
+
+Add it to `plugins`. The summary call reuses request plugins, cancellation and usage tracking; `record` commits the new history.
+
+### Stream progress from tools
+
+A tool’s `yield` becomes a `tool_update`; its `return` is the final result sent to the model:
+
+```ts
+import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
+
+const checkUrls = tool({
+  name: 'check_urls',
+  description: 'Check HTTP status codes for a list of URLs.',
+  parameters: Type.Object({ urls: Type.Array(Type.String()) }),
+  async *run({ urls }, signal) {
+    const results = []
+    for (const [i, url] of urls.entries()) {
+      const response = await fetch(url, { method: 'HEAD', signal })
+      results.push({ url, status: response.status })
+      yield { done: i + 1, total: urls.length, url, status: response.status }
+    }
+    return JSON.stringify(results)
+  },
+})
+
+const checking = createSession(createAgent({ model, tools: [checkUrls] }))
+for await (const event of checking.send('Check https://example.com')) {
+  if (event.type === 'tool_update') console.log(event.call.name, event.data)
+}
+```
+
+The same stream carries text and tool start/end events. Add [throttleUpdates](plugins/throttle-updates/src/index.ts) to reduce progress update frequency.
+
+More capabilities, built with the same hooks:
+
+| Capability       | Examples                                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Manage context   | [Compaction](apps/examples/src/plugins/compaction.ts), [shorter tool results](apps/examples/src/plugins/truncate-tool-results.ts)   |
+| Keep work moving | [Auto-continue](apps/examples/src/plugins/keep-going.ts), [retrieval and fallback](apps/examples/src/hooks.ts)                      |
+| Control tools    | [Sequential execution](apps/examples/src/plugins/sequential-tools.ts), [progress throttling](plugins/throttle-updates/src/index.ts) |
+| Export events    | [OpenTelemetry](plugins/otel/src/index.ts), [JSONL](plugins/jsonl/src/index.ts)                                                     |
+
+## Quick start
+
+Requires **Node ≥ 24** and **pnpm**. From the repository root:
+
+```bash
+pnpm install
+pnpm demo
+```
+
+The demo runs offline with a calculator; no API key is needed. For a real model, set your provider's API key and run `MODEL=provider/model pnpm demo`, replacing `provider/model` with a supported model.
+
+Application code, with your selected `model` and plugins:
 
 ```ts
 import { createAgent, createSession } from '@gaoxiang.ai/llm'
 
-const agent = createAgent({
-  model,
-  system: 'Be concise.',
-  tools: [readFile],
-  plugins: [compaction({ maxTokens: 100_000 })],
-})
+const agent = createAgent({ model, plugins: [lowTemperature, toolPlugins] })
 const chat = createSession(agent)
+const run = chat.send('Explain middleware in one sentence.')
 
-const r = chat.send('Summarize the README')
-for await (const chunk of r.text) process.stdout.write(chunk)
-
-const { usage, tools } = await r.summary
-// plain JSON: createSession(agent, { state }) picks up from here
-save(chat.state)
+for await (const chunk of run.text) process.stdout.write(chunk)
+console.log(await run.summary)
 ```
 
-## Why JI
-
-- **Four objects:** `Agent`, `Session`, `Run` and `Plugin`. A session has a single method, `send`.
-- **Plugins act at fixed points in a step.** Two plugins that use different hooks don't depend on each other's order.
-- **Send messages while it runs.** A message can wait until the agent is idle, arrive after the current tool finishes, or stop the current step.
-- **Built-in stats.** Streamed text, a record of each step, timing, tokens and cost all come from the run, with no extra plugins.
-- **Stopping really stops.** Breaking out of any `for await` also closes the HTTP request.
-
-## Quick start
-
-Requires **Node ≥ 24** (runs `.ts` directly) and **pnpm**.
-
-```bash
-pnpm install
-
-# offline: plays back a scripted reply, no API key needed
-pnpm demo
-
-# real model; API key read from env
-MODEL=anthropic/claude-sonnet-5 pnpm demo
-```
-
-Any supported `provider/model` works. More runnable scenarios are in [apps/examples](apps/examples/README.md):
-
-```bash
-cd apps/examples
-pnpm compaction  # shorten long history
-pnpm interject   # send messages while the agent runs
-pnpm hooks       # auto-continue, search, backup model, spending limit
-```
-
-### Chat in your terminal
-
-[`repl.ts`](apps/examples/src/repl.ts) is a small chat REPL built on JI and DeepSeek, in about 300 lines. It streams replies, shows the model's thinking and each tool call with its result, and prints tokens, cache hits and cost after every reply.
-
-```bash
-DEEPSEEK_API_KEY=sk-... pnpm repl
-DEEPSEEK_API_KEY=sk-... DEEPSEEK_THINKING=high pnpm repl   # start with thinking on
-```
-
-```
-◆  You
-│  Is 391 prime? Check with calc.
-│
-◌  Thinking
-┊  391 = 17 × 23. Let me verify with calc.
-│
-▸  calc(expr: "391/17")
-✓  calc  23
-│
-│  No, 391 is not prime: 391 = 17 × 23.
-│
-│  1.8s · in 916 · out 246 · cached 512 (56%) · $0.0001
-```
-
-`/think high` changes the thinking level mid-chat, Ctrl+C stops the current reply, and `/exit` quits. How it's built is explained in the [apps/examples README](apps/examples/README.md#极简-repl--replts) (Chinese).
-
-## Packages
-
-| Package                                  | What it is                                                                            | When you touch it                              |
-| ---------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| [`@gaoxiang.ai/llm`](packages/llm)       | The LLM agent: `createAgent`, `createSession`, `definePlugin`, `tool`                 | Almost always                                  |
-| [`@gaoxiang.ai/kernel`](packages/kernel) | The core, not tied to any model: `unfold`, `extend` and helpers. Has no dependencies. | Only for non-LLM agents or building new layers |
-| [`apps/demo`](apps/demo)                 | Minimal end-to-end example                                                            | Starting point                                 |
-| [`apps/examples`](apps/examples)         | Scenarios and copy-pasteable plugins                                                  | When writing your own plugin                   |
+Find more offline scenarios in [apps/examples](apps/examples/README.md).
 
 ## Documentation
 
-| Read this                                    | To learn                                                                          |
-| -------------------------------------------- | --------------------------------------------------------------------------------- |
-| [Concepts](docs/concepts.md)                 | How a step works, how the layers fit together, and the rules the design relies on |
-| [Sessions & Runs](docs/sessions-and-runs.md) | Streaming, sending messages mid-run, stopping, save/load, stats                   |
-| [Writing Plugins](docs/plugins.md)           | Every hook, its execution order, and which hook fits your task                    |
-| [Kernel API](docs/kernel.md)                 | `unfold`, `extend` and the other core helpers                                     |
+[Sessions & Runs](docs/sessions-and-runs.md) · [Writing Plugins](docs/plugins.md) · [Concepts](docs/concepts.md) · [Kernel API](docs/kernel.md) · [Runnable examples](apps/examples/README.md)
+
+Use [`@gaoxiang.ai/llm`](packages/llm) for LLM agents, or the dependency-free [`@gaoxiang.ai/kernel`](packages/kernel) for your own decide → act → record loop.
 
 ## Development
 
 ```bash
-pnpm test         # vitest
-pnpm typecheck    # tsc across all workspaces
-pnpm lint         # eslint (@antfu/eslint-config)
+pnpm test
+pnpm typecheck
+pnpm lint
 ```
-
-Source is TypeScript that Node runs directly, with no build step. Code comments are written in Chinese.

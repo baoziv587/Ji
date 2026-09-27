@@ -1,27 +1,90 @@
 # 编写插件
 
-[English](../plugins.md) · **简体中文**
+[English](../plugins.md) · **简体中文** · [文档导航](README.md)
 
-插件是一组挂在 agent loop 上、有名字的钩子。它和 Rollup、Vite 的插件是同一种形状：一个带 `name` 的对象，字段是在流程固定位置被调用的钩子。这里的流程就是 agent loop，所以选哪个钩子，就是选你的代码在 loop 的哪个位置运行、多久运行一次。
+插件是一个有名字的对象，只需声明你要改变的行为。先选钩子，再选 `before`、`after` 或 `intercept`；需要控制完整执行过程时，再写中间件。
+
+## 第一个插件
+
+下面的插件在每次模型调用前设置 temperature。把它放进 `plugins` 后，主模型调用和插件发起的模型调用都会经过它：
 
 ```ts
-import { after, before, definePlugin } from '@gaoxiang.ai/llm'
+import { before, createAgent, definePlugin } from '@gaoxiang.ai/llm'
 
-export const myPlugin = definePlugin({
-  name: 'my-plugin', // 必填，不能重名
-  tools: [/* AgentTool */],
-  system: prompt => `${prompt}\nBe concise.`,
-  input: (messages, { state, idle, own }) => messages,
+const temperature = definePlugin({
+  name: 'temperature',
   request: before(req => ({
     ...req,
     options: { ...req.options, temperature: 0 },
   })),
-  toolCall: after(result => result),
-  record: (input, next) => next(input),
-  state: { init: 0, reduce: (n, turn) => n + 1 },
-  observe: (e, run) => log(run.id, e.type),
 })
+
+const agent = createAgent({ model, plugins: [temperature] })
 ```
+
+`model` 是你选定的模型。插件名称必须唯一；helper 的参数和返回值类型由钩子推导。这个插件只修改请求参数，不修改对话历史。
+
+先读下面的辅助函数，再按[需求选钩子](#该用哪个钩子)。遇到组合问题查[顺序](#顺序)，需要状态或取消信号查 [`ctx`](#ctx)。
+
+## 辅助函数：不写生成器
+
+| 我想……                         | 写法              | 需要懂生成器 |
+| ------------------------------ | ----------------- | ------------ |
+| 改输入                         | `before(f)`       | 否           |
+| 改结果                         | `after(g)`        | 否           |
+| 满足条件时拦截                 | `intercept(f)`    | 否           |
+| 逐个改事件（只影响读者看到的） | `mapEvents(f)`    | 否           |
+| 发自己的事件、重试、调用模型   | `async function*` | 是           |
+
+```text
+before(f)     f(input, ctx)         => input | Promise<input>
+after(g)      g(output, input, ctx) => output | Promise<output>
+intercept(f)  f(input, ctx)         => output | undefined | Promise<output | undefined>
+mapEvents(f)  f(event, input, ctx)  => event
+```
+
+`intercept` 的回调返回一个值，就以它为结果，不调用 `next`；返回 `undefined` 就原样放行。四个流式钩子的结果都不可能是 `undefined`，所以不会有歧义。
+
+```ts
+// 预算：超了就停
+decide: intercept(state => (overBudget(state) ? stop(state) : undefined))
+
+// 审批：拒绝时直接给模型一个错误结果
+toolCall: intercept(async (call, { signal }) =>
+  (await askApproval(call, { signal })) ? undefined : toolError(call, 'User denied this call'),
+)
+```
+
+- `before`、`after`、`intercept` 的回调可以是异步的。回调结束后它们会检查 `ctx.signal`：这一步已被取消时，不再启动 `next`，也不返回迟到的结果。它们停不下回调本身，所以回调里的 IO 要接上 `ctx.signal`。
+- `after` 原样转发事件，只变换最终结果；`mapEvents` 同步地逐个改写事件，一进一出，结果不变。事件只会到达运行的读者，要同时改流式文字和写入状态的消息（比如遮盖密钥），就两个一起用。
+- 辅助函数只用于四个流式钩子。`record` 直接写普通函数：`record: (input, next) => trim(next(input))`。
+
+## 该用哪个钩子
+
+| 我想……                            | 用                                               | 例子                                                                                   |
+| --------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| 修改工具参数或结果                | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../../apps/examples/src/plugins/truncate-tool-results.ts) |
+| 审批、拦截工具调用                | `toolCall: intercept(...)`                       | 返回 `toolError(call, reason)` 即拦截                                                  |
+| 重试工具                          | `toolCall`                                       | [错误与重试](#错误与重试)                                                              |
+| 一个回合的工具调用逐个执行        | `toolCalls`                                      | [`sequential-tools.ts`](../../apps/examples/src/plugins/sequential-tools.ts)           |
+| 一次审批一个回合的全部工具调用    | `toolCalls: intercept(...)`                      | 拒绝时为 `callsOf(message)` 的每个调用返回一个 `toolError`                             |
+| 工具超时                          | 在工具的 `run` 里                                | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                   |
+| 换模型、改 temperature / thinking | `request: before(...)`                           | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature`                     |
+| 模型出错时换兜底模型              | `request`                                        | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`                         |
+| 改写流式文字（只影响显示）        | `request: mapEvents(...)`                        | 输出时遮盖密钥                                                                         |
+| 给请求加检索结果、只发最近 N 条   | `request: before(...)`，跳过带 `ctx.by` 的调用   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
+| 任务没完成就自动继续、定时提醒    | `input`                                          | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
+| 写摘要并替换历史                  | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
+| 预算、步数上限                    | `decide: intercept(...)` + `stop`                | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
+| 截断历史（不调用模型）            | `record`                                         | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast`                               |
+| 保存自己的计数                    | `state: { init, reduce }`，用 `ctx.own` 读取     | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
+| 统计耗时、token、费用             | 不写插件：`r.summary`、`r.turns`、`usageOf`      | [`metrics.ts`](../../apps/examples/src/metrics.ts)                                     |
+| 记录日志、追踪、计数              | `observe`                                        | [`plugins/otel`](../../plugins/otel)、[`plugins/jsonl`](../../plugins/jsonl)           |
+| 显示一个耗时步骤正在做什么        | 在 `decide`、`request` 或 `toolCall` 里 `yield`  | [插件发出的事件](#插件发出的事件)                                                      |
+
+`budget` 用 `usageOf(state)` 计数，它只看得到仍在历史里的主模型消息，所以不是严格的费用上限：`ctx.complete` 的调用和被压缩掉的消息都不算在内（见[会话与运行](sessions-and-runs.md#统计不需要插件)）。
+
+[`apps/examples/src/plugins`](../../apps/examples/src/plugins) 里的插件可以直接复制过去改；[`plugins/`](../../plugins) 下提供可复用的 workspace 包：`otel`、`jsonl`、`throttle-updates`，目前尚未发布到 npm；每个示例的详细说明见 [示例 README](../../apps/examples/README.md)。
 
 ## agent loop
 
@@ -75,7 +138,7 @@ toolCalls( message )            看得到这一回合的全部调用
 
 改历史用 `record`，存自己的数据用 `state`。在插件外部用 `myPlugin.select(state)` 读取插件状态，插件还没写入时返回 `init`；在插件自己的钩子里，`ctx.own` 就是同一个值。
 
-## 两种签名
+## 钩子签名
 
 ```text
 变换      (value, ctx) => value | Promise<value>          input
@@ -139,38 +202,24 @@ const enrich = definePlugin({
 
 不要原地修改 `ctx.state` 或 `ctx.own`，要返回新值。打开[开发检查](#开发检查)时，`ctx.own.count++` 这样的写入会在那一行抛出 `TypeError`。
 
-## 辅助函数：不写生成器
+## 顺序
 
-| 我想……                         | 写法              | 需要懂生成器 |
-| ------------------------------ | ----------------- | ------------ |
-| 改输入                         | `before(f)`       | 否           |
-| 改结果                         | `after(g)`        | 否           |
-| 满足条件时拦截                 | `intercept(f)`    | 否           |
-| 逐个改事件（只影响读者看到的） | `mapEvents(f)`    | 否           |
-| 发自己的事件、重试、调用模型   | `async function*` | 是           |
+插件列表从上到下，就是从外到内：
 
 ```text
-before(f)     f(input, ctx)         => input | Promise<input>
-after(g)      g(output, input, ctx) => output | Promise<output>
-intercept(f)  f(input, ctx)         => output | undefined | Promise<output | undefined>
-mapEvents(f)  f(event, input, ctx)  => event
+plugins: [a, b]
+
+变换      input                    a 先处理，再交给 b
+中间件    decide / request / ...   a 在外层：a 先看到输入，最后看到输出
+record    a( b( applyTurn ) )      每个 state.reduce 在所属层返回时执行：先 b，后 a
+observe   a，然后 b                每个事件都按列表顺序
 ```
 
-`intercept` 的回调返回一个值，就以它为结果，不调用 `next`；返回 `undefined` 就原样放行。四个流式钩子的结果都不可能是 `undefined`，所以不会有歧义。
+- **同一个钩子**：与 Koa 的 `app.use(a); app.use(b)` 相同。预算要在审计记录之前决定是否放行，就写成 `[budget, audit]`。
+- **不同钩子**：顺序由一步的结构固定，所以写不同钩子的插件怎么排都行。
+- **预设**：`plugins` 可以嵌套数组。列表先展开，再按对象去重，保留第一次出现的位置：`[a, [b, a]]` 等价于 `[a, b]`。同一个插件对象的工具、钩子、reducer 和 observer 都只登记一次，状态也不会重复累计。不同对象使用同一个名字仍抛出 `PluginConflictError`。`agent.with(...)` 同样适用。
 
-```ts
-// 预算：超了就停
-decide: intercept(state => (overBudget(state) ? stop(state) : undefined))
-
-// 审批：拒绝时直接给模型一个错误结果
-toolCall: intercept(async (call, { signal }) =>
-  (await askApproval(call, { signal })) ? undefined : toolError(call, 'User denied this call'),
-)
-```
-
-- `before`、`after`、`intercept` 的回调可以是异步的。回调结束后它们会检查 `ctx.signal`：这一步已被取消时，不再启动 `next`，也不返回迟到的结果。它们停不下回调本身，所以回调里的 IO 要接上 `ctx.signal`。
-- `after` 原样转发事件，只变换最终结果；`mapEvents` 同步地逐个改写事件，一进一出，结果不变。事件只会到达运行的读者，要同时改流式文字和写入状态的消息（比如遮盖密钥），就两个一起用。
-- 辅助函数只用于四个流式钩子。`record` 直接写普通函数：`record: (input, next) => trim(next(input))`。
+内核的 `extend(base, m1, m2)` 让 `m2` 在外层；LLM 层把列表反过来再交给它（见 [内核 API](kernel.md)）。
 
 ## 调用模型：`ctx.complete`
 
@@ -227,25 +276,6 @@ const compaction = definePlugin({
 
 完整版本（切点不会拆开工具调用和它的结果）见 [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)。
 
-## 顺序
-
-插件列表从上到下，就是从外到内：
-
-```text
-plugins: [a, b]
-
-变换      input                    a 先处理，再交给 b
-中间件    decide / request / ...   a 在外层：a 先看到输入，最后看到输出
-record    a( b( applyTurn ) )      每个 state.reduce 在所属层返回时执行：先 b，后 a
-observe   a，然后 b                每个事件都按列表顺序
-```
-
-- **同一个钩子**：与 Koa 的 `app.use(a); app.use(b)` 相同。预算要在审计记录之前决定是否放行，就写成 `[budget, audit]`。
-- **不同钩子**：顺序由一步的结构固定，所以写不同钩子的插件怎么排都行。
-- **预设**：`plugins` 可以嵌套数组。列表先展开，再按对象去重，保留第一次出现的位置：`[a, [b, a]]` 等价于 `[a, b]`。同一个插件对象的工具、钩子、reducer 和 observer 都只登记一次，状态也不会重复累计。不同对象使用同一个名字仍抛出 `PluginConflictError`。`agent.with(...)` 同样适用。
-
-内核的 `extend(base, m1, m2)` 让 `m2` 在外层；LLM 层把列表反过来再交给它（见 [内核 API](kernel.md)）。
-
 ## 错误与重试
 
 | 情况                                 | 怎么做                                                                         |
@@ -279,6 +309,33 @@ const retryReads = definePlugin({
 ```
 
 每次尝试的事件都留在运行里。
+
+## 插件发出的事件
+
+插件在任何流式钩子里 yield 一个事件，并用声明合并登记它的类型，命名为 `<插件名>:<事件>`：
+
+```ts
+declare module '@gaoxiang.ai/llm' {
+  interface Events {
+    'compaction:start': { tokens: number }
+    'compaction:end': { before: number; after: number }
+  }
+}
+
+definePlugin({
+  name: 'compaction',
+  async *decide(state, next, { complete }) {
+    if (count(state.messages) < limit) return yield* next(state)
+    yield { type: 'compaction:start', tokens: count(state.messages) }
+    const reply = yield* complete({ systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] })
+    const messages = [user(textOf(reply))]
+    yield { type: 'compaction:end', before: count(state.messages), after: count(messages) }
+    return rewriteHistory(messages)
+  },
+})
+```
+
+读的人按 `e.type === 'compaction:start'` 判别，不需要导入这个插件；另一个插件要读，就自己声明同样的形状。事件出现在它被 yield 的位置：在 `next` 之前 yield，就排在 `next` 的事件之前。事件只陈述发生过的事。要根据别的插件做了什么来改变行为，请在 `state.reduce` 里读 `Turn`（压缩就是一个 `rewrite` turn，不管是谁做的），因为事件既不保存也不重放。
 
 ## observer 是同步的
 
@@ -341,60 +398,6 @@ try {
 5. 不要原地修改状态，要返回新值。
 6. 插件之间不互相导入。它们共享的是每个插件都能读到的东西：`Turn`、消息，以及事件名和它的形状。
 
-## 插件发出的事件
-
-插件在任何流式钩子里 yield 一个事件，并用声明合并登记它的类型，命名为 `<插件名>:<事件>`：
-
-```ts
-declare module '@gaoxiang.ai/llm' {
-  interface Events {
-    'compaction:start': { tokens: number }
-    'compaction:end': { before: number; after: number }
-  }
-}
-
-definePlugin({
-  name: 'compaction',
-  async *decide(state, next, { complete }) {
-    if (count(state.messages) < limit) return yield* next(state)
-    yield { type: 'compaction:start', tokens: count(state.messages) }
-    const reply = yield* complete({ systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] })
-    const messages = [user(textOf(reply))]
-    yield { type: 'compaction:end', before: count(state.messages), after: count(messages) }
-    return rewriteHistory(messages)
-  },
-})
-```
-
-读的人按 `e.type === 'compaction:start'` 判别，不需要导入这个插件；另一个插件要读，就自己声明同样的形状。事件出现在它被 yield 的位置：在 `next` 之前 yield，就排在 `next` 的事件之前。事件只陈述发生过的事。要根据别的插件做了什么来改变行为，请在 `state.reduce` 里读 `Turn`（压缩就是一个 `rewrite` turn，不管是谁做的），因为事件既不保存也不重放。
-
-## 该用哪个钩子
-
-| 我想……                            | 用                                               | 例子                                                                                   |
-| --------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| 修改工具参数或结果                | `toolCall: before(...)` / `toolCall: after(...)` | [`truncate-tool-results.ts`](../../apps/examples/src/plugins/truncate-tool-results.ts) |
-| 审批、拦截工具调用                | `toolCall: intercept(...)`                       | 返回 `toolError(call, reason)` 即拦截                                                  |
-| 重试工具                          | `toolCall`                                       | [错误与重试](#错误与重试)                                                              |
-| 一个回合的工具调用逐个执行        | `toolCalls`                                      | [`sequential-tools.ts`](../../apps/examples/src/plugins/sequential-tools.ts)           |
-| 一次审批一个回合的全部工具调用    | `toolCalls: intercept(...)`                      | 拒绝时为 `callsOf(message)` 的每个调用返回一个 `toolError`                             |
-| 工具超时                          | 在工具的 `run` 里                                | `AbortSignal.any([signal, AbortSignal.timeout(ms)])`                                   |
-| 换模型、改 temperature / thinking | `request: before(...)`                           | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `lowTemperature`                     |
-| 模型出错时换兜底模型              | `request`                                        | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `fallbackTo`                         |
-| 改写流式文字（只影响显示）        | `request: mapEvents(...)`                        | 输出时遮盖密钥                                                                         |
-| 给请求加检索结果、只发最近 N 条   | `request: before(...)`，跳过带 `ctx.by` 的调用   | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
-| 任务没完成就自动继续、定时提醒    | `input`                                          | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
-| 写摘要并替换历史                  | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
-| 预算、步数上限                    | `decide: intercept(...)` + `stop`                | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
-| 截断历史（不调用模型）            | `record`                                         | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast`                               |
-| 保存自己的计数                    | `state: { init, reduce }`，用 `ctx.own` 读取     | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
-| 统计耗时、token、费用             | 不写插件：`r.summary`、`r.turns`、`usageOf`      | [`metrics.ts`](../../apps/examples/src/metrics.ts)                                     |
-| 记录日志、追踪、计数              | `observe`                                        | [`plugins/otel`](../../plugins/otel)、[`plugins/jsonl`](../../plugins/jsonl)           |
-| 显示一个耗时步骤正在做什么        | 在 `decide`、`request` 或 `toolCall` 里 `yield`  | [插件发出的事件](#插件发出的事件)                                                      |
-
-`budget` 用 `usageOf(state)` 计数，它只看得到仍在历史里的主模型消息，所以不是严格的费用上限：`ctx.complete` 的调用和被压缩掉的消息都不算在内（见[会话与运行](sessions-and-runs.md#统计不需要插件)）。
-
-[`apps/examples/src/plugins`](../../apps/examples/src/plugins) 里的插件可以直接复制过去改；[`plugins/`](../../plugins) 下的包可以直接安装：`otel`、`jsonl`、`throttle-updates`；每个示例的详细说明见 [示例 README](../../apps/examples/README.md)。
-
 ## 工具
 
 ```ts
@@ -410,3 +413,7 @@ const calc = tool({
 ```
 
 `run` 之前会先按 schema 校验参数。同一回合的多个工具调用并行执行，它们的事件交错出现，结果保持调用顺序。`run` 写成异步生成器就能报告进度，见[工具的中间更新](sessions-and-runs.md#事件)。
+
+## 继续阅读
+
+[会话与运行](sessions-and-runs.md) · [核心概念](concepts.md) · [文档导航](README.md)
