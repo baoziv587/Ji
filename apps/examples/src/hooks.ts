@@ -3,7 +3,7 @@
 //   input    keep going automatically while the agent is idle but the task is unfinished (keepGoing plugin)
 //   view     add retrieval results to this one request without touching the history
 //   request  switch to a fallback model on error
-//   turn     stop once over budget (budget plugin)
+//   decide   stop once over budget (budget plugin)
 //
 // The list reads outside in: lowTemperature comes before fallback, so both the first try and the fallback run at
 // temperature 0.

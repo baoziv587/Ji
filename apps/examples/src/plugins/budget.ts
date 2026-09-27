@@ -21,7 +21,7 @@ export function budget({ maxCost = Infinity, maxTokens = Infinity }: BudgetOptio
   return definePlugin({
     name: 'budget',
 
-    turn: intercept(state => {
+    decide: intercept(state => {
       const { input, output, cost } = usageOf(state)
       return cost >= maxCost || input + output >= maxTokens ? stop(state) : undefined
     }),

@@ -14,6 +14,9 @@ export { findModel, listModels, type ModelInfo, UnknownModelError, UnsupportedTh
 export {
   type CallOptions,
   type CompleteRequest,
+  type DecideContext,
+  type DecideNext,
+  type DecideStream,
   definePlugin,
   type HookContext,
   type InputContext,
@@ -25,9 +28,6 @@ export {
   type RecordInput,
   type RequestContext,
   type ToolCallsRunner,
-  type TurnContext,
-  type TurnNext,
-  type TurnStream,
 } from './plugin.ts'
 export type { Run } from './run.ts'
 export { createSession, type Session, type SessionOptions } from './session.ts'

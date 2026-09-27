@@ -27,7 +27,7 @@ describe('jsonl', () => {
     const lines: string[] = []
     const helper = definePlugin({
       name: 'helper',
-      async *turn(state, next, { complete }) {
+      async *decide(state, next, { complete }) {
         if (state.messages.length === 1) {
           yield* complete({ messages: state.messages })
         }

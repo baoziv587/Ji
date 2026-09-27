@@ -478,12 +478,12 @@ describe('thinking levels', () => {
 })
 
 describe('rewriteHistory', () => {
-  it('turn returning rewriteHistory replaces the history; toolCalls is skipped, record and state see the rewrite', async () => {
+  it('decide returning rewriteHistory replaces the history; toolCalls is skipped, record and state see the rewrite', async () => {
     let batches = 0
     const seen: Turn['kind'][] = []
     const compact = definePlugin({
       name: 'compact',
-      async *turn(state, next) {
+      async *decide(state, next) {
         if (state.messages.length >= 3 && state.messages[0].content !== 'summary') {
           return rewriteHistory([user('summary')])
         }

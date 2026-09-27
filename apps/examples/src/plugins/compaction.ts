@@ -41,7 +41,7 @@ export function compaction({ maxTokens, keepRecent = 6, model, timeoutMs }: Comp
   return definePlugin({
     name: 'compaction',
 
-    async *turn(state, next, { complete, signal }) {
+    async *decide(state, next, { complete, signal }) {
       const { messages } = state
       const cut = cutIndex(messages, keepRecent)
       const before = estimateTokens(messages)

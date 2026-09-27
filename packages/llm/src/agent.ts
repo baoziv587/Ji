@@ -97,7 +97,7 @@ export function createAgent(options: AgentOptions): Agent {
    *     view      state.messages -> p1 -> p2        every model request
    *
    *   middleware, earlier plugins wrap later ones (p1 sees the input first and the output last)
-   *     turn^       p1( p2( baseAgent.policy ) )    every step
+   *     decide^     p1( p2( baseAgent.policy ) )    every step
    *     toolCalls^  p1( p2( runTools ) )            every model turn with tool calls
    *     record^     p1( p2( applyTurn ) )           every step; each layer then runs its own state.reduce
    *     request     p1( p2( callModel ) )           every model call, ctx.complete's included
@@ -194,7 +194,7 @@ function compile(parts: Parts, rctx: RunContext): LLMAgent {
       const state = snapshot!
       return { state, own: plugin.select(state), signal: rctx.signal }
     },
-    turn: plugin => ({
+    decide: plugin => ({
       ...contexts.of(plugin),
       complete: (req, options) => complete(plugin, req, options),
     }),
@@ -232,7 +232,7 @@ function compile(parts: Parts, rctx: RunContext): LLMAgent {
 }
 
 /**
- * One step (RFC-0004 §4); plugin turn middleware wraps it and may return rewriteHistory / stop instead:
+ * One step (RFC-0004 §4); plugin decide middleware wraps it and may return rewriteHistory / stop instead:
  *
  *   boundary = { state, idle }
  *   input transforms( ctx.offer(boundary) )

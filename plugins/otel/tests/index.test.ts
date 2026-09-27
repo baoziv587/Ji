@@ -76,7 +76,7 @@ describe('otel', () => {
     const tracer = fakeTracer()
     const compaction = definePlugin({
       name: 'compaction',
-      async *turn(state, next) {
+      async *decide(state, next) {
         yield { type: 'compaction:start', tokens: 100 }
         yield { type: 'compaction:end', before: 100, after: 10 }
         return yield* next(state)
@@ -98,7 +98,7 @@ describe('otel', () => {
     const tracer = fakeTracer()
     const compaction = definePlugin({
       name: 'compaction',
-      async *turn(state, next, { complete }) {
+      async *decide(state, next, { complete }) {
         if (state.messages.length === 1) {
           yield { type: 'compaction:start', tokens: 100 }
           yield* complete({ messages: state.messages })

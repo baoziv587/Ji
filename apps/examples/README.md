@@ -87,23 +87,23 @@ export const myPlugin = definePlugin({
 钩子只有两种签名：
 
 - **变换**（`input`、`view`）：`(value, ctx) => value`，可以是异步的。多个插件按数组顺序依次执行。
-- **中间件**（`turn`、`request`、`toolCalls`、`toolCall`）：`(input, next, ctx)`。调用 `next` 并返回它的结果 = 什么都不改；改参数再调用 = 改输入；改返回值 = 改输出；不调用 = 拦截；调用多次 = 重试。
+- **中间件**（`decide`、`request`、`toolCalls`、`toolCall`）：`(input, next, ctx)`。调用 `next` 并返回它的结果 = 什么都不改；改参数再调用 = 改输入；改返回值 = 改输出；不调用 = 拦截；调用多次 = 重试。
 
 `system(prompt)`、`record({ state, turn }, next)`、`state.reduce(own, turn)` 是纯函数，没有 `ctx`。
 
-**`ctx`。** `ctx.state` 是这一步开始前已提交的状态，同一步里所有钩子看到同一个快照；`ctx.own` 是本插件自己的状态（等于 `plugin.select(ctx.state)`，类型由 `state.init` 推断）；`ctx.signal` 在中断或取消时触发，钩子里的 IO 都要接上它。`input` 还有 `ctx.idle`，`turn` 还有 `ctx.complete`（经过 request 链调用模型），`request` 还有 `ctx.by`（发起辅助调用的插件名）。
+**`ctx`。** `ctx.state` 是这一步开始前已提交的状态，同一步里所有钩子看到同一个快照；`ctx.own` 是本插件自己的状态（等于 `plugin.select(ctx.state)`，类型由 `state.init` 推断）；`ctx.signal` 在中断或取消时触发，钩子里的 IO 都要接上它。`input` 还有 `ctx.idle`，`decide` 还有 `ctx.complete`（经过 request 链调用模型），`request` 还有 `ctx.by`（发起辅助调用的插件名）。
 
 **不写生成器。** 只改输入用 `before(f)`，只改结果用 `after(g)`，满足条件时拦截用 `intercept(f)`（返回值即结果，返回 `undefined` 放行），只改流式事件（只影响显示）用 `mapEvents(f)`。前三个的回调可以是异步的。要发自己的事件、重试或调用模型时，才需要写 `async function*`。
 
 ```ts
-turn: intercept(state => (overBudget(state) ? stop(state) : undefined)) // 超预算就停
+decide: intercept(state => (overBudget(state) ? stop(state) : undefined)) // 超预算就停
 ```
 
 **顺序。** 插件列表从上到下就是从外到内：同一个中间件钩子上，靠前的插件在外层，先看到输入、最后看到输出。不同钩子之间的顺序是固定的，所以写不同钩子的插件顺序可以随意。嵌套的预设会被展开，同一个插件对象只登记一次。
 
 **规则。**
 
-- `record` 和 `state.reduce` 必须同步、纯（不读时钟、不发请求），否则保存后恢复的结果会不同。需要 IO 的事放在 `turn`、`input`、`view`、`request`、`toolCalls` 或 `toolCall` 里，并传入 `ctx.signal`。
+- `record` 和 `state.reduce` 必须同步、纯（不读时钟、不发请求），否则保存后恢复的结果会不同。需要 IO 的事放在 `decide`、`input`、`view`、`request`、`toolCalls` 或 `toolCall` 里，并传入 `ctx.signal`。
 - 流式中间件里消费 `next` 用 `return yield* next(...)`，这样取消能传到底层请求，返回值也不会丢。
 - 工具拦截、拒绝等预期内的失败返回 `toolError(call, reason)`；重试可能解决的失败直接抛出，外层 `toolCall` 中间件可以重试，没人处理时也会被转成错误结果交给模型。
 - 不要原地修改状态。开发时（`NODE_ENV` 为 `development` / `test`）已提交的状态会被冻结，原地修改当场抛出 `TypeError`。
@@ -124,8 +124,8 @@ turn: intercept(state => (overBudget(state) ? stop(state) : undefined)) // 超�
 | 改写流式文字（只影响显示）            | `request: mapEvents(...)`                          | 输出时遮盖密钥                 |
 | 给这一次请求加检索结果、只发最近 N 条 | `view`                                             | `hooks.ts` 的 `retrieval`      |
 | 自动继续、定时提醒                    | `input`                                            | `keepGoing`                    |
-| 替换历史（压缩）                      | `turn` 里 `ctx.complete`，返回 `rewriteHistory`    | `compaction`                   |
-| 预算、步数上限                        | `turn: intercept(...)` 返回 `stop(state)`          | `budget`                       |
+| 替换历史（压缩）                      | `decide` 里 `ctx.complete`，返回 `rewriteHistory`  | `compaction`                   |
+| 预算、步数上限                        | `decide: intercept(...)` 返回 `stop(state)`        | `budget`                       |
 | 截断历史（不需要调用模型）            | `record`                                           | demo 里的 `keepLast`           |
 | 保存一份插件自己的数据                | `state: { init, reduce }`，用 `ctx.own` 读取       | `keepGoing` 记录自动继续的次数 |
 | 耗时、token、费用                     | 不写插件：`r.summary`、`r.turns`、`usageOf(state)` | `metrics.ts`                   |
@@ -139,7 +139,7 @@ compaction({ maxTokens: 100_000, keepRecent: 6 })
 compaction({ maxTokens: 100_000, model: cheapModel, timeoutMs: 30_000 })
 ```
 
-每次调用模型前估算上下文大小；超过 `maxTokens` 时，把较早的消息写成摘要，用「摘要 + 最近 `keepRecent` 条消息」替换历史。写摘要是 IO，在 `turn` 里通过 `ctx.complete` 做：默认用 agent 的模型，可以用 `model` 换成便宜的；它经过 request 插件（兜底模型照样生效），随这一步一起取消，事件带 `by: 'compaction'`，用量计入 `r.summary.usage`，摘要的文字不会出现在 `r.text` 里。设了 `timeoutMs` 时，超时就放弃这次压缩，这一步保留原来的历史。替换本身由 `rewriteHistory` 交给 `record`，所以可以保存和重放。切点不会拆开工具调用和它的结果。被替换的消息需要另存时，从 `r.turns` 里 `turn.kind === 'rewrite'` 之前那一步的 `state` 读取。
+每次调用模型前估算上下文大小；超过 `maxTokens` 时，把较早的消息写成摘要，用「摘要 + 最近 `keepRecent` 条消息」替换历史。写摘要是 IO，在 `decide` 里通过 `ctx.complete` 做：默认用 agent 的模型，可以用 `model` 换成便宜的；它经过 request 插件（兜底模型照样生效），随这一步一起取消，事件带 `by: 'compaction'`，用量计入 `r.summary.usage`，摘要的文字不会出现在 `r.text` 里。设了 `timeoutMs` 时，超时就放弃这次压缩，这一步保留原来的历史。替换本身由 `rewriteHistory` 交给 `record`，所以可以保存和重放。切点不会拆开工具调用和它的结果。被替换的消息需要另存时，从 `r.turns` 里 `turn.kind === 'rewrite'` 之前那一步的 `state` 读取。
 
 ### 剔除过大的工具结果 · [`truncate-tool-results.ts`](src/plugins/truncate-tool-results.ts)
 
@@ -180,7 +180,7 @@ usageOf(chat.state) // 整段对话
 
 ### 细粒度钩子 · [`hooks.ts`](src/hooks.ts)
 
-`input` 自动继续（[`keep-going.ts`](src/plugins/keep-going.ts)，用 `ctx.own` 读取已继续的次数）、`view` 加检索结果、`request` 换兜底模型和改 temperature、`turn` 预算（[`budget.ts`](src/plugins/budget.ts)，用 `intercept`）组合在一个 agent 里。兜底模型只在还没有任何输出时才切换，这一步被取消后也不再重试。`lowTemperature` 排在 `fallbackTo` 前面，处在外层，所以第一次请求和兜底请求都用 temperature 0。
+`input` 自动继续（[`keep-going.ts`](src/plugins/keep-going.ts)，用 `ctx.own` 读取已继续的次数）、`view` 加检索结果、`request` 换兜底模型和改 temperature、`decide` 预算（[`budget.ts`](src/plugins/budget.ts)，用 `intercept`）组合在一个 agent 里。兜底模型只在还没有任何输出时才切换，这一步被取消后也不再重试。`lowTemperature` 排在 `fallbackTo` 前面，处在外层，所以第一次请求和兜底请求都用 temperature 0。
 
 `budget` 按 `usageOf(state)` 计算，看不到插件的模型调用和被压缩掉的消息，所以不是严格的费用上限。
 

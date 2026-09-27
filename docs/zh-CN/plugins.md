@@ -32,7 +32,7 @@ export const myPlugin = definePlugin({
 createAgent        tools、system                           一次
 run                observe                                 这次运行的每个事件，按顺序
  └─ step
-     turn          决定这一步的 turn                        每一步
+     decide        决定这一步做什么                         每一步
       ├─ input     这里要插入消息吗？                        有：一个 input turn，直接到 record
       │                                                     没有且空闲：运行结束
       ├─ view      这次请求发送的消息
@@ -43,7 +43,7 @@ run                observe                                 这次运行的每个
       └─ state.reduce  各插件自己的数据                     所属插件的 record 层返回时
 ```
 
-`input`、`view`、`request` 都在 `turn` 里面：`turn` 不调用 `next`、直接返回 `rewriteHistory(...)` 或 `stop(state)` 时，它们都不会执行，改写历史直接进入 `record`。
+`input`、`view`、`request` 都在 `decide` 里面：`decide` 不调用 `next`、直接返回 `rewriteHistory(...)` 或 `stop(state)` 时，它们都不会执行，改写历史直接进入 `record`。工具不在里面：`decide` 的 `next` 返回时，模型已经回答，但还没有任何工具执行。
 
 ## 钩子
 
@@ -51,7 +51,7 @@ run                observe                                 这次运行的每个
 | -------------- | ------ | ---------------------------------------- | -------- | ------------------------------ |
 | `tools`        | 列表   | `createAgent` 时                         | —        | 注册工具                       |
 | `system`       | 变换   | `createAgent` 时执行一次                 | 否       | 修改 system prompt             |
-| `turn`         | 中间件 | 每一步                                   | 是       | 压缩、预算、结束运行           |
+| `decide`       | 中间件 | 每一步                                   | 是       | 压缩、预算、结束运行           |
 | `input`        | 变换   | 每个步边界                               | 否       | 自动继续、提醒                 |
 | `view`         | 变换   | 每次调用主模型前                         | 否       | 检索、窗口截取；不改历史       |
 | `request`      | 中间件 | 每次模型调用，包括 `ctx.complete` 发起的 | 是       | 换模型、改 temperature、兜底   |
@@ -98,7 +98,7 @@ toolCalls( message )            看得到这一回合的全部调用
 | 不调用 `next`       | 拦截       |
 | 多次调用 `next`     | 重试       |
 
-有副作用的四个中间件（`turn`、`request`、`toolCalls`、`toolCall`）都是**流**：`yield` 往这次运行追加一个事件，`return` 给出结果，`yield* next(...)` 把内层的事件原样传出去。`record` 也是 `(input, next)` 的形状，但它是普通的同步函数：`record: ({ state, turn }, next) => AgentState`。
+有副作用的四个中间件（`decide`、`request`、`toolCalls`、`toolCall`）都是**流**：`yield` 往这次运行追加一个事件，`return` 给出结果，`yield* next(...)` 把内层的事件原样传出去。`record` 也是 `(input, next)` 的形状，但它是普通的同步函数：`record: ({ state, turn }, next) => AgentState`。
 
 ## `ctx`
 
@@ -110,7 +110,7 @@ toolCalls( message )            看得到这一回合的全部调用
 | `ctx.own`      | 所有带 ctx 的钩子 | 本插件的状态，即 `plugin.select(ctx.state)`。类型由 `state.init` 推断   |
 | `ctx.signal`   | 所有带 ctx 的钩子 | 这一步被中断或运行被取消时触发。钩子发起的任何 IO 都把它传下去          |
 | `ctx.idle`     | `input`           | 历史为空，或最后一条是没有工具调用的助手消息                            |
-| `ctx.complete` | `turn`            | 经过 agent 的 request 链调用模型（[见下文](#调用模型ctxcomplete)）      |
+| `ctx.complete` | `decide`          | 经过 agent 的 request 链调用模型（[见下文](#调用模型ctxcomplete)）      |
 | `ctx.by`       | `request`         | 发起这次请求的插件名（通过 `ctx.complete`）；主模型的请求为 `undefined` |
 
 有状态的插件读自己的状态，不需要引用自己，也不需要写类型：
@@ -160,7 +160,7 @@ mapEvents(f)  f(event, input, ctx)  => event
 
 ```ts
 // 预算：超了就停
-turn: intercept(state => (overBudget(state) ? stop(state) : undefined))
+decide: intercept(state => (overBudget(state) ? stop(state) : undefined))
 
 // 审批：拒绝时直接给模型一个错误结果
 toolCall: intercept(async (call, { signal }) =>
@@ -174,12 +174,12 @@ toolCall: intercept(async (call, { signal }) =>
 
 ## 调用模型：`ctx.complete`
 
-在 `turn` 里，`ctx.complete(req, { signal? })` 借助 agent 自己的机制调用模型，不需要导入 pi-ai：
+在 `decide` 里，`ctx.complete(req, { signal? })` 借助 agent 自己的机制调用模型，不需要导入 pi-ai：
 
 ```ts
 const summarize = definePlugin({
   name: 'summarize',
-  async *turn(state, next, { complete }) {
+  async *decide(state, next, { complete }) {
     if (!tooLong(state.messages)) return yield* next(state)
 
     const reply = yield* complete({
@@ -207,7 +207,7 @@ const summarize = definePlugin({
 ```ts
 const compaction = definePlugin({
   name: 'compaction',
-  async *turn(state, next, { complete, signal }) {
+  async *decide(state, next, { complete, signal }) {
     if (!tooLong(state.messages)) return yield* next(state)
 
     const deadline = AbortSignal.timeout(30_000)
@@ -334,10 +334,10 @@ try {
 
 ## 规则
 
-1. `record` 和 `state.reduce` **同步且纯**。IO 放在 `turn`、`input`、`view`、`request`、`toolCalls` 或 `toolCall` 里，并把 `ctx.signal` 传下去。
+1. `record` 和 `state.reduce` **同步且纯**。IO 放在 `decide`、`input`、`view`、`request`、`toolCalls` 或 `toolCall` 里，并把 `ctx.signal` 传下去。
 2. 在流式钩子里用 **`return yield* next(...)`** 消费流，或者用辅助函数，保证取消能传下去、内层事件和返回值都不会丢。
 3. 重试可能解决的失败，工具**抛出**；预期内的失败**返回 `toolError(call, reason)`**（见[上文](#错误与重试)）。
-4. 在 `turn` 里返回 `rewriteHistory(messages)` 替换历史，返回 `stop(state)` 以最后一条助手消息结束运行。
+4. 在 `decide` 里返回 `rewriteHistory(messages)` 替换历史，返回 `stop(state)` 以最后一条助手消息结束运行。
 5. 不要原地修改状态，要返回新值。
 6. 插件之间不互相导入。它们共享的是每个插件都能读到的东西：`Turn`、消息，以及事件名和它的形状。
 
@@ -355,7 +355,7 @@ declare module '@gaoxiang.ai/llm' {
 
 definePlugin({
   name: 'compaction',
-  async *turn(state, next, { complete }) {
+  async *decide(state, next, { complete }) {
     if (count(state.messages) < limit) return yield* next(state)
     yield { type: 'compaction:start', tokens: count(state.messages) }
     const reply = yield* complete({ systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] })
@@ -383,13 +383,13 @@ definePlugin({
 | 改写流式文字（只影响显示）        | `request: mapEvents(...)`                        | 输出时遮盖密钥                                                                         |
 | 给请求加检索结果、只发最近 N 条   | `view`                                           | [`hooks.ts`](../../apps/examples/src/hooks.ts) 的 `retrieval`                          |
 | 任务没完成就自动继续、定时提醒    | `input`                                          | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
-| 写摘要并替换历史                  | `turn` + `ctx.complete` + `rewriteHistory`       | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
-| 预算、步数上限                    | `turn: intercept(...)` + `stop`                  | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
+| 写摘要并替换历史                  | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../../apps/examples/src/plugins/compaction.ts)                       |
+| 预算、步数上限                    | `decide: intercept(...)` + `stop`                | [`budget.ts`](../../apps/examples/src/plugins/budget.ts)                               |
 | 截断历史（不调用模型）            | `record`                                         | [`apps/demo`](../../apps/demo/src/main.ts) 的 `keepLast`                               |
 | 保存自己的计数                    | `state: { init, reduce }`，用 `ctx.own` 读取     | [`keep-going.ts`](../../apps/examples/src/plugins/keep-going.ts)                       |
 | 统计耗时、token、费用             | 不写插件：`r.summary`、`r.turns`、`usageOf`      | [`metrics.ts`](../../apps/examples/src/metrics.ts)                                     |
 | 记录日志、追踪、计数              | `observe`                                        | [`plugins/otel`](../../plugins/otel)、[`plugins/jsonl`](../../plugins/jsonl)           |
-| 显示一个耗时步骤正在做什么        | 在 `turn`、`request` 或 `toolCall` 里 `yield`    | [插件发出的事件](#插件发出的事件)                                                      |
+| 显示一个耗时步骤正在做什么        | 在 `decide`、`request` 或 `toolCall` 里 `yield`  | [插件发出的事件](#插件发出的事件)                                                      |
 
 `budget` 用 `usageOf(state)` 计数，它只看得到仍在历史里的主模型消息，所以不是严格的费用上限：`ctx.complete` 的调用和被压缩掉的消息都不算在内（见[会话与运行](sessions-and-runs.md#统计不需要插件)）。
 

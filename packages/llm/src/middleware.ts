@@ -8,9 +8,9 @@ export interface Cancellable {
 }
 
 /**
- * A streaming hook: turn, request, toolCalls or toolCall. The helpers below build one without writing a generator;
+ * A streaming hook: decide, request, toolCalls or toolCall. The helpers below build one without writing a generator;
  * their callbacks' results are NoInfer, so the hook the helper is assigned to decides the types (stop(state) is a
- * Step<never, …>, yet still fits turn).
+ * Step<never, …>, yet still fits decide).
  */
 export type Middleware<I, O, C extends Cancellable = Cancellable, D = Payload> = (
   input: I,

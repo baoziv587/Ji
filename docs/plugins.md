@@ -32,7 +32,7 @@ Every hook, where it sits and how often it runs. A run repeats steps until the a
 createAgent        tools, system                              once
 run                observe                                    every event of the run, in order
  └─ step
-     turn          decides this step's turn                   every step
+     decide        what this step does                        every step
       ├─ input     messages to insert here?                   yes: an input turn, go to record
       │                                                        none and idle: the run ends
       ├─ view      the messages this request sends
@@ -43,7 +43,7 @@ run                observe                                    every event of the
       └─ state.reduce  each plugin's own data                 as its plugin's record returns
 ```
 
-`input`, `view` and `request` run inside `turn`: a `turn` that returns `rewriteHistory(...)` or `stop(state)` without calling `next` skips them, and a rewrite goes straight to `record`.
+`input`, `view` and `request` run inside `decide`: a `decide` that returns `rewriteHistory(...)` or `stop(state)` without calling `next` skips them, and a rewrite goes straight to `record`. The tools do not: when `decide`'s `next` returns, the model has answered but no tool has run yet.
 
 ## Hooks
 
@@ -51,7 +51,7 @@ run                observe                                    every event of the
 | -------------- | ---------- | ---------------------------------------------------- | ------------- | ------------------------------------------------ |
 | `tools`        | list       | At `createAgent`                                     | —             | Register tools                                   |
 | `system`       | transform  | Once, at `createAgent`                               | No            | Edit the system prompt                           |
-| `turn`         | middleware | Every step                                           | Yes           | Compaction, budgets, stopping                    |
+| `decide`       | middleware | Every step                                           | Yes           | Compaction, budgets, stopping                    |
 | `input`        | transform  | Every step boundary                                  | No            | Auto-continue, reminders                         |
 | `view`         | transform  | Before each main model call                          | No            | Retrieval, windowing. History is unchanged.      |
 | `request`      | middleware | Every model call, `ctx.complete`'s too               | Yes           | Switch model, temperature, fallback              |
@@ -98,7 +98,7 @@ pure         no ctx                                          system(prompt), rec
 | don't call `next`                 | Intercept         |
 | call `next` more than once        | Retry             |
 
-The four middleware with side effects (`turn`, `request`, `toolCalls`, `toolCall`) are **streams**: `yield` adds an event to the run, `return` gives the result, and `yield* next(...)` passes the inner layers' events through. `record` has the same `(input, next)` shape, but it is a plain synchronous function: `record: ({ state, turn }, next) => AgentState`.
+The four middleware with side effects (`decide`, `request`, `toolCalls`, `toolCall`) are **streams**: `yield` adds an event to the run, `return` gives the result, and `yield* next(...)` passes the inner layers' events through. `record` has the same `(input, next)` shape, but it is a plain synchronous function: `record: ({ state, turn }, next) => AgentState`.
 
 ## `ctx`
 
@@ -110,7 +110,7 @@ Every hook with a `ctx` gets the same three fields; some get one more.
 | `ctx.own`      | every hook with a ctx | This plugin's state, `plugin.select(ctx.state)`. Its type is inferred from `state.init`.                  |
 | `ctx.signal`   | every hook with a ctx | Fires when the step is interrupted or the run is aborted. Pass it to any IO the hook starts.              |
 | `ctx.idle`     | `input`               | History is empty, or its last message is an assistant message without tool calls.                         |
-| `ctx.complete` | `turn`                | Calls a model through the agent's request chain ([below](#calling-a-model-ctxcomplete)).                  |
+| `ctx.complete` | `decide`              | Calls a model through the agent's request chain ([below](#calling-a-model-ctxcomplete)).                  |
 | `ctx.by`       | `request`             | The name of the plugin whose `ctx.complete` made this request; `undefined` for the main model's requests. |
 
 A stateful plugin reads its own state without referring to itself or spelling out its type:
@@ -160,7 +160,7 @@ mapEvents(f)  f(event, input, ctx)  => event
 
 ```ts
 // budget: stop once over the limit
-turn: intercept(state => (overBudget(state) ? stop(state) : undefined))
+decide: intercept(state => (overBudget(state) ? stop(state) : undefined))
 
 // approval: a refused call gets an error result for the model
 toolCall: intercept(async (call, { signal }) =>
@@ -174,12 +174,12 @@ toolCall: intercept(async (call, { signal }) =>
 
 ## Calling a model: `ctx.complete`
 
-In `turn`, `ctx.complete(req, { signal? })` calls a model with the agent's own machinery instead of importing pi-ai:
+In `decide`, `ctx.complete(req, { signal? })` calls a model with the agent's own machinery instead of importing pi-ai:
 
 ```ts
 const summarize = definePlugin({
   name: 'summarize',
-  async *turn(state, next, { complete }) {
+  async *decide(state, next, { complete }) {
     if (!tooLong(state.messages)) return yield* next(state)
 
     const reply = yield* complete({
@@ -207,7 +207,7 @@ The optional `signal` narrows the call: it is merged with the step's signal, so 
 ```ts
 const compaction = definePlugin({
   name: 'compaction',
-  async *turn(state, next, { complete, signal }) {
+  async *decide(state, next, { complete, signal }) {
     if (!tooLong(state.messages)) return yield* next(state)
 
     const deadline = AbortSignal.timeout(30_000)
@@ -334,10 +334,10 @@ They catch common mistakes; they do not prove a plugin pure. Two `Date.now()` ca
 
 ## Rules
 
-1. `record` and `state.reduce` are **synchronous and pure**. Put IO in `turn`, `input`, `view`, `request`, `toolCalls` or `toolCall`, and pass it `ctx.signal`.
+1. `record` and `state.reduce` are **synchronous and pure**. Put IO in `decide`, `input`, `view`, `request`, `toolCalls` or `toolCall`, and pass it `ctx.signal`.
 2. In the streaming hooks, consume the stream with **`return yield* next(...)`**, or use a helper. That keeps cancellation, the inner events and the return value intact.
 3. Tools **throw** for failures a retry may fix and **return `toolError(call, reason)`** for expected ones ([above](#errors-and-retries)).
-4. From `turn`, return `rewriteHistory(messages)` to replace history, or `stop(state)` to end the run with the last assistant message.
+4. From `decide`, return `rewriteHistory(messages)` to replace history, or `stop(state)` to end the run with the last assistant message.
 5. Never change state in place: return new values.
 6. Plugins don't import each other. They share what every plugin can read: `Turn`s, the messages, and event names with their shapes.
 
@@ -355,7 +355,7 @@ declare module '@gaoxiang.ai/llm' {
 
 definePlugin({
   name: 'compaction',
-  async *turn(state, next, { complete }) {
+  async *decide(state, next, { complete }) {
     if (count(state.messages) < limit) return yield* next(state)
     yield { type: 'compaction:start', tokens: count(state.messages) }
     const reply = yield* complete({ systemPrompt: SUMMARIZE, messages: [user(transcript(state.messages))] })
@@ -383,13 +383,13 @@ Readers match on `e.type === 'compaction:start'` without importing the plugin; a
 | Rewrite streamed text for display only                 | `request: mapEvents(...)`                        | Redact secrets as they stream                                                       |
 | Add retrieval results or send only the last N messages | `view`                                           | `retrieval` in [`hooks.ts`](../apps/examples/src/hooks.ts)                          |
 | Keep going until done, add reminders                   | `input`                                          | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
-| Summarize and replace history                          | `turn` + `ctx.complete` + `rewriteHistory`       | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
-| Enforce a budget or step cap                           | `turn: intercept(...)` + `stop`                  | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |
+| Summarize and replace history                          | `decide` + `ctx.complete` + `rewriteHistory`     | [`compaction.ts`](../apps/examples/src/plugins/compaction.ts)                       |
+| Enforce a budget or step cap                           | `decide: intercept(...)` + `stop`                | [`budget.ts`](../apps/examples/src/plugins/budget.ts)                               |
 | Trim history (no model call)                           | `record`                                         | `keepLast` in [`apps/demo`](../apps/demo/src/main.ts)                               |
 | Keep your own counters                                 | `state: { init, reduce }`, read with `ctx.own`   | [`keep-going.ts`](../apps/examples/src/plugins/keep-going.ts)                       |
 | Measure time, tokens or cost                           | No plugin: `r.summary`, `r.turns`, `usageOf`     | [`metrics.ts`](../apps/examples/src/metrics.ts)                                     |
 | Log, trace or count what happens                       | `observe`                                        | [`plugins/otel`](../plugins/otel), [`plugins/jsonl`](../plugins/jsonl)              |
-| Show what a long step is doing                         | `yield` in `turn`, `request` or `toolCall`       | [Events from plugins](#events-from-plugins)                                         |
+| Show what a long step is doing                         | `yield` in `decide`, `request` or `toolCall`     | [Events from plugins](#events-from-plugins)                                         |
 
 `budget` counts with `usageOf(state)`, which only sees the main model's messages still in history, so it is not a hard cap on spending: `ctx.complete` calls and compacted messages are left out ([Sessions & Runs](sessions-and-runs.md#metrics-without-plugins)).
 

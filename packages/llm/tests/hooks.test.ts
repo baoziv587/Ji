@@ -63,7 +63,7 @@ describe('plugin order (§6)', () => {
 
         // Assert
         const reversed = names.toReversed()
-        for (const hook of ['turn', 'request', 'toolCalls', 'toolCall', 'record']) {
+        for (const hook of ['decide', 'request', 'toolCalls', 'toolCall', 'record']) {
           expectRepeats(pick(log, `${hook}>`, `${hook}<`), [
             ...names.map(n => `${hook}> ${n}`),
             ...reversed.map(n => `${hook}< ${n}`),
@@ -179,8 +179,8 @@ describe('ctx (§3)', () => {
     const watcher = definePlugin({
       name: 'watcher',
       state: { init: 0, reduce: n => n + 1 },
-      async *turn(state, next, ctx) {
-        watch('turn', ctx)
+      async *decide(state, next, ctx) {
+        watch('decide', ctx)
         seen.push({ hook: 'committed', state: chat.session!.state, own: watcher.select(state) })
         return yield* next(state)
       },
@@ -215,13 +215,13 @@ describe('ctx (§3)', () => {
     // Assert
     expect(seen.every(s => s.own === watcher.select(s.state))).toBe(true)
     // input, the tool call, the answer, and the idle step that stops
-    const steps = splitAt(seen, s => s.hook === 'turn')
+    const steps = splitAt(seen, s => s.hook === 'decide')
     expect(steps).toHaveLength(4)
     for (const step of steps) {
       expect(new Set(step.map(s => s.state)).size).toBe(1)
     }
     expect(new Set(seen.map(s => s.hook))).toEqual(
-      new Set(['turn', 'committed', 'input', 'view', 'request', 'toolCalls', 'toolCall']),
+      new Set(['decide', 'committed', 'input', 'view', 'request', 'toolCalls', 'toolCall']),
     )
   })
 
@@ -259,7 +259,7 @@ describe('ctx (§3)', () => {
     })
     const late = definePlugin({
       name: 'late',
-      turn: intercept((state, { own }) => {
+      decide: intercept((state, { own }) => {
         expectTypeOf(own).toEqualTypeOf<number>()
         return own > 3 ? stop(state) : undefined
       }),
@@ -291,7 +291,7 @@ describe('ctx.complete (§5)', () => {
     let summary: AssistantMessage | undefined
     const summarizer = definePlugin({
       name: 'summarizer',
-      async *turn(state, next, { complete }) {
+      async *decide(state, next, { complete }) {
         if (state.messages.length === 1) {
           summary = yield* complete({ messages: [user('summarize')] })
         }
@@ -329,7 +329,7 @@ describe('ctx.complete (§5)', () => {
     // Arrange
     const summarizer = definePlugin({
       name: 'summarizer',
-      async *turn(state, next, { complete }) {
+      async *decide(state, next, { complete }) {
         if (state.messages.length === 1) {
           yield* complete({ messages: [user('a long enough prompt to be billed for')] })
         }
@@ -352,7 +352,7 @@ describe('ctx.complete (§5)', () => {
     // Arrange
     const summarizer = definePlugin({
       name: 'summarizer',
-      async *turn(state, next, { complete }) {
+      async *decide(state, next, { complete }) {
         if (state.messages.length === 1) {
           yield* complete({ messages: [user('summarize')] })
         }
@@ -384,7 +384,7 @@ describe('ctx.complete (§5)', () => {
     let stepAborted: boolean | undefined
     const summarizer = definePlugin({
       name: 'summarizer',
-      async *turn(state, next, { complete, signal }) {
+      async *decide(state, next, { complete, signal }) {
         if (state.messages.length === 1) {
           try {
             yield* complete({ messages: [user('summarize')] }, { signal: local.signal })
@@ -420,7 +420,7 @@ describe('ctx.complete (§5)', () => {
     const provider = gate()
     const summarizer = definePlugin({
       name: 'summarizer',
-      async *turn(state, next, { complete }) {
+      async *decide(state, next, { complete }) {
         yield* complete({ messages: [user('summarize')] }, { signal: new AbortController().signal })
         return yield* next(state)
       },
@@ -452,7 +452,7 @@ describe('ctx.complete (§5)', () => {
       // Arrange
       const summarizer = definePlugin({
         name: 'summarizer',
-        async *turn(state, next, { complete }) {
+        async *decide(state, next, { complete }) {
           if (state.messages.length < 3) {
             return yield* next(state)
           }
@@ -486,7 +486,7 @@ describe('model attempts (§5.4–§5.5, appendix A.6–A.7)', () => {
         // Arrange
         const helper = definePlugin({
           name: 'helper',
-          async *turn(state, next, { complete }) {
+          async *decide(state, next, { complete }) {
             if (state.messages.length === 1) {
               yield* complete({ messages: [user('help')] })
             }
@@ -752,14 +752,14 @@ function retryTool(limit: number): Plugin {
 /** Logs entering and leaving every hook, and each reducer and observer call, under its plugin's name. */
 function traced(name: string, log: string[]): Plugin<number> {
   const around = (hook: string) => (enter: boolean) => log.push(`${hook}${enter ? '>' : '<'} ${name}`)
-  const [turn, request, toolCalls, toolCall] = ['turn', 'request', 'toolCalls', 'toolCall'].map(around)
+  const [decide, request, toolCalls, toolCall] = ['decide', 'request', 'toolCalls', 'toolCall'].map(around)
 
   return definePlugin({
     name,
-    async *turn(state, next) {
-      turn(true)
+    async *decide(state, next) {
+      decide(true)
       const result = yield* next(state)
-      turn(false)
+      decide(false)
       return result
     },
     input: messages => {

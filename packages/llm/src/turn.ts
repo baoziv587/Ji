@@ -5,15 +5,15 @@ import { act, done } from '@gaoxiang.ai/kernel'
 import { lastAssistant } from './message.ts'
 
 /**
- * Return from a turn middleware to replace the whole history with `messages`.
- * Do any IO needed to build them (e.g. a summarizing ctx.complete) in the turn middleware; the replacement itself
+ * Return from a decide middleware to replace the whole history with `messages`.
+ * Do any IO needed to build them (e.g. a summarizing ctx.complete) in the decide middleware; the replacement itself
  * happens in record, so it stays replayable.
  */
 export function rewriteHistory(messages: Message[]): Step<RewriteAction, never> {
   return act({ kind: 'rewrite', messages })
 }
 
-/** Return from a turn middleware to end the run with the last assistant message as its result. */
+/** Return from a decide middleware to end the run with the last assistant message as its result. */
 export function stop(state: AgentState): Step<never, AssistantMessage> {
   const last = lastAssistant(state)
   if (last === undefined) {

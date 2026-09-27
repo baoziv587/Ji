@@ -21,7 +21,7 @@ import { actionOf, isModelAction, turnOf } from './turn.ts'
  * Fields are listed in the order they run within a step (RFC-0004 §4). Two shapes (RFC-0006 §3):
  *
  *   transform    (value, ctx) => value | Promise<value>           input, view: plugins run in list order
- *   middleware   (input, next, ctx) => Stream<Payload, output>    turn, request, toolCalls, toolCall: earlier plugins
+ *   middleware   (input, next, ctx) => Stream<Payload, output>    decide, request, toolCalls, toolCall: earlier plugins
  *                                                                  are outer, so they see the input first
  *
  * The middleware are streams: `yield` adds an event to the run, `return` gives the result, `yield* next(...)` passes
@@ -34,10 +34,11 @@ export interface PluginSpec<State = undefined> {
   /** Transform, run once at createAgent. */
   system?: (prompt: string) => string
   /**
-   * Middleware that decides this step's turn: insert messages, call the model, or return rewriteHistory(...) to replace
-   * history or stop(state) to end. ctx.complete calls a model of the plugin's own. The tool calls run afterwards.
+   * Middleware that decides what this step does: insert messages, call the model, or return rewriteHistory(...) to
+   * replace history or stop(state) to end. ctx.complete calls a model of the plugin's own. The tool calls of the model's
+   * reply run afterwards, in toolCalls: when next returns, no tool has run yet.
    */
-  turn?: (state: AgentState, next: TurnNext, ctx: TurnContext<State>) => TurnStream
+  decide?: (state: AgentState, next: DecideNext, ctx: DecideContext<State>) => DecideStream
   /** Transform of the messages to insert at this boundary; starts with the queued messages deliverable now. */
   input?: (messages: Message[], ctx: InputContext<State>) => Message[] | Promise<Message[]>
   /** Transform of the messages sent in this request only; history is untouched. */
@@ -83,7 +84,7 @@ export interface InputContext<State = undefined> extends HookContext<State> {
   readonly idle: boolean
 }
 
-export interface TurnContext<State = undefined> extends HookContext<State> {
+export interface DecideContext<State = undefined> extends HookContext<State> {
   /**
    * Calls a model through the agent's request chain, so fallback and other request plugins apply. Its model events
    * carry `by: <plugin name>` and its usage counts in r.summary; its thinking, text and tool calls are not streamed.
@@ -111,9 +112,9 @@ export interface RecordInput {
   turn: Turn
 }
 
-export type TurnStream = Stream<Payload, Step<AgentAction, AssistantMessage>>
+export type DecideStream = Stream<Payload, Step<AgentAction, AssistantMessage>>
 
-export type TurnNext = (state: AgentState) => TurnStream
+export type DecideNext = (state: AgentState) => DecideStream
 
 export type ToolCallsRunner = (message: AssistantMessage) => Stream<Payload, ToolResultMessage[]>
 
@@ -188,13 +189,13 @@ export function assertNoConflicts(tools: AgentTool[], plugins: AnyPlugin[]): voi
 /** Builds the ctx of each hook for the step in progress. */
 export interface HookContexts {
   of: (plugin: AnyPlugin) => HookContext<unknown>
-  turn: (plugin: AnyPlugin) => TurnContext<unknown>
+  decide: (plugin: AnyPlugin) => DecideContext<unknown>
 }
 
 type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, Payload>
 
 /**
- * Plugin turn / toolCalls / record / state -> kernel middleware (turn wraps the kernel's policy, toolCalls its env).
+ * Plugin decide / toolCalls / record / state -> kernel middleware (decide wraps the kernel's policy, toolCalls its env).
  * record and state work on Turns, so this converts to and from the kernel's (action, obs); state.reduce runs on the
  * result of this plugin's record, inside its own layer.
  *
@@ -202,11 +203,11 @@ type LLMExtension = Extension<AgentState, AgentAction, ToolResultMessage[], Assi
  * DeterminismWarning and the first result is kept (RFC-0006 §8).
  */
 export function extensionOf(plugin: AnyPlugin, contexts: HookContexts, checkDeterminism: boolean): LLMExtension {
-  const { name, turn, toolCalls, record, state } = plugin
+  const { name, decide, toolCalls, record, state } = plugin
   const ext: LLMExtension = {}
 
-  if (turn) {
-    ext.policy = (s, next) => turn(s, next, contexts.turn(plugin))
+  if (decide) {
+    ext.policy = (s, next) => decide(s, next, contexts.decide(plugin))
   }
 
   if (toolCalls) {
