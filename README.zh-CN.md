@@ -20,8 +20,6 @@ for await (const chunk of run.text) process.stdout.write(chunk)
 console.log(await run.summary)
 ```
 
-运行中可以排队、插话或打断，对话和插件状态可一起保存为 JSON。[会话与运行 →](docs/zh-CN/sessions-and-runs.md)
-
 <br>
 
 ## Highlights
