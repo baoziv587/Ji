@@ -2,6 +2,8 @@
 
 **English** · [简体中文](README.zh-CN.md)
 
+_极 (jí) means "the utmost", as in 极简 (minimal to the extreme) and 极限 (the limit): a core kept as small as it can be, taken as far as you need by plugins._
+
 **A small, extensible TypeScript runtime for LLM agents.**
 
 > In development. APIs may change; packages are not published to npm yet.
