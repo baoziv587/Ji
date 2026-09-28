@@ -6,6 +6,20 @@
 
 > 开发中，API 可能变化，包尚未发布到 npm。
 
+```ts
+import { createAgent, createSession } from '@gaoxiang.ai/llm'
+
+const agent = createAgent({ model, plugins: [lowTemperature, toolPlugins] })
+const chat = createSession(agent)
+const run = chat.send('用一句话解释什么是中间件')
+
+for await (const chunk of run.text) process.stdout.write(chunk)
+
+console.log(await run.summary)
+```
+
+运行中可以排队、插话或打断，对话和插件状态可一起保存为 JSON。[会话与运行 →](docs/zh-CN/sessions-and-runs.md)
+
 <br>
 
 ## Highlights
@@ -163,22 +177,6 @@ pnpm demo
 demo 离线演示计算工具，无需 API key。
 
 连接真实模型时，设置服务商的 API key，再运行 `MODEL=provider/model pnpm demo`，将 `provider/model` 换成支持的模型。
-
-选好 `model` 和插件后，应用中的调用如下：
-
-```ts
-import { createAgent, createSession } from '@gaoxiang.ai/llm'
-
-const agent = createAgent({ model, plugins: [lowTemperature, toolPlugins] })
-const chat = createSession(agent)
-const run = chat.send('用一句话解释什么是中间件')
-
-for await (const chunk of run.text) process.stdout.write(chunk)
-
-console.log(await run.summary)
-```
-
-运行中可以排队、插话或打断，对话和插件状态可一起保存为 JSON。[会话与运行 →](docs/zh-CN/sessions-and-runs.md)
 
 更多离线示例见 [apps/examples](apps/examples/README.md)。
 

@@ -6,6 +6,18 @@
 
 > In development. APIs may change; packages are not published to npm yet.
 
+```ts
+import { createAgent, createSession } from '@gaoxiang.ai/llm'
+
+const agent = createAgent({ model, plugins: [lowTemperature, toolPlugins] })
+const chat = createSession(agent)
+const run = chat.send('Explain middleware in one sentence.')
+
+for await (const chunk of run.text) process.stdout.write(chunk)
+
+console.log(await run.summary)
+```
+
 <br>
 
 ## Highlights
@@ -163,20 +175,6 @@ pnpm demo
 The demo runs offline with a calculator; no API key is needed.
 
 For a real model, set your provider's API key and run `MODEL=provider/model pnpm demo`, replacing `provider/model` with a supported model.
-
-Application code, with your selected `model` and plugins:
-
-```ts
-import { createAgent, createSession } from '@gaoxiang.ai/llm'
-
-const agent = createAgent({ model, plugins: [lowTemperature, toolPlugins] })
-const chat = createSession(agent)
-const run = chat.send('Explain middleware in one sentence.')
-
-for await (const chunk of run.text) process.stdout.write(chunk)
-
-console.log(await run.summary)
-```
 
 Queue, steer or interrupt a running agent, and save conversation and plugin state together as JSON. [Sessions & Runs →](docs/sessions-and-runs.md)
 
