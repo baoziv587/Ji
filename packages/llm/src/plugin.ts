@@ -13,8 +13,7 @@ import type {
   ToolRunner,
   Turn,
 } from './types.ts'
-import { duplicatesBy, sameData } from '@ji.dev/utils'
-import { warn } from './diagnostics.ts'
+import { duplicatesBy, sameData, warn } from '@ji.dev/utils'
 import { callsOf } from './message.ts'
 import { actionOf, isModelAction, turnOf } from './turn.ts'
 
