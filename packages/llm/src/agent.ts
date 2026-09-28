@@ -1,4 +1,4 @@
-import type { Stream } from '@gaoxiang.ai/kernel'
+import type { Stream } from '@ji.dev/kernel'
 import type {
   Api,
   AssistantMessage,
@@ -24,9 +24,10 @@ import type {
   ToolRunner,
 } from './types.ts'
 import { performance } from 'node:perf_hooks'
-import { act, extend, merge } from '@gaoxiang.ai/kernel'
+import { act, extend, merge } from '@ji.dev/kernel'
+import { errorMessage, isDevEnv, isThenable } from '@ji.dev/utils'
 import { clampThinkingLevel, streamSimple } from '@mariozechner/pi-ai'
-import { checksByDefault, warn } from './diagnostics.ts'
+import { warn } from './diagnostics.ts'
 import { ModelCallError } from './errors.ts'
 import { callsOf, isIdle } from './message.ts'
 import { findModel, modelInfo, UnsupportedThinkingError } from './models.ts'
@@ -113,7 +114,7 @@ export function createAgent(options: AgentOptions): Agent {
     system = '',
     tools = [],
     plugins = [],
-    checkDeterminism = checksByDefault(),
+    checkDeterminism = isDevEnv(),
     ...streamOptions
   } = options
 
@@ -429,7 +430,7 @@ function isolated(plugins: AnyPlugin[]): (e: RunEvent, run: RunInfo) => void {
           reportPromise(name, e.type, returned, returnedPromise)
         }
       } catch (error) {
-        warn(`observe of plugin "${name}" threw on ${e.type}: ${messageOf(error)}`, 'ObserveWarning')
+        warn(`observe of plugin "${name}" threw on ${e.type}: ${errorMessage(error)}`, 'ObserveWarning')
       }
     }
   }
@@ -445,16 +446,8 @@ function reportPromise(name: string, type: string, returned: PromiseLike<unknown
   }
 
   Promise.resolve(returned).catch((error: unknown) => {
-    warn(`observe of plugin "${name}" rejected on ${type}: ${messageOf(error)}`, 'ObserveWarning')
+    warn(`observe of plugin "${name}" rejected on ${type}: ${errorMessage(error)}`, 'ObserveWarning')
   })
-}
-
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'then') === 'function'
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /** Each plugin's transform in list order, each with its own ctx. */

@@ -1,8 +1,8 @@
 // Shared by the examples: picking a model and displaying a run.
-import type { Api, Model, Run, RunSummary, Turn } from '@gaoxiang.ai/llm'
+import type { Api, Model, Run, RunSummary, Turn } from '@ji.dev/llm'
 import type { FauxResponseStep } from '@mariozechner/pi-ai'
 import process from 'node:process'
-import { findModel } from '@gaoxiang.ai/llm'
+import { findModel } from '@ji.dev/llm'
 import { registerFauxProvider } from '@mariozechner/pi-ai'
 
 /**

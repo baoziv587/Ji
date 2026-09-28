@@ -2,11 +2,11 @@
 // middleware.test.ts checks the helpers' algebra against a hand-written next; this file checks what each helper
 // changes where it sits in the loop: history, the model's input, tools, events and usage. Runs against pi-ai's faux
 // provider.
-import type { Step } from '@gaoxiang.ai/kernel'
+import type { Step } from '@ji.dev/kernel'
 import type { AssistantMessage, FauxResponseStep, Message, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { AgentAction, AgentState, Api, Model, Plugin, Run, RunEvent } from '../src/index.ts'
 import type { Cancellable, Middleware } from '../src/middleware.ts'
-import { act } from '@gaoxiang.ai/kernel'
+import { act } from '@ji.dev/kernel'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'

@@ -1,10 +1,10 @@
-// Timing and cost: pnpm --filter @gaoxiang.ai/examples metrics
+// Timing and cost: pnpm --filter @ji.dev/examples metrics
 //
 // No plugin needed: every record of a Run carries that step's timing and the totals so far,
 // and r.summary holds the totals for the whole run.
 import process from 'node:process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { createAgent, createSession, tool, usageOf } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, tool, usageOf } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { pickModel } from './shared.ts'
 

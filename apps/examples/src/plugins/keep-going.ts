@@ -1,5 +1,5 @@
-import type { AgentState, Plugin } from '@gaoxiang.ai/llm'
-import { definePlugin, user } from '@gaoxiang.ai/llm'
+import type { AgentState, Plugin } from '@ji.dev/llm'
+import { definePlugin, user } from '@ji.dev/llm'
 
 export interface KeepGoingOptions {
   /** Once this returns true, the plugin stops nudging. */

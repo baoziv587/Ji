@@ -1,5 +1,5 @@
-import type { Plugin } from '@gaoxiang.ai/llm'
-import { definePlugin, intercept, stop, usageOf } from '@gaoxiang.ai/llm'
+import type { Plugin } from '@ji.dev/llm'
+import { definePlugin, intercept, stop, usageOf } from '@ji.dev/llm'
 
 export interface BudgetOptions {
   /** In US dollars. */

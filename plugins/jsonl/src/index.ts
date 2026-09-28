@@ -1,4 +1,4 @@
-// @gaoxiang.ai/plugin-jsonl: every run event as one line of JSON, for replay and debugging (RFC-0005 §4.3)
+// @ji.dev/plugin-jsonl: every run event as one line of JSON, for replay and debugging (RFC-0005 §4.3)
 //
 //   createAgent({ model, plugins: [jsonl(line => file.write(line + '\n'))] })
 //
@@ -7,8 +7,8 @@
 //   step_end carries the whole state after the step; it is left out unless asked for, because it grows with the
 //   conversation. Errors become { name, message, kind? } so they survive JSON.
 
-import type { Plugin, RunEvent, RunInfo } from '@gaoxiang.ai/llm'
-import { definePlugin } from '@gaoxiang.ai/llm'
+import type { Plugin, RunEvent, RunInfo } from '@ji.dev/llm'
+import { definePlugin } from '@ji.dev/llm'
 
 export interface JsonlOptions {
   /** Include step_end's state. Default false. */

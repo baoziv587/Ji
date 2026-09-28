@@ -1,4 +1,5 @@
 import type { AgentState } from './types.ts'
+import { errorMessage } from '@ji.dev/utils'
 
 /**
  * Why a run failed:
@@ -35,7 +36,7 @@ export class ModelCallError extends Error {
 }
 
 function messageOf(kind: RunErrorKind, cause: unknown): string {
-  const text = cause instanceof Error ? cause.message : cause === undefined ? '' : String(cause)
+  const text = cause === undefined ? '' : errorMessage(cause)
   if (kind === 'aborted') {
     return text === '' ? 'run aborted' : `run aborted: ${text}`
   }

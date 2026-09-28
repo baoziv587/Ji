@@ -1,7 +1,7 @@
-import type { Stream } from '@gaoxiang.ai/kernel'
 import type { ToolCall, ToolResultMessage, TSchema } from '@mariozechner/pi-ai'
 import type { AgentTool, ToolRunner } from './types.ts'
-import { mapYield } from '@gaoxiang.ai/kernel'
+import { mapYield } from '@ji.dev/kernel'
+import { errorMessage, isAsyncIterable } from '@ji.dev/utils'
 import { validateToolCall } from '@mariozechner/pi-ai'
 
 /** Identity; exists so `run`'s arguments are inferred from the schema. */
@@ -16,8 +16,7 @@ export function toolResult(call: ToolCall, text: string): ToolResultMessage {
  * retry's catch never sees it (RFC-0006 §4.2).
  */
 export function toolError(call: ToolCall, error: unknown): ToolResultMessage {
-  const text = error instanceof Error ? error.message : String(error)
-  return resultOf(call, text, true)
+  return resultOf(call, errorMessage(error), true)
 }
 
 /**
@@ -31,15 +30,11 @@ export function toolRunner(tools: AgentTool[], signal: AbortSignal): ToolRunner 
   return async function* (call) {
     const args = validateToolCall(tools, call)
     const output = byName.get(call.name)!.run(args, signal)
-    const text = isStream(output)
+    const text = isAsyncIterable(output)
       ? yield* mapYield(output, data => ({ type: 'tool_update', call, data }) as const)
       : await output
     return toolResult(call, String(text))
   }
-}
-
-function isStream(output: unknown): output is Stream<unknown, string> {
-  return typeof output === 'object' && output !== null && Symbol.asyncIterator in output
 }
 
 function resultOf(call: ToolCall, text: string, isError: boolean): ToolResultMessage {

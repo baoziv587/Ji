@@ -1,7 +1,7 @@
-// Trimming oversized tool results: pnpm --filter @gaoxiang.ai/examples truncate
+// Trimming oversized tool results: pnpm --filter @ji.dev/examples truncate
 //
 // fetch_page returns a 50,000-character page; truncateToolResults cuts it to 2,000 characters before the model sees it.
-import { createAgent, createSession, tool } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, tool } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { truncateToolResults } from './plugins/truncate-tool-results.ts'
 import { pickModel, show } from './shared.ts'

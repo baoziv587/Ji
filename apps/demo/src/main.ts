@@ -1,9 +1,9 @@
 // Demo: an agent with a calc tool and a history-trimming plugin.
 //   pnpm demo                                    offline: pi-ai's built-in faux provider (streams token by token)
 //   MODEL=anthropic/claude-sonnet-4-6 pnpm demo   real: any provider/model pi-ai supports, API key read from env
-import type { Api, Model, Plugin } from '@gaoxiang.ai/llm'
+import type { Api, Model, Plugin } from '@ji.dev/llm'
 import process from 'node:process'
-import { createAgent, createSession, definePlugin, findModel, textOf, tool, Type } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, definePlugin, findModel, textOf, tool, Type } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 
 const calc = tool({

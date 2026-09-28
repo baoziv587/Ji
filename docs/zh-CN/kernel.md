@@ -2,7 +2,7 @@
 
 [English](../kernel.md) · **简体中文** · [文档导航](README.md)
 
-`@gaoxiang.ai/kernel` 零依赖，与 LLM 无关。写非 LLM 的 agent、或者搭新的一层时直接使用；其他情况下，[`@gaoxiang.ai/llm`](sessions-and-runs.md) 已经把它包装好了。
+`@ji.dev/kernel` 零依赖，与 LLM 无关。写非 LLM 的 agent、或者搭新的一层时直接使用；其他情况下，[`@ji.dev/llm`](sessions-and-runs.md) 已经把它包装好了。
 
 <br>
 
@@ -11,8 +11,8 @@
 下面的 agent 从 `0` 数到 `3`。`policy` 决定下一步，`env` 执行动作，`update` 保存结果。`run` 消费整个循环并返回 `3`：
 
 ```ts
-import type { Agent } from '@gaoxiang.ai/kernel'
-import { act, done, run } from '@gaoxiang.ai/kernel'
+import type { Agent } from '@ji.dev/kernel'
+import { act, done, run } from '@ji.dev/kernel'
 
 const counter: Agent<number, number, number, number> = {
   async *policy(state) {
@@ -31,11 +31,11 @@ console.log(await run(counter, 0)) // 3
 
 ## 核心
 
-| 入口                           | 内容                                                                                                             |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `@gaoxiang.ai/kernel`          | `Agent`、`Extension`、`unfold`、`run`、`extend`、`mapState`、`mapYield`、`merge`、`act`、`done`、`MaxStepsError` |
-| `@gaoxiang.ai/kernel/advanced` | 改变类型参数的变换：`withState` / `focus`、`widen` / `liftWiden`                                                 |
-| `@gaoxiang.ai/kernel/reduce`   | 可组合的 reducer：`combine`、`mapInput`、`filterInput`、`mapResult`、`reduce`、`scan`                            |
+| 入口                      | 内容                                                                                                             |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `@ji.dev/kernel`          | `Agent`、`Extension`、`unfold`、`run`、`extend`、`mapState`、`mapYield`、`merge`、`act`、`done`、`MaxStepsError` |
+| `@ji.dev/kernel/advanced` | 改变类型参数的变换：`withState` / `focus`、`widen` / `liftWiden`                                                 |
+| `@ji.dev/kernel/reduce`   | 可组合的 reducer：`sum`、`count`、`combine`、`mapInput`、`filterInput`、`mapResult`、`reduce`、`scan`            |
 
 ```ts
 interface Agent<S, A, O, R, D = never> {
@@ -84,7 +84,7 @@ transform(extend(a, x)) ≃ extend(transform(a), lift(x))
 | `withState(agent, lens)`：`S → T`             | `focus(ext, lens)`      | 把 agent 嵌进更大的状态里；中间件只看到自己那一部分 |
 | `widen(agent, isNew, handlers)`：`A → A \| N` | `liftWiden(ext, isNew)` | 增加一种新动作，由外层中间件发出                    |
 
-`Lens<T, S>` 必须满足三条 lens 定律：get-set、set-get、set-set。`@gaoxiang.ai/llm` 的插件状态也用 `Lens`：`pluginStateSlot(name, init)` 是指向 `state.plugins[name]` 的 lens，`plugin.select` 就是它的 `get`，状态 reducer 通过它的 `set` 写入。
+`Lens<T, S>` 必须满足三条 lens 定律：get-set、set-get、set-set。`@ji.dev/llm` 的插件状态也用 `Lens`：`pluginStateSlot(name, init)` 是指向 `state.plugins[name]` 的 lens，`plugin.select` 就是它的 `get`，状态 reducer 通过它的 `set` 写入。
 
 `liftWiden` 只接受 `env` / `update` 中间件：policy 中间件的输出里含有 `A`，没有通用的提升方式，类型上直接拒绝。
 
@@ -100,7 +100,7 @@ interface Reducer<In, Acc, Out = Acc> {
 }
 ```
 
-`combine({ a: r1, b: r2 })` 一次遍历同时计算多个 reducer；`scan` 逐个输出中间结果。`@gaoxiang.ai/llm` 就是这样实现 `Run.summary` 和插件状态的。和 `update` 一样，`reduce` 必须同步且纯。
+`combine({ a: r1, b: r2 })` 一次遍历同时计算多个 reducer；`scan` 逐个输出中间结果。`@ji.dev/llm` 就是这样实现 `Run.summary` 和插件状态的。和 `update` 一样，`reduce` 必须同步且纯。
 
 <br>
 

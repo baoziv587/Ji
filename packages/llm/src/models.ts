@@ -1,5 +1,6 @@
 import type { Api, KnownProvider, Model } from '@mariozechner/pi-ai'
 import type { ModelRef, ThinkingLevel } from './types.ts'
+import { closest } from '@ji.dev/utils'
 import { getEnvApiKey, getModels, getProviders, getSupportedThinkingLevels } from '@mariozechner/pi-ai'
 
 /** A pi-ai Model plus what the agent already knows about it; still a Model, so pi-ai functions accept it. */
@@ -118,28 +119,4 @@ function findById(id: string): ModelInfo {
 
 function specOf(m: Model<Api>): string {
   return `${m.provider}/${m.id}`
-}
-
-/** The candidate nearest to `target` by edit distance, if it is close enough to be a typo. */
-function closest(target: string, candidates: string[], key: (c: string) => string = c => c): string | undefined {
-  let best: { candidate: string; distance: number } | undefined
-  for (const candidate of candidates) {
-    const distance = editDistance(target, key(candidate))
-    if (best === undefined || distance < best.distance) {
-      best = { candidate, distance }
-    }
-  }
-  return best !== undefined && best.distance <= Math.max(2, Math.floor(target.length / 3)) ? best.candidate : undefined
-}
-
-function editDistance(a: string, b: string): number {
-  let previous = Array.from({ length: b.length + 1 }, (_, j) => j)
-  for (let i = 1; i <= a.length; i++) {
-    const current = [i]
-    for (let j = 1; j <= b.length; j++) {
-      current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
-    }
-    previous = current
-  }
-  return previous[b.length]
 }

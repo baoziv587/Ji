@@ -1,6 +1,6 @@
-import type { Stream } from '@gaoxiang.ai/kernel'
+import type { Stream } from '@ji.dev/kernel'
 import type { Payload } from './types.ts'
-import { mapYield } from '@gaoxiang.ai/kernel'
+import { mapYield } from '@ji.dev/kernel'
 
 /** What the helpers read from a hook's ctx: the step's signal, checked after every async callback (RFC-0006 §3.5). */
 export interface Cancellable {

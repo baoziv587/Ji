@@ -1,5 +1,5 @@
-import type { Api, Model } from '@gaoxiang.ai/llm'
-import { createAgent, createSession, definePlugin, tool, Type } from '@gaoxiang.ai/llm'
+import type { Api, Model } from '@ji.dev/llm'
+import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
 import { jsonl } from '../src/index.ts'

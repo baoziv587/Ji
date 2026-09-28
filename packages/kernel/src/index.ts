@@ -1,4 +1,4 @@
-// @gaoxiang.ai/kernel: the algebraic core, independent of LLMs, tools and IO
+// @ji.dev/kernel: the algebraic core, independent of LLMs, tools and IO
 //
 //   π : S → D* · (A + R)     policy   decide: stream zero or more deltas D, then return a Step
 //   ε : A → D* · O           env      act: stream zero or more deltas D, then return the observation

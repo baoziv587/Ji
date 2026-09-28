@@ -1,13 +1,12 @@
-import type { Reducer } from '@gaoxiang.ai/kernel/reduce'
+import type { Reducer } from '@ji.dev/kernel/reduce'
 import type { Usage } from '@mariozechner/pi-ai'
 import type { AgentState, RunSummary, Turn, TurnTiming, UsageTotals } from './types.ts'
-import { combine, filterInput } from '@gaoxiang.ai/kernel/reduce'
+import { combine, count, filterInput, sum } from '@ji.dev/kernel/reduce'
 import { isAssistant } from './message.ts'
 
 // Declared first: the reducers below read them at module initialization.
 export const NO_USAGE: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }
 const NO_TOOLS: RunSummary['tools'] = {}
-const count: Reducer<unknown, number> = sum(() => 1)
 
 /**
  * Sums usage over the main model's messages kept in history. Plugin model calls and messages replaced by a history
@@ -60,10 +59,6 @@ function on<K extends Turn['kind'], Acc, Out>(
   r: Reducer<TimedTurnOf<K>, Acc, Out>,
 ): Reducer<TimedTurn, Acc, Out> {
   return filterInput(r, (x: TimedTurn): x is TimedTurnOf<K> => x.turn.kind === kind)
-}
-
-function sum<In>(amount: (input: In) => number): Reducer<In, number> {
-  return { init: 0, reduce: (n, input) => n + amount(input) }
 }
 
 function addToolStats(stats: RunSummary['tools'], { turn, timing }: TimedTurnOf<'model'>): RunSummary['tools'] {

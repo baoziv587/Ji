@@ -1,4 +1,4 @@
-// @gaoxiang.ai/plugin-otel: OpenTelemetry traces and metrics from a run's events (RFC-0005 §4.4)
+// @ji.dev/plugin-otel: OpenTelemetry traces and metrics from a run's events (RFC-0005 §4.4)
 //
 //   import { context, trace } from '@opentelemetry/api'
 //   createAgent({ model, plugins: [otel({ tracer: trace.getTracer('agent'), context: { active: context.active, setSpan: trace.setSpan } })] })
@@ -14,9 +14,9 @@
 // of the OpenTelemetry API, not the package, so any tracer with startSpan fits. Names follow the GenAI semantic
 // conventions (Development status at the time of writing).
 
-import type { Plugin, RunEvent, RunInfo } from '@gaoxiang.ai/llm'
+import type { Plugin, RunEvent, RunInfo } from '@ji.dev/llm'
 import { performance } from 'node:perf_hooks'
-import { definePlugin } from '@gaoxiang.ai/llm'
+import { definePlugin } from '@ji.dev/llm'
 
 export type AttributeValue = string | number | boolean | string[]
 export type Attributes = Record<string, AttributeValue>

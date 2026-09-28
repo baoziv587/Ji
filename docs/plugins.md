@@ -11,7 +11,7 @@ A plugin is a named object containing only the behavior you want to change. Pick
 This plugin sets the temperature before each model call. Once added to `plugins`, it applies to both the main model and calls made by other plugins:
 
 ```ts
-import { before, createAgent, definePlugin } from '@gaoxiang.ai/llm'
+import { before, createAgent, definePlugin } from '@ji.dev/llm'
 
 const temperature = definePlugin({
   name: 'temperature',
@@ -369,7 +369,7 @@ Every attempt’s events stay in the run.
 A plugin yields an event from any stream hook, and registers its type with declaration merging, named `<plugin>:<event>`:
 
 ```ts
-declare module '@gaoxiang.ai/llm' {
+declare module '@ji.dev/llm' {
   interface Events {
     'compaction:start': { tokens: number }
     'compaction:end': { before: number; after: number }
@@ -464,7 +464,7 @@ They catch common mistakes; they do not prove a plugin pure. Two `Date.now()` ca
 ## Tools
 
 ```ts
-import { tool, Type } from '@gaoxiang.ai/llm'
+import { tool, Type } from '@ji.dev/llm'
 
 const calc = tool({
   name: 'calc',

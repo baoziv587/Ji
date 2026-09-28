@@ -24,7 +24,7 @@ export default antfu(
         'error',
         {
           patterns: [
-            { group: ['@gaoxiang.ai/plugin-*', '**/plugins/**'], message: 'packages/ must not depend on plugins/.' },
+            { group: ['@ji.dev/plugin-*', '**/plugins/**'], message: 'packages/ must not depend on plugins/.' },
           ],
         },
       ],
@@ -49,18 +49,12 @@ export default antfu(
         {
           patterns: [
             {
-              group: ['@gaoxiang.ai/plugin-*'],
+              group: ['@ji.dev/plugin-*'],
               message: 'Plugins do not import each other; depend on the event protocol instead (RFC-0005 §8.3).',
             },
             {
-              group: [
-                '@gaoxiang.ai/llm/*',
-                '@gaoxiang.ai/kernel',
-                '@gaoxiang.ai/kernel/*',
-                '@mariozechner/pi-ai',
-                '**/packages/**',
-              ],
-              message: 'Plugins use only the public entry of @gaoxiang.ai/llm.',
+              group: ['@ji.dev/llm/*', '@ji.dev/kernel', '@ji.dev/kernel/*', '@mariozechner/pi-ai', '**/packages/**'],
+              message: 'Plugins use only the public entry of @ji.dev/llm.',
             },
           ],
         },
@@ -73,7 +67,7 @@ export default antfu(
     rules: {
       'no-restricted-imports': [
         'error',
-        { paths: [{ name: '@mariozechner/pi-ai', message: 'Import it from @gaoxiang.ai/llm.' }] },
+        { paths: [{ name: '@mariozechner/pi-ai', message: 'Import it from @ji.dev/llm.' }] },
       ],
     },
   },

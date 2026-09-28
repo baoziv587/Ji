@@ -1,5 +1,5 @@
 // before / after / intercept / mapEvents against a hand-written next, no model involved (RFC-0006 §4, appendix A.2–A.3).
-import type { Stream } from '@gaoxiang.ai/kernel'
+import type { Stream } from '@ji.dev/kernel'
 import type { Cancellable, Middleware } from '../src/middleware.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'

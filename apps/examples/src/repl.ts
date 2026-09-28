@@ -1,12 +1,12 @@
-// Minimal REPL: DEEPSEEK_API_KEY=sk-... pnpm --filter @gaoxiang.ai/examples repl
+// Minimal REPL: DEEPSEEK_API_KEY=sk-... pnpm --filter @ji.dev/examples repl
 //
 //   Enter sends; replies stream in, with one line per tool call and one per result as each call finishes
 //   Ctrl+C during a reply stops only that reply; Ctrl+C at the prompt or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=high turns thinking on (default off); /think <level> switches it mid-chat, thinking shows in gray
 //
-// Everything comes from @gaoxiang.ai/llm: the model, its thinking levels and the events need nothing from pi-ai.
-import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@gaoxiang.ai/llm'
+// Everything comes from @ji.dev/llm: the model, its thinking levels and the events need nothing from pi-ai.
+import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@ji.dev/llm'
 import process from 'node:process'
 import { styleText } from 'node:util'
 import { cancel, intro, isCancel, log, outro, S_BAR, text } from '@clack/prompts'
@@ -18,7 +18,7 @@ import {
   Type,
   UnknownModelError,
   UnsupportedThinkingError,
-} from '@gaoxiang.ai/llm'
+} from '@ji.dev/llm'
 
 const calc = tool({
   name: 'calc',

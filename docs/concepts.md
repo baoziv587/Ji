@@ -74,11 +74,11 @@ Everything with side effects is a stream of the same `D`; everything pure is a p
 
 ## Three layers
 
-| Layer                      | Responsibility                                                                     | Types                                                                                                                  |
-| -------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `@gaoxiang.ai/kernel`      | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO.       | Generic `S, A, O, R, D`                                                                                                |
-| `@gaoxiang.ai/llm` agent   | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware.        | `S = AgentState`, `O = ToolResultMessage[]`, `D` = every event: model output, tool start / update / end, plugin events |
-| `@gaoxiang.ai/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run`                                                                                                       |
+| Layer                 | Responsibility                                                                     | Types                                                                                                                  |
+| --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `@ji.dev/kernel`      | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO.       | Generic `S, A, O, R, D`                                                                                                |
+| `@ji.dev/llm` agent   | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware.        | `S = AgentState`, `O = ToolResultMessage[]`, `D` = every event: model output, tool start / update / end, plugin events |
+| `@ji.dev/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run`                                                                                                       |
 
 <br>
 

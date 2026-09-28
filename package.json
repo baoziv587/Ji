@@ -7,8 +7,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "demo": "pnpm --filter @gaoxiang.ai/demo start",
-    "repl": "pnpm --filter @gaoxiang.ai/examples repl",
+    "demo": "pnpm --filter @ji.dev/demo start",
+    "repl": "pnpm --filter @ji.dev/examples repl",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

@@ -1,5 +1,5 @@
-import type { Plugin, ToolResultMessage } from '@gaoxiang.ai/llm'
-import { callsOf, definePlugin } from '@gaoxiang.ai/llm'
+import type { Plugin, ToolResultMessage } from '@ji.dev/llm'
+import { callsOf, definePlugin } from '@ji.dev/llm'
 
 /**
  * Runs the tool calls of a turn one at a time instead of all at once, e.g. for tools that write the same files.

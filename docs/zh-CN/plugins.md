@@ -11,7 +11,7 @@
 下面的插件在每次模型调用前设置 temperature。把它放进 `plugins` 后，主模型调用和插件发起的模型调用都会经过它：
 
 ```ts
-import { before, createAgent, definePlugin } from '@gaoxiang.ai/llm'
+import { before, createAgent, definePlugin } from '@ji.dev/llm'
 
 const temperature = definePlugin({
   name: 'temperature',
@@ -367,7 +367,7 @@ const retryReads = definePlugin({
 插件在任何流式钩子里 yield 一个事件，并用声明合并登记它的类型，命名为 `<插件名>:<事件>`：
 
 ```ts
-declare module '@gaoxiang.ai/llm' {
+declare module '@ji.dev/llm' {
   interface Events {
     'compaction:start': { tokens: number }
     'compaction:end': { before: number; after: number }
@@ -460,7 +460,7 @@ try {
 ## 工具
 
 ```ts
-import { tool, Type } from '@gaoxiang.ai/llm'
+import { tool, Type } from '@ji.dev/llm'
 
 const calc = tool({
   name: 'calc',

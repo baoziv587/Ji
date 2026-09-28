@@ -1,4 +1,4 @@
-// Fine-grained hooks: pnpm --filter @gaoxiang.ai/examples hooks
+// Fine-grained hooks: pnpm --filter @ji.dev/examples hooks
 //
 //   input    keep going automatically while the agent is idle but the task is unfinished (keepGoing plugin)
 //   request  add retrieval results to this one request without touching the history; switch to a fallback model on
@@ -7,9 +7,9 @@
 //
 // The list reads outside in: lowTemperature comes before fallback, so both the first try and the fallback run at
 // temperature 0.
-import type { AssistantMessage, ModelRequest, Plugin, RequestContext } from '@gaoxiang.ai/llm'
+import type { AssistantMessage, ModelRequest, Plugin, RequestContext } from '@ji.dev/llm'
 import type { Api, Model } from '@mariozechner/pi-ai'
-import { before, createAgent, createSession, definePlugin, mapEvents, textOf, user } from '@gaoxiang.ai/llm'
+import { before, createAgent, createSession, definePlugin, mapEvents, textOf, user } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxText } from '@mariozechner/pi-ai'
 import { budget } from './plugins/budget.ts'
 import { keepGoing } from './plugins/keep-going.ts'

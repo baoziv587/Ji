@@ -3,7 +3,7 @@
 import type { AssistantMessage, ToolCall, Usage } from '@mariozechner/pi-ai'
 import type { TimedTurn } from '../src/summary.ts'
 import type { RunSummary, UsageTotals } from '../src/types.ts'
-import { resultOf } from '@gaoxiang.ai/kernel/reduce'
+import { resultOf } from '@ji.dev/kernel/reduce'
 import { fauxAssistantMessage } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'

@@ -3,12 +3,12 @@
 可以直接运行的例子，以及它们用到的插件。插件代码在 [`src/plugins/`](src/plugins/)，可以直接复制到你的项目里改。
 
 ```bash
-pnpm --filter @gaoxiang.ai/examples compaction   # 上下文压缩
-pnpm --filter @gaoxiang.ai/examples truncate     # 剔除过大的工具结果
-pnpm --filter @gaoxiang.ai/examples metrics      # 记录耗时和费用
-pnpm --filter @gaoxiang.ai/examples interject    # 运行中插话：steer、follow-up、interrupt
-pnpm --filter @gaoxiang.ai/examples hooks        # 细粒度钩子：自动继续、检索、兜底模型、预算
-pnpm --filter @gaoxiang.ai/examples repl         # 极简 REPL：DeepSeek + clack，需要 DEEPSEEK_API_KEY
+pnpm --filter @ji.dev/examples compaction   # 上下文压缩
+pnpm --filter @ji.dev/examples truncate     # 剔除过大的工具结果
+pnpm --filter @ji.dev/examples metrics      # 记录耗时和费用
+pnpm --filter @ji.dev/examples interject    # 运行中插话：steer、follow-up、interrupt
+pnpm --filter @ji.dev/examples hooks        # 细粒度钩子：自动继续、检索、兜底模型、预算
+pnpm --filter @ji.dev/examples repl         # 极简 REPL：DeepSeek + clack，需要 DEEPSEEK_API_KEY
 ```
 
 默认使用 pi-ai 的 faux provider 离线回放脚本。设置 `MODEL=anthropic/claude-sonnet-5`（或 pi-ai 支持的其他 `provider/model`）即可换成真实模型，API key 从环境变量读取。
@@ -18,7 +18,7 @@ pnpm --filter @gaoxiang.ai/examples repl         # 极简 REPL：DeepSeek + clac
 只有四个对象：`Agent`（模型、工具、插件的组合）、`Session`（一段对话）、`Run`（一次运行）、`Plugin`（插件）。会话只有一个方法 `send`。
 
 ```ts
-import { createAgent, createSession } from '@gaoxiang.ai/llm'
+import { createAgent, createSession } from '@ji.dev/llm'
 
 const agent = createAgent({
   model, // pi-ai 的 Model
@@ -69,7 +69,7 @@ agent 工作时，`send` 把消息并入当前的运行，返回的是同一个 
 ## 3. 写一个插件
 
 ```ts
-import { after, before, definePlugin } from '@gaoxiang.ai/llm'
+import { after, before, definePlugin } from '@ji.dev/llm'
 
 export const myPlugin = definePlugin({
   name: 'my-plugin', // 必填，不能和其他插件重名
@@ -186,7 +186,7 @@ usageOf(chat.state) // 整段对话
 ### 极简 REPL · [`repl.ts`](src/repl.ts)
 
 ```bash
-DEEPSEEK_API_KEY=sk-... pnpm --filter @gaoxiang.ai/examples repl
+DEEPSEEK_API_KEY=sk-... pnpm --filter @ji.dev/examples repl
 DEEPSEEK_MODEL=deepseek-v4-pro ...   # 换模型，默认 deepseek-v4-flash
 DEEPSEEK_THINKING=high ...           # 打开思考，默认 off；可用档位 off / high / xhigh
 ```

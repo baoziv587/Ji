@@ -9,7 +9,7 @@ Start with one conversation, then add event handling, interjections and persiste
 ## Send and read an answer
 
 ```ts
-import { createAgent, createSession } from '@gaoxiang.ai/llm'
+import { createAgent, createSession } from '@ji.dev/llm'
 
 const agent = createAgent({ model, system: 'Be concise.' })
 const chat = createSession(agent)
@@ -100,7 +100,7 @@ Mark any text already displayed as interrupted in your UI. Tools must pass their
 Recover from the last committed state after a failure:
 
 ```ts
-import { RunError } from '@gaoxiang.ai/llm'
+import { RunError } from '@ji.dev/llm'
 
 try {
   await chat.send('Continue the task').result
@@ -259,7 +259,7 @@ const runTests = tool({
 
 A `for await` loop that throws or leaves early aborts the run, and it sees only one run. For logs, traces and metrics use a plugin's read-only `observe` hook instead: it gets every event of every run of the agent from the first one, and what it throws is reported as a warning without touching the run.
 
-`observe` is synchronous and never awaited: to export asynchronously, enqueue in `observe` and flush after the run ([example](plugins.md#observers-are-synchronous)). Ready-made: `@gaoxiang.ai/plugin-otel` and `@gaoxiang.ai/plugin-jsonl` in [`plugins/`](../plugins).
+`observe` is synchronous and never awaited: to export asynchronously, enqueue in `observe` and flush after the run ([example](plugins.md#observers-are-synchronous)). Ready-made: `@ji.dev/plugin-otel` and `@ji.dev/plugin-jsonl` in [`plugins/`](../plugins).
 
 <br>
 

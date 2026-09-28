@@ -1,0 +1,13 @@
+{
+  "name": "@ji.dev/utils",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "零依赖的通用工具：纯数据、类型守卫、字符串匹配、运行时环境",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

@@ -1,4 +1,4 @@
-// @gaoxiang.ai/kernel/reduce: reductions over sequences (RFC-0004 appendix B.2)
+// @ji.dev/kernel/reduce: reductions over sequences (RFC-0004 appendix B.2)
 //
 //   For library internals and low-level extensions only. The LLM layer uses it to implement Run.summary and
 //   plugin state; end users see the ready-made fields and never touch these functions directly.
@@ -9,6 +9,14 @@ export interface Reducer<In, Acc, Out = Acc> {
   reduce: (acc: Acc, input: In) => Acc
   result?: (acc: Acc) => Out
 }
+
+/** Adds up what each input is worth. */
+export function sum<In>(amount: (input: In) => number): Reducer<In, number> {
+  return { init: 0, reduce: (n, input) => n + amount(input) }
+}
+
+/** Counts the inputs. */
+export const count: Reducer<unknown, number> = sum(() => 1)
 
 type AnyReducer<In> = Reducer<In, any, any>
 type AccOf<R> = R extends { init: infer Acc } ? Acc : never

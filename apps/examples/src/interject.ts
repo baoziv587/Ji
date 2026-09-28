@@ -1,4 +1,4 @@
-// Interjecting mid-run: pnpm --filter @gaoxiang.ai/examples interject
+// Interjecting mid-run: pnpm --filter @ji.dev/examples interject
 //
 //   chat.send(text, { when: 'step' })   steer: inserted at the next step boundary (after the running tool finishes)
 //   chat.send(text)                     follow-up: inserted once the agent is idle
@@ -7,7 +7,7 @@
 // While the agent is working, all of these join the current run and return the same Run.
 import type { Context } from '@mariozechner/pi-ai'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { createAgent, createSession, tool } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, tool } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { pickModel, show } from './shared.ts'
 

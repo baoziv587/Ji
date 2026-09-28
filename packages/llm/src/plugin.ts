@@ -1,5 +1,5 @@
-import type { Extension, Step, Stream } from '@gaoxiang.ai/kernel'
-import type { Lens } from '@gaoxiang.ai/kernel/advanced'
+import type { Extension, Step, Stream } from '@ji.dev/kernel'
+import type { Lens } from '@ji.dev/kernel/advanced'
 import type { AssistantMessage, Message, ToolCall, ToolResultMessage } from '@mariozechner/pi-ai'
 import type {
   AgentAction,
@@ -13,7 +13,8 @@ import type {
   ToolRunner,
   Turn,
 } from './types.ts'
-import { sameData, warn } from './diagnostics.ts'
+import { duplicatesBy, sameData } from '@ji.dev/utils'
+import { warn } from './diagnostics.ts'
 import { callsOf } from './message.ts'
 import { actionOf, isModelAction, turnOf } from './turn.ts'
 
@@ -187,7 +188,7 @@ export function pluginsOf(list: PluginList): AnyPlugin[] {
 
 /** Only distinct objects sharing a name conflict; registering the same object twice is fine. */
 export function assertNoConflicts(tools: AgentTool[], plugins: AnyPlugin[]): void {
-  const conflicts = { tools: duplicateNames(tools), plugins: duplicateNames(plugins) }
+  const conflicts = { tools: duplicatesBy(tools, t => t.name), plugins: duplicatesBy(plugins, p => p.name) }
 
   if (conflicts.tools.length > 0 || conflicts.plugins.length > 0) {
     throw new PluginConflictError(conflicts)
@@ -268,10 +269,4 @@ function flatten(list: PluginList): AnyPlugin[] {
 
 function hasToolCalls(action: AgentAction): action is AssistantMessage {
   return isModelAction(action) && callsOf(action).length > 0
-}
-
-function duplicateNames(items: ReadonlyArray<{ name: string }>): string[] {
-  return [...Map.groupBy(new Set(items), item => item.name)]
-    .filter(([, group]) => group.length > 1)
-    .map(([name]) => name)
 }

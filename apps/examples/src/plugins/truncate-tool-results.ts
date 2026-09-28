@@ -1,5 +1,5 @@
-import type { Plugin } from '@gaoxiang.ai/llm'
-import { after, definePlugin } from '@gaoxiang.ai/llm'
+import type { Plugin } from '@ji.dev/llm'
+import { after, definePlugin } from '@ji.dev/llm'
 
 export interface TruncateOptions {
   /** Maximum characters kept per text block. */

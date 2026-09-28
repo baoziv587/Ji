@@ -1,6 +1,6 @@
-import type { Turn, TurnEvent } from '@gaoxiang.ai/llm'
+import type { Turn, TurnEvent } from '@ji.dev/llm'
 import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, ToolCall } from '@mariozechner/pi-ai'
-import { callsOf, createAgent, createSession, textOf, tool, toolResult, user } from '@gaoxiang.ai/llm'
+import { callsOf, createAgent, createSession, textOf, tool, toolResult, user } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { budget } from '../src/plugins/budget.ts'

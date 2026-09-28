@@ -1,4 +1,4 @@
-// @gaoxiang.ai/llm: the kernel instantiated with pi-ai (RFC-0004)
+// @ji.dev/llm: the kernel instantiated with pi-ai (RFC-0004)
 //
 //   Users only touch four objects:
 //     Agent    createAgent({ model, tools, plugins })   model + tools + plugins, stateless; agent.with(...) for variants
@@ -59,7 +59,7 @@ export type {
   UsageTotals,
   When,
 } from './types.ts'
-export type { Stream } from '@gaoxiang.ai/kernel'
+export type { Stream } from '@ji.dev/kernel'
 
 // What writing an agent needs from pi-ai, so tools, events and models come from one import
 export { Type } from '@mariozechner/pi-ai'

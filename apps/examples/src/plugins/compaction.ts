@@ -1,7 +1,7 @@
-import type { Api, AssistantMessage, Message, Model, Plugin } from '@gaoxiang.ai/llm'
-import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
+import type { Api, AssistantMessage, Message, Model, Plugin } from '@ji.dev/llm'
+import { definePlugin, rewriteHistory, textOf, user } from '@ji.dev/llm'
 
-declare module '@gaoxiang.ai/llm' {
+declare module '@ji.dev/llm' {
   interface Events {
     'compaction:start': { tokens: number }
     /** `after` equals `before` when the summary ran out of time and the history was kept as it was. */

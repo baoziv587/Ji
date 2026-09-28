@@ -1,4 +1,4 @@
-// @gaoxiang.ai/kernel/advanced: transforms that change an agent's type parameters (RFC-0003 §2.5, appendix A.4)
+// @ji.dev/kernel/advanced: transforms that change an agent's type parameters (RFC-0003 §2.5, appendix A.4)
 //
 //   Each transform comes with a lift that moves middleware from the old types to the new ones, such that
 //     transform(extend(a, x)) ≃ extend(transform(a), lift(x))

@@ -1,4 +1,4 @@
-import type { Agent as KernelAgent, Stream } from '@gaoxiang.ai/kernel'
+import type { Agent as KernelAgent, Stream } from '@ji.dev/kernel'
 import type {
   Api,
   AssistantMessage,
@@ -122,7 +122,7 @@ type Empty = Record<never, never>
  * Every event of a run, keyed by type (RFC-0005 §3.3). Open: a plugin adds its own events with declaration merging,
  * named `<plugin>:<event>`:
  *
- *     declare module '@gaoxiang.ai/llm' {
+ *     declare module '@ji.dev/llm' {
  *       interface Events { 'compaction:start': { tokens: number } }
  *     }
  *

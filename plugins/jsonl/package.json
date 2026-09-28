@@ -1,5 +1,5 @@
 {
-  "name": "@gaoxiang.ai/plugin-jsonl",
+  "name": "@ji.dev/plugin-jsonl",
   "type": "module",
   "version": "0.0.0",
   "private": true,
@@ -11,10 +11,10 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@gaoxiang.ai/llm": "workspace:*"
+    "@ji.dev/llm": "workspace:*"
   },
   "devDependencies": {
-    "@gaoxiang.ai/llm": "workspace:*",
+    "@ji.dev/llm": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }
 }

@@ -1,9 +1,9 @@
-// Context compaction: pnpm --filter @gaoxiang.ai/examples compaction
+// Context compaction: pnpm --filter @ji.dev/examples compaction
 //
 // The agent reads two large files in a row. Once the context exceeds maxTokens, the compaction plugin
 // has the model write a summary through ctx.complete, replaces the history with "summary + recent messages", and keeps
 // working. The summary's own text never reaches r.text; its model events carry by: 'compaction'.
-import { createAgent, createSession, tool } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, tool } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { compaction, SUMMARY_PREFIX } from './plugins/compaction.ts'
 import { pickModel, show } from './shared.ts'

@@ -1,5 +1,5 @@
 {
-  "name": "@gaoxiang.ai/examples",
+  "name": "@ji.dev/examples",
   "type": "module",
   "version": "0.0.0",
   "private": true,
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
-    "@gaoxiang.ai/llm": "workspace:*",
+    "@ji.dev/llm": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }
 }

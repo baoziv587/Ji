@@ -1,5 +1,5 @@
-import type { AgentTool, Api, Model, PluginList, RunEvent } from '@gaoxiang.ai/llm'
-import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
+import type { AgentTool, Api, Model, PluginList, RunEvent } from '@ji.dev/llm'
+import { createAgent, createSession, tool, Type } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'

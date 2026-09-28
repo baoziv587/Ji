@@ -7,7 +7,7 @@
 > 开发中，API 可能变化，包尚未发布到 npm。
 
 ```ts
-import { createAgent, createSession } from '@gaoxiang.ai/llm'
+import { createAgent, createSession } from '@ji.dev/llm'
 
 const agent = createAgent({ model, plugins: [lowTemperature, toolPlugins] })
 const chat = createSession(agent)
@@ -37,7 +37,7 @@ console.log(await run.summary)
 `before` 改输入 · `after` 改结果 · `intercept` 提前返回。它们通用于 `decide`、`request`、`toolCalls`、`toolCall`。
 
 ```ts
-import { after, before, definePlugin, intercept, toolError } from '@gaoxiang.ai/llm'
+import { after, before, definePlugin, intercept, toolError } from '@ji.dev/llm'
 
 const lowTemperature = definePlugin({
   name: 'low-temperature',
@@ -84,7 +84,7 @@ const plugins = [lowTemperature, toolPlugins]
 **复杂能力，也沿用同一套中间件。** `decide` 中调用 `complete` 生成摘要，再用 `rewriteHistory` 替换历史。
 
 ```ts
-import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
+import { definePlugin, rewriteHistory, textOf, user } from '@ji.dev/llm'
 
 const compactHistory = definePlugin({
   name: 'compaction',
@@ -118,7 +118,7 @@ const compactHistory = definePlugin({
 把工具写成异步生成器：`yield` 报告进度，`return` 交付最终结果，无需另写回调或事件通道。下面以批量检查 URL 为例：
 
 ```ts
-import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, tool, Type } from '@ji.dev/llm'
 
 const checkUrls = tool({
   name: 'check_urls',
@@ -189,7 +189,7 @@ demo 离线演示计算工具，无需 API key。
 - [核心概念](docs/zh-CN/concepts.md) · [内核 API](docs/zh-CN/kernel.md) — 理解底层循环
 - [可运行示例](apps/examples/README.md) — 从具体场景开始
 
-构建 LLM agent 用 [`@gaoxiang.ai/llm`](packages/llm)；需要自定义「决策 → 执行 → 记录」循环时，用零依赖的 [`@gaoxiang.ai/kernel`](packages/kernel)。
+构建 LLM agent 用 [`@ji.dev/llm`](packages/llm)；需要自定义「决策 → 执行 → 记录」循环时，用零依赖的 [`@ji.dev/kernel`](packages/kernel)。
 
 <br>
 

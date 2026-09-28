@@ -2,10 +2,9 @@
 import type { Reducer } from '../src/reduce.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { combine, filterInput, mapInput, mapResult, reduce, scan } from '../src/reduce.ts'
+import { combine, count, filterInput, mapInput, mapResult, reduce, scan, sum } from '../src/reduce.ts'
 
-const count: Reducer<number, number> = { init: 0, reduce: n => n + 1 }
-const sum: Reducer<number, number> = { init: 0, reduce: (s, x) => s + x }
+const total = sum((x: number) => x)
 const last: Reducer<number, number | undefined> = { init: undefined, reduce: (_, x) => x }
 const average: Reducer<number, { n: number; s: number }, number> = {
   init: { n: 0, s: 0 },
@@ -13,7 +12,7 @@ const average: Reducer<number, { n: number; s: number }, number> = {
   result: ({ n, s }) => (n === 0 ? 0 : s / n),
 }
 
-const reducers = fc.constantFrom<Reducer<number, any, any>>(count, sum, last, average)
+const reducers = fc.constantFrom<Reducer<number, any, any>>(count, total, last, average)
 const inputs = fc.array(fc.integer({ min: -100, max: 100 }), { maxLength: 30 })
 
 async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {

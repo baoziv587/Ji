@@ -9,7 +9,7 @@
 ## 发送并读取回答
 
 ```ts
-import { createAgent, createSession } from '@gaoxiang.ai/llm'
+import { createAgent, createSession } from '@ji.dev/llm'
 
 const agent = createAgent({ model, system: 'Be concise.' })
 const chat = createSession(agent)
@@ -100,7 +100,7 @@ await printing
 出错后，从最后写入的状态继续：
 
 ```ts
-import { RunError } from '@gaoxiang.ai/llm'
+import { RunError } from '@ji.dev/llm'
 
 try {
   await chat.send('Continue the task').result
@@ -259,7 +259,7 @@ const runTests = tool({
 
 `for await` 循环抛错或提前退出会取消整次运行，而且它只能看到一次运行。日志、追踪、指标请用插件的只读钩子 `observe`：它从第一个事件起收到这个 agent 每次运行的全部事件，抛出的异常只会作为警告报告，不影响运行。
 
-`observe` 是同步的，不会被等待：要异步导出，就在 `observe` 里入队，运行结束后再 flush（[示例](plugins.md#observer-是同步的)）。现成的插件在 [`plugins/`](../../plugins)：`@gaoxiang.ai/plugin-otel`、`@gaoxiang.ai/plugin-jsonl`。
+`observe` 是同步的，不会被等待：要异步导出，就在 `observe` 里入队，运行结束后再 flush（[示例](plugins.md#observer-是同步的)）。现成的插件在 [`plugins/`](../../plugins)：`@ji.dev/plugin-otel`、`@ji.dev/plugin-jsonl`。
 
 <br>
 

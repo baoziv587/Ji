@@ -2,7 +2,7 @@
 
 **English** · [简体中文](zh-CN/kernel.md) · [Documentation index](README.md)
 
-`@gaoxiang.ai/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@gaoxiang.ai/llm`](sessions-and-runs.md) wraps it for you.
+`@ji.dev/kernel` has no dependencies and nothing LLM-specific. Use it directly to build a non-LLM agent or a new layer. Otherwise, [`@ji.dev/llm`](sessions-and-runs.md) wraps it for you.
 
 <br>
 
@@ -11,8 +11,8 @@
 This agent counts from `0` to `3`. `policy` chooses the next action, `env` executes it, and `update` records the result. `run` consumes the loop and returns `3`:
 
 ```ts
-import type { Agent } from '@gaoxiang.ai/kernel'
-import { act, done, run } from '@gaoxiang.ai/kernel'
+import type { Agent } from '@ji.dev/kernel'
+import { act, done, run } from '@ji.dev/kernel'
 
 const counter: Agent<number, number, number, number> = {
   async *policy(state) {
@@ -31,11 +31,11 @@ console.log(await run(counter, 0)) // 3
 
 ## Core
 
-| Entry                          | Contents                                                                                                         |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `@gaoxiang.ai/kernel`          | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `merge`, `act`, `done`, `MaxStepsError` |
-| `@gaoxiang.ai/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden`                                           |
-| `@gaoxiang.ai/kernel/reduce`   | Composable reducers: `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan`                         |
+| Entry                     | Contents                                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `@ji.dev/kernel`          | `Agent`, `Extension`, `unfold`, `run`, `extend`, `mapState`, `mapYield`, `merge`, `act`, `done`, `MaxStepsError` |
+| `@ji.dev/kernel/advanced` | Type-changing transforms: `withState` / `focus`, `widen` / `liftWiden`                                           |
+| `@ji.dev/kernel/reduce`   | Composable reducers: `sum`, `count`, `combine`, `mapInput`, `filterInput`, `mapResult`, `reduce`, `scan`         |
 
 ```ts
 interface Agent<S, A, O, R, D = never> {
@@ -84,7 +84,7 @@ That means code can always be written as `extend(transform(base), ...extensions)
 | `withState(agent, lens)`: `S → T`             | `focus(ext, lens)`      | Embed an agent in a larger state. The middleware only sees its own slice. |
 | `widen(agent, isNew, handlers)`: `A → A \| N` | `liftWiden(ext, isNew)` | Add a new kind of action, emitted by an outer middleware                  |
 
-A `Lens<T, S>` must satisfy the three lens laws: get-set, set-get and set-set. `@gaoxiang.ai/llm` also uses `Lens` for plugin state: its `pluginStateSlot(name, init)` is a lens onto `state.plugins[name]`: `plugin.select` is its `get`, and the state reducer writes through its `set`.
+A `Lens<T, S>` must satisfy the three lens laws: get-set, set-get and set-set. `@ji.dev/llm` also uses `Lens` for plugin state: its `pluginStateSlot(name, init)` is a lens onto `state.plugins[name]`: `plugin.select` is its `get`, and the state reducer writes through its `set`.
 
 `liftWiden` only accepts `env`/`update` middleware. A policy middleware's output mentions `A`, so there is no general lift for it, and the types reject it.
 
@@ -100,7 +100,7 @@ interface Reducer<In, Acc, Out = Acc> {
 }
 ```
 
-`combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@gaoxiang.ai/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.
+`combine({ a: r1, b: r2 })` computes several reducers in one pass. `scan` yields every intermediate result. `@ji.dev/llm` builds `Run.summary` and plugin state this way. As with `update`, `reduce` must be synchronous and pure.
 
 <br>
 

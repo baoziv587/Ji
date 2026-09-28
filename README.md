@@ -7,7 +7,7 @@
 > In development. APIs may change; packages are not published to npm yet.
 
 ```ts
-import { createAgent, createSession } from '@gaoxiang.ai/llm'
+import { createAgent, createSession } from '@ji.dev/llm'
 
 const agent = createAgent({ model, plugins: [lowTemperature, toolPlugins] })
 const chat = createSession(agent)
@@ -35,7 +35,7 @@ Long-running tools can report progress as they work: `yield` in the tool, receiv
 `before` changes input · `after` changes results · `intercept` returns early. All three work with `decide`, `request`, `toolCalls` and `toolCall`.
 
 ```ts
-import { after, before, definePlugin, intercept, toolError } from '@gaoxiang.ai/llm'
+import { after, before, definePlugin, intercept, toolError } from '@ji.dev/llm'
 
 const lowTemperature = definePlugin({
   name: 'low-temperature',
@@ -82,7 +82,7 @@ Pass them to `createAgent({ model, plugins })`. On the same hook, the list wraps
 **Complex behavior uses the same middleware model.** Call `complete` inside `decide` to summarize, then use `rewriteHistory` to replace history.
 
 ```ts
-import { definePlugin, rewriteHistory, textOf, user } from '@gaoxiang.ai/llm'
+import { definePlugin, rewriteHistory, textOf, user } from '@ji.dev/llm'
 
 const compactHistory = definePlugin({
   name: 'compaction',
@@ -116,7 +116,7 @@ The summary call runs through the existing `request` plugins, reusing temperatur
 Write an async generator: `yield` reports progress and `return` delivers the final result, with no separate callback or event channel. For example, check a batch of URLs:
 
 ```ts
-import { createAgent, createSession, tool, Type } from '@gaoxiang.ai/llm'
+import { createAgent, createSession, tool, Type } from '@ji.dev/llm'
 
 const checkUrls = tool({
   name: 'check_urls',
@@ -189,7 +189,7 @@ Find more offline scenarios in [apps/examples](apps/examples/README.md).
 - [Concepts](docs/concepts.md) · [Kernel API](docs/kernel.md) — the underlying agent loop
 - [Runnable examples](apps/examples/README.md) — start from a working scenario
 
-Use [`@gaoxiang.ai/llm`](packages/llm) for LLM agents, or the dependency-free [`@gaoxiang.ai/kernel`](packages/kernel) for your own decide → act → record loop.
+Use [`@ji.dev/llm`](packages/llm) for LLM agents, or the dependency-free [`@ji.dev/kernel`](packages/kernel) for your own decide → act → record loop.
 
 <br>
 

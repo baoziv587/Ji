@@ -1,8 +1,8 @@
-// Development checks (RFC-0006 §8): freezing committed state and comparing reducer results as plain data.
+// deepFreeze and sameData over plain data
 import { isDeepStrictEqual } from 'node:util'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { deepFreeze, sameData } from '../src/diagnostics.ts'
+import { deepFreeze, sameData } from '../src/data.ts'
 
 describe('deepFreeze', () => {
   it('should always freeze every plain object and array inside, and give the same value back', () => {

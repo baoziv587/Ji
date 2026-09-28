@@ -205,7 +205,7 @@ importers:
 
   apps/demo:
     dependencies:
-      '@gaoxiang.ai/llm':
+      '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
       '@mariozechner/pi-ai':
@@ -217,7 +217,7 @@ importers:
       '@clack/prompts':
         specifier: ^1.8.1
         version: 1.8.1
-      '@gaoxiang.ai/llm':
+      '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
       '@mariozechner/pi-ai':
@@ -228,16 +228,21 @@ importers:
 
   packages/llm:
     dependencies:
-      '@gaoxiang.ai/kernel':
+      '@ji.dev/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@ji.dev/utils':
+        specifier: workspace:*
+        version: link:../utils
       '@mariozechner/pi-ai':
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.3)(zod@4.6.5)
 
+  packages/utils: {}
+
   plugins/jsonl:
     devDependencies:
-      '@gaoxiang.ai/llm':
+      '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
       '@mariozechner/pi-ai':
@@ -246,7 +251,7 @@ importers:
 
   plugins/otel:
     devDependencies:
-      '@gaoxiang.ai/llm':
+      '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
       '@mariozechner/pi-ai':
@@ -255,7 +260,7 @@ importers:
 
   plugins/throttle-updates:
     devDependencies:
-      '@gaoxiang.ai/llm':
+      '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
       '@mariozechner/pi-ai':
