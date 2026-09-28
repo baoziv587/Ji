@@ -4,8 +4,6 @@
 
 **A small, extensible TypeScript runtime for LLM agents.**
 
-JI handles model calls, tools and conversation state. Add behavior through plugins; stream answers and read usage from the same Run.
-
 > In development. APIs may change; packages are not published to npm yet.
 
 <br>
