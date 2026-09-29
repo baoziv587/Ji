@@ -21,7 +21,7 @@ pnpm replay cache                                   # 看下载缓存；pnpm rep
 - **下载缓存**：`~/.cache/ji-replay/`（遵循 `XDG_CACHE_HOME`，也可以用 `--cache dir` 指定）。parquet 分片按数据集的 revision 存放，同一台机器上的所有 clone 和 worktree 共用，同一个 revision 只下载一次。下载时会校验 sha256，中断后再跑只补缺少的文件。上游发布新版本时下载新 revision，并删掉旧的。连不上 Hugging Face 时直接使用已缓存的最新版本。
 - **导入的库**：`.replay/terminalbench.duckdb`，之后的运行直接复用。删掉它、换一个 `--db`，或者跑 `pnpm replay import`，都会从下载缓存重新导入，大约 1 秒，不会重新下载。
 
-case 是分批从库里读出来的（每批 100 条），跑全量时内存里只有当前这一批的 steps。不想下载的话，也可以直接跑仓库自带的 6 条样本：`pnpm replay run --source apps/replay/fixtures/terminalbench-sample.jsonl`。
+case 是分批从库里读出来的（每批 100 条），跑全量时内存里只有当前这一批的 steps。`--source <file>` 可以直接跑任意 parquet 或 JSONL 文件（列要和数据集一致），不经过导入的库。测试不依赖数据集：[`tests/fixture.ts`](tests/fixture.ts) 会在临时目录里生成 6 条合成轨迹，覆盖各个 scaffold 录制格式里的特殊情况。
 
 ## 命令
 

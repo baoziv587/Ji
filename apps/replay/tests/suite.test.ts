@@ -3,16 +3,16 @@ import type { SuiteOptions } from '../src/runner.ts'
 import type { Case } from '../src/testkit.ts'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { after, before, definePlugin } from '@ji.dev/llm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { openRuns } from '../src/analyze.ts'
 import { importTrials, openDb } from '../src/dataset.ts'
 import { runSuite } from '../src/runner.ts'
 import { selectCases } from '../src/testkit.ts'
+import { writeFixture } from './fixture.ts'
 
-const FIXTURE = fileURLToPath(new URL('../fixtures/terminalbench-sample.jsonl', import.meta.url))
+const FIXTURE = writeFixture()
 
 let cases: Case[]
 let dir: string
@@ -24,7 +24,10 @@ beforeAll(async () => {
   db.close()
   dir = mkdtempSync(join(tmpdir(), 'ji-replay-'))
 })
-afterAll(() => rmSync(dir, { recursive: true, force: true }))
+afterAll(() => {
+  rmSync(dir, { recursive: true, force: true })
+  rmSync(dirname(FIXTURE), { recursive: true, force: true })
+})
 
 function optionsFor(name: string, patch: Partial<SuiteOptions> = {}): SuiteOptions {
   return {

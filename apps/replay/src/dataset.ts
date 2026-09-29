@@ -1,7 +1,7 @@
 // Terminal-Bench trajectories in DuckDB: import once into a local database file, then select cases with SQL.
 //
 //   importTrials(db, (await ensureDataset()).files)     the cached parquet files (see cache.ts)
-//   importTrials(db, 'fixtures/sample.jsonl')           or any parquet / JSONL path or URL DuckDB can read
+//   importTrials(db, 'trials.jsonl')                    or any parquet / JSONL path or URL DuckDB can read
 //     -> table trials: the dataset's columns with fixed types, plus case_id, n_steps and n_tool_calls
 //
 // Rows whose steps are missing ('null' in the dataset) are left out: there is nothing to replay. Most rows have an

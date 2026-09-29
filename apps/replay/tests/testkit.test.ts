@@ -1,10 +1,13 @@
 import type { Db } from '../src/dataset.ts'
-import { fileURLToPath } from 'node:url'
+import { rmSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { importTrials, openDb } from '../src/dataset.ts'
 import { countCases, selectCases, selectIds, streamCases, whereOf } from '../src/testkit.ts'
+import { writeFixture } from './fixture.ts'
 
-const FIXTURE = fileURLToPath(new URL('../fixtures/terminalbench-sample.jsonl', import.meta.url))
+const FIXTURE = writeFixture()
+afterAll(() => rmSync(dirname(FIXTURE), { recursive: true, force: true }))
 
 describe('whereOf', () => {
   it('should AND every field, with its values in placeholder order', () => {
@@ -44,7 +47,7 @@ describe('selectCases', () => {
     )
 
     // Assert
-    expect(row).toEqual({ n: '6', ids: '6', calls: 7 })
+    expect(row).toEqual({ n: '6', ids: '6', calls: 3 })
   })
 
   it('should return the cases a filter picks, with their steps parsed and normalized', async () => {
@@ -56,6 +59,7 @@ describe('selectCases', () => {
     const codex = cases.find(c => c.agent === 'codex')!
     const argv = codex.steps.flatMap(s => s.tools).find(t => t.cmd.startsWith('['))
     expect(argv?.cmd).toMatch(/^\["bash","-lc",/)
+    expect(codex.id).toBe('kv-store__trial3')
     expect(codex.steps.every(s => typeof s.msg === 'string' && Array.isArray(s.tools))).toBe(true)
   })
 
@@ -90,6 +94,6 @@ describe('selectCases', () => {
     const rows = await countCases(db, { minToolCalls: 10 })
 
     // Assert
-    expect(rows.map(r => r.agent).toSorted()).toEqual(['codex', 'mini-swe-agent', 'openhands', 'terminus-2'])
+    expect(rows.map(r => r.agent).toSorted()).toEqual(['mini-swe-agent', 'openhands', 'terminus-2'])
   })
 })
