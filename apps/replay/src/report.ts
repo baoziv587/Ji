@@ -1,6 +1,7 @@
 // A replay run in numbers (summarize) and as a Markdown page (renderReport). Both are pure over the SuiteResult.
 
 import type { PluginList } from '@ji.dev/llm'
+import type { Interjections } from './plan.ts'
 import type { CaseRow, SuiteResult } from './runner.ts'
 import { join } from 'node:path'
 import { percentile } from './metrics.ts'
@@ -26,6 +27,9 @@ export interface SuiteStats {
   failed: number
   modelTurns: number
   toolCalls: number
+  /** Messages sent with when: 'step' and when: 'now' while a case ran. */
+  steers: number
+  interrupts: number
   events: number
   textChars: number
   throughput: { casesPerSec: number; turnsPerSec: number; toolCallsPerSec: number; eventsPerSec: number }
@@ -72,6 +76,8 @@ export function summarize({ rows, cost }: Pick<SuiteResult, 'rows' | 'cost'>): S
     failed: rows.length - passed,
     modelTurns,
     toolCalls,
+    steers: sum(r => r.steers),
+    interrupts: sum(r => r.interrupts),
     events,
     textChars: sum(r => r.text_chars),
     throughput: {
@@ -113,6 +119,7 @@ ${verdict} · ${stats.modelTurns} model turns · ${stats.toolCalls} tool calls �
 | faux tokens/s | ${o.tokensPerSecond === 0 ? 'unthrottled' : o.tokensPerSecond} |
 | tool updates / latency | ${o.toolUpdates} / ${o.toolLatencyMs} ms |
 | determinism checks | ${o.checkDeterminism ? 'on' : 'off'} |
+| steer / interrupt | ${interjections(o.interject)} · ${stats.steers} / ${stats.interrupts} sent |
 | plugins | ${['probe', ...pluginNames(o.plugins ?? []), ...(o.otel ? ['otel'] : []), ...(o.events ? ['jsonl'] : [])].join(', ')} |
 
 ## Throughput
@@ -171,6 +178,11 @@ duckdb -c "SELECT agent, count(*), avg(wall_ms) FROM '${join(o.out, `cases.${ext
 }
 
 /** The names in a (possibly nested) plugin list, in order. */
+function interjections({ steer, interrupt }: Interjections): string {
+  const every = (n: number): string => (n === 0 ? 'never' : `every ${n}`)
+  return steer === 0 && interrupt === 0 ? 'off' : `${every(steer)} / ${every(interrupt)} model turns`
+}
+
 export function pluginNames(list: PluginList): string[] {
   return list.flatMap(item => ('name' in item ? [item.name] : pluginNames(item as PluginList)))
 }

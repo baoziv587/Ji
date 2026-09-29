@@ -1,19 +1,22 @@
-// What a replayed run must look like, given its script. Pure: everything observed comes in, a list of failures
+// What a replayed run must look like, given its plan. Pure: everything observed comes in, a list of failures
 // comes out; an empty list means the case passed.
 //
 //   outcome     the run ended done, with the last scripted text as its result
-//   history     state.messages is exactly the script: inputs, assistant turns (text + calls), tool results
-//   summary     turns, inputs and per-tool call counts agree with the script; no tool errors
-//   events      the ledger found no protocol violation; observe and `for await` saw the same sequence
-//   text        the main model's text deltas join up to the scripted text
-//   plugins     every hook of the probe ran as often as it should and saw consistent state
+//   history     state.messages is exactly the plan: inputs and interjections, assistant turns (text + calls), tool
+//               results; nothing of a cancelled attempt
+//   summary     turns, inputs and per-tool call counts agree with the plan; no tool errors
+//   events      the ledger found no protocol violation; observe and `for await` saw the same sequence; one
+//               step_cancelled per interrupt
+//   text        the main model's text deltas join up to the planned text, cancelled attempts included
+//   plugins     every hook of the probe ran as often as it should and saw consistent state; input steps say whether
+//               they came while idle or after an interrupt
 //   model       the faux model got every request it expected, each carrying the right history
 //   spans       (with otel) one invoke_agent, a chat span per model call, an execute_tool span per tool call
 
 import type { AgentState, Message, RunError, RunSummary } from '@ji.dev/llm'
 import type { LedgerSummary } from './ledger.ts'
+import type { Plan } from './plan.ts'
 import type { ProbeCounts } from './probe.ts'
-import type { Script } from './script.ts'
 import type { SpanStats } from './spans.ts'
 import { callsOf as callsIn, textOf } from '@ji.dev/llm'
 import { NO_COUNTS } from './probe.ts'
@@ -32,7 +35,8 @@ export interface Observed {
   spans?: SpanStats
 }
 
-export function verify(script: Script, o: Observed): string[] {
+export function verify(plan: Plan, o: Observed): string[] {
+  const { script } = plan
   const failures: string[] = []
   const expect = (ok: boolean, message: string): void => {
     if (!ok) {
@@ -42,14 +46,18 @@ export function verify(script: Script, o: Observed): string[] {
 
   const turns = turnsOf(script)
   const calls = callsOf(script)
-  const inputs = script.segments.length
+  const inputs = script.segments.length + plan.steers + plan.interrupts
+  const attempts = plan.attempts.length
+  // Calls of an attempt cancelled while its tools ran may or may not have run by the time the interrupt lands
+  const maxCalls = calls.length + plan.cancelledCalls
+  const between = (n: number | undefined, min: number, max: number): boolean => n !== undefined && n >= min && n <= max
 
   if (!o.outcome.ok) {
     failures.push(`run failed (${o.outcome.error.kind}) at step ${o.outcome.error.t}: ${o.outcome.error.message}`)
   } else {
     const { result, state, summary } = o.outcome
     expect(result === turns.at(-1)?.text, `result is ${JSON.stringify(clip(result))}, not the last scripted text`)
-    failures.push(...compareHistory(expectedHistory(script), state.messages.map(shapeOf)))
+    failures.push(...compareHistory(expectedHistory(plan), state.messages.map(shapeOf)))
 
     expect(summary.turns === turns.length, `summary.turns ${summary.turns}, script has ${turns.length}`)
     expect(summary.inputs === inputs, `summary.inputs ${summary.inputs}, script has ${inputs}`)
@@ -60,7 +68,14 @@ export function verify(script: Script, o: Observed): string[] {
     }
 
     const own = (state.plugins.probe as ProbeCounts | undefined) ?? NO_COUNTS
-    const want: ProbeCounts = { model: turns.length, input: inputs, rewrite: 0, results: calls.length }
+    const want: ProbeCounts = {
+      model: turns.length,
+      input: inputs,
+      rewrite: 0,
+      results: calls.length,
+      idle: script.segments.length,
+      interrupted: plan.interrupts,
+    }
     expect(sameCounts(own, want), `probe state ${JSON.stringify(own)}, expected ${JSON.stringify(want)}`)
   }
 
@@ -70,16 +85,20 @@ export function verify(script: Script, o: Observed): string[] {
     o.run.digest === o.observed.digest && o.run.events === o.observed.events,
     `observe saw ${o.observed.events} events, for await saw ${o.run.events}, or in another order`,
   )
-  const text = turns.map(t => t.text).join('')
   expect(
-    o.run.text === text,
-    `streamed text (${o.run.text.length} chars) differs from the script (${text.length} chars)`,
+    o.run.text === plan.text,
+    `streamed text (${o.run.text.length} chars) differs from the plan (${plan.text.length} chars)`,
   )
+  const cancelled = o.run.byType.step_cancelled ?? 0
+  expect(cancelled === plan.interrupts, `${cancelled} steps cancelled for ${plan.interrupts} interrupts`)
 
   if (o.outcome.ok) {
     const { hooks } = o.probe
-    expect(hooks.request === turns.length, `request hook ran ${hooks.request} times for ${turns.length} model turns`)
-    expect(hooks.toolCall === calls.length, `toolCall hook ran ${hooks.toolCall} times for ${calls.length} calls`)
+    expect(hooks.request === attempts, `request hook ran ${hooks.request} times for ${attempts} model requests`)
+    expect(
+      between(hooks.toolCall, calls.length, maxCalls),
+      `toolCall hook ran ${hooks.toolCall} times for ${calls.length} calls (${maxCalls} with cancelled ones)`,
+    )
     expect(hooks.input === inputs, `input hook saw ${hooks.input} messages, script has ${inputs}`)
     expect(
       hooks.record === turns.length + inputs,
@@ -88,7 +107,7 @@ export function verify(script: Script, o: Observed): string[] {
   }
   failures.push(...o.probe.violations.map(v => `probe: ${v}`))
 
-  expect(o.model.calls === turns.length, `faux model was called ${o.model.calls} times for ${turns.length} turns`)
+  expect(o.model.calls === attempts, `faux model was called ${o.model.calls} times for ${attempts} requests`)
   expect(o.model.pending === 0, `${o.model.pending} scripted model turns never requested`)
   failures.push(...o.model.violations.slice(0, 20).map(v => `model: ${v}`))
 
@@ -100,10 +119,10 @@ export function verify(script: Script, o: Observed): string[] {
       `spans: ${s.started} started, ${s.ended} ended, ${s.endedTwice} twice`,
     )
     expect(ops.invoke_agent === 1, `spans: ${ops.invoke_agent ?? 0} invoke_agent`)
-    expect((ops.chat ?? 0) === turns.length, `spans: ${ops.chat ?? 0} chat for ${turns.length} model turns`)
+    expect((ops.chat ?? 0) === attempts, `spans: ${ops.chat ?? 0} chat for ${attempts} model requests`)
     expect(
-      (ops.execute_tool ?? 0) === calls.length,
-      `spans: ${ops.execute_tool ?? 0} execute_tool for ${calls.length} calls`,
+      between(ops.execute_tool ?? 0, calls.length, maxCalls),
+      `spans: ${ops.execute_tool ?? 0} execute_tool for ${calls.length} calls (${maxCalls} with cancelled ones)`,
     )
   }
 
@@ -119,18 +138,19 @@ interface Shape {
   isError?: boolean
 }
 
-function expectedHistory(script: Script): Shape[] {
-  return script.segments.flatMap(segment => [
-    { role: 'user', text: segment.input } satisfies Shape,
-    ...segment.turns.flatMap(turn => [
-      {
-        role: 'assistant',
-        text: turn.text,
-        calls: turn.calls.map(({ id, name, cmd }) => ({ id, name, cmd })),
-      } satisfies Shape,
-      ...turn.calls.map(c => ({ role: 'toolResult', text: c.obs, toolCallId: c.id, isError: false }) satisfies Shape),
-    ]),
-  ])
+function expectedHistory(plan: Plan): Shape[] {
+  return plan.steps.flatMap((step): Shape[] =>
+    step.kind === 'input'
+      ? [{ role: 'user', text: step.text }]
+      : [
+          {
+            role: 'assistant',
+            text: step.turn.text,
+            calls: step.turn.calls.map(({ id, name, cmd }) => ({ id, name, cmd })),
+          },
+          ...step.turn.calls.map(c => ({ role: 'toolResult', text: c.obs, toolCallId: c.id, isError: false }) as const),
+        ],
+  )
 }
 
 function shapeOf(m: Message): Shape {
@@ -174,7 +194,7 @@ function compareHistory(expected: Shape[], actual: Shape[]): string[] {
 }
 
 function sameCounts(a: ProbeCounts, b: ProbeCounts): boolean {
-  return a.model === b.model && a.input === b.input && a.rewrite === b.rewrite && a.results === b.results
+  return (Object.keys(b) as Array<keyof ProbeCounts>).every(key => a[key] === b[key])
 }
 
 function countBy(items: string[]): Record<string, number> {

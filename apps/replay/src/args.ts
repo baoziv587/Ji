@@ -34,6 +34,8 @@ const OPTIONS = {
   'no-otel': { type: 'boolean', default: false },
   events: { type: 'boolean', default: false },
   checks: { type: 'boolean', default: false },
+  steer: { type: 'string', default: '5' },
+  interrupt: { type: 'string', default: '7' },
   plugin: { type: 'string', multiple: true, default: [] as string[] },
   runs: { type: 'string', default: join('.replay', 'runs') },
   cache: { type: 'string', default: DEFAULT_CACHE },

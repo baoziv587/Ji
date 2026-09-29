@@ -1,20 +1,23 @@
 // One case as a runnable agent: pi-ai's faux provider speaks the script's model turns, replay tools return the
 // recorded observations, and the probe plugin rides along.
 //
-//   faux response k    checks the request it answers (history length, last role, system prompt), then streams turn k
-//   tool <name>        returns the next recorded obs for (name, cmd); optionally with latency and tool_update chunks
+//   faux response k    checks the request it answers (history length, last role, system prompt), then streams the
+//                      turn of attempt k; an interrupted turn is asked for twice, so it has two attempts
+//   tool <name>        returns the recorded obs for (name, cmd) in the turn being answered; optionally with latency
+//                      and tool_update chunks
+//   interjections      sent to the session from the faux response or the first tool call, as the plan says
 //
 // The model side checks the request because it is the one place that sees exactly what the loop sent.
 
-import type { Agent, AgentTool, AssistantMessage, PluginList } from '@ji.dev/llm'
+import type { Agent, AgentTool, AssistantMessage, PluginList, Run, Session } from '@ji.dev/llm'
 import type { Context } from '@mariozechner/pi-ai'
+import type { Interjection, Interjections, Plan } from './plan.ts'
 import type { Probe } from './probe.ts'
-import type { Script, ScriptTurn } from './script.ts'
+import type { ScriptTurn } from './script.ts'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { createAgent, tool, Type } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { probe } from './probe.ts'
-import { callsOf } from './script.ts'
 
 export interface ReplayOptions {
   /** Faux streaming speed; 0 streams as fast as the event loop allows. */
@@ -24,6 +27,7 @@ export interface ReplayOptions {
   /** Simulated time each tool call takes. */
   toolLatencyMs: number
   checkDeterminism: boolean
+  interject: Interjections
   /** Added after the probe, so the probe is the outermost middleware. */
   plugins: PluginList
 }
@@ -34,10 +38,13 @@ export interface Replay {
   /** What the faux model found wrong in the requests it answered. */
   modelViolations: string[]
   faux: () => { calls: number; pending: number }
+  /** The session and Run that interjections go to; the replay sends nothing before this. */
+  bind: (session: Session, run: Run) => void
   dispose: () => void
 }
 
-export function replay(script: Script, modelId: string, options: ReplayOptions): Replay {
+export function replay(plan: Plan, modelId: string, options: Omit<ReplayOptions, 'interject'>): Replay {
+  const { script } = plan
   const modelViolations: string[] = []
   const faux = registerFauxProvider({
     provider: 'faux',
@@ -45,19 +52,37 @@ export function replay(script: Script, modelId: string, options: ReplayOptions):
     tokensPerSecond: options.tokensPerSecond > 0 ? options.tokensPerSecond : undefined,
   })
 
-  const expected = requestShapes(script)
+  let target: { session: Session; run: Run } | undefined
+  const interject = ({ message, when }: Interjection): void => {
+    if (target === undefined) {
+      modelViolations.push(`nothing to send "${message}" to: bind was never called`)
+      return
+    }
+    // A message sent while a Run is in progress joins that Run
+    const run = target.session.send(message, { when })
+    if (run !== target.run) {
+      modelViolations.push(`send(when: '${when}') during the run started another Run`)
+    }
+  }
+
+  const tools = replayTools(plan, options, interject)
   faux.setResponses(
-    expected.map(({ turn, messages, lastRole }, k) => (context: Context) => {
+    plan.attempts.map((attempt, k) => (context: Context) => {
       const got = context.messages
-      if (got.length !== messages || got.at(-1)?.role !== lastRole) {
+      if (got.length !== attempt.messages || got.at(-1)?.role !== attempt.lastRole) {
         modelViolations.push(
-          `request ${k}: ${got.length} messages ending in ${got.at(-1)?.role}, expected ${messages} ending in ${lastRole}`,
+          `request ${k}: ${got.length} messages ending in ${got.at(-1)?.role}, expected ${attempt.messages} ending in ${attempt.lastRole}`,
         )
       }
       if ((context.systemPrompt ?? '') !== script.system) {
         modelViolations.push(`request ${k}: system prompt differs from the recording`)
       }
-      return messageOf(turn)
+
+      tools.answering(attempt.turn, attempt.send?.site === 'tool' ? attempt.send : undefined)
+      if (attempt.send?.site === 'model') {
+        interject(attempt.send)
+      }
+      return messageOf(attempt.turn)
     }),
   )
 
@@ -65,7 +90,7 @@ export function replay(script: Script, modelId: string, options: ReplayOptions):
   const agent = createAgent({
     model: faux.getModel(),
     system: script.system,
-    tools: replayTools(script, options),
+    tools: tools.tools,
     plugins: [p.plugin, ...options.plugins],
     checkDeterminism: options.checkDeterminism,
   })
@@ -75,32 +100,11 @@ export function replay(script: Script, modelId: string, options: ReplayOptions):
     probe: p,
     modelViolations,
     faux: () => ({ calls: faux.state.callCount, pending: faux.getPendingResponseCount() }),
+    bind: (session, run) => {
+      target = { session, run }
+    },
     dispose: () => faux.unregister(),
   }
-}
-
-interface RequestShape {
-  turn: ScriptTurn
-  /** History length the request must carry. */
-  messages: number
-  lastRole: 'user' | 'toolResult'
-}
-
-/** Each model turn in order, with the history the loop must have sent to get it. */
-function requestShapes(script: Script): RequestShape[] {
-  const shapes: RequestShape[] = []
-  let history = 0
-
-  for (const segment of script.segments) {
-    history += 1
-    let lastRole: RequestShape['lastRole'] = 'user'
-    for (const turn of segment.turns) {
-      shapes.push({ turn, messages: history, lastRole })
-      history += 1 + turn.calls.length
-      lastRole = 'toolResult'
-    }
-  }
-  return shapes
 }
 
 function messageOf(turn: ScriptTurn): AssistantMessage {
@@ -109,21 +113,44 @@ function messageOf(turn: ScriptTurn): AssistantMessage {
   return fauxAssistantMessage(content, { stopReason: calls.length > 0 ? 'toolUse' : 'stop' })
 }
 
+interface ReplayTools {
+  tools: AgentTool[]
+  /** The faux model has answered with `turn`: its tool calls come next. `send` goes out from the first of them. */
+  answering: (turn: ScriptTurn, send?: Interjection) => void
+}
+
 /**
- * One tool per recorded function name. A tool knows its arguments, not its call id, so observations queue up per
- * (name, cmd) in script order: turns run one after another, and identical calls within a turn share one obs.
+ * One tool per recorded function name. A tool knows its arguments, not its call id, so it looks its observation up by
+ * (name, cmd) among the calls of the turn the model is answering with; identical calls within a turn share one obs.
+ * A turn answered again after an interrupt gets its observations again.
  */
-function replayTools(script: Script, { toolUpdates, toolLatencyMs }: ReplayOptions): AgentTool[] {
-  const queues = new Map<string, string[]>()
-  for (const call of callsOf(script)) {
-    const key = keyOf(call.name, call.cmd)
-    queues.set(key, [...(queues.get(key) ?? []), call.obs])
+function replayTools(
+  plan: Plan,
+  { toolUpdates, toolLatencyMs }: Omit<ReplayOptions, 'interject'>,
+  interject: (send: Interjection) => void,
+): ReplayTools {
+  let queues = new Map<string, string[]>()
+  let pending: Interjection | undefined
+
+  const answering = (turn: ScriptTurn, send?: Interjection): void => {
+    queues = new Map()
+    for (const call of turn.calls) {
+      const key = keyOf(call.name, call.cmd)
+      queues.set(key, [...(queues.get(key) ?? []), call.obs])
+    }
+    pending = send
   }
 
-  const next = (name: string, cmd: string): string =>
-    queues.get(keyOf(name, cmd))?.shift() ?? `no recorded output for ${name}(${cmd})`
+  const next = (name: string, cmd: string): string => {
+    if (pending !== undefined) {
+      const send = pending
+      pending = undefined
+      interject(send)
+    }
+    return queues.get(keyOf(name, cmd))?.shift() ?? `no recorded output for ${name}(${cmd})`
+  }
 
-  return script.tools.map(name =>
+  const tools = plan.script.tools.map(name =>
     tool({
       name,
       description: `Replays the recorded output of ${name}`,
@@ -137,6 +164,7 @@ function replayTools(script: Script, { toolUpdates, toolLatencyMs }: ReplayOptio
       },
     }),
   )
+  return { tools, answering }
 }
 
 /** Yields obs in `parts` chunks spread over `ms`, then returns the whole of it. */

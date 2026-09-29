@@ -51,6 +51,8 @@ case 是分批从库里读出来的（每批 100 条），跑全量时内存里�
 | `--tool-updates`                      | 0       | 每次工具调用把输出拆成 n 段 `tool_update`                            |
 | `--tool-latency`                      | 0       | 每次工具调用的模拟耗时（ms）                                         |
 | `--timeout`                           | 60000   | 单个 case 的超时时间，超时即 abort 并记为失败                        |
+| `--steer`                             | 5       | 每 n 个模型回合发一条 `when: 'step'` 消息；0 表示不发                |
+| `--interrupt`                         | 7       | 每 n 个模型回合发一条 `when: 'now'` 消息；0 表示不发                 |
 | `--format`                            | parquet | `parquet` 或 `jsonl`                                                 |
 | `--no-otel` / `--events` / `--checks` |         | 不挂 otel 插件 / 挂 jsonl 插件记录全部事件 / 打开 `checkDeterminism` |
 | `--source file`                       |         | 不读导入好的库，直接从文件跑                                         |
@@ -69,22 +71,35 @@ case 是分批从库里读出来的（每批 100 条），跑全量时内存里�
 | 段尾               | 补一个纯文本回合，让 agent 进入 idle（没有可用文本时标为 synthetic）  |
 | 后续的 `system`    | 丢弃（属于 scaffold 的记账信息，不是对话内容）                        |
 
-每个 `fn` 生成一个回放工具（参数 `{ cmd }`），按 `(name, cmd)` 依次返回录下的 `obs`。同一回合里的工具调用是并发执行的，顺序不固定，所以完全相同的调用会拿到同一份 obs。
+每个 `fn` 生成一个回放工具（参数 `{ cmd }`），在当前正在回答的那个回合里按 `(name, cmd)` 返回录下的 `obs`。同一回合里的工具调用是并发执行的，顺序不固定，所以完全相同的调用会拿到同一份 obs。
+
+## 运行中插话：steer 和 interrupt
+
+录下的轨迹里，用户只在 agent 空闲时说话。为了测到 `send` 的另外两种时机，[`src/plan.ts`](src/plan.ts) 会在脚本上按固定间隔加入插话，由回放在运行过程中发给同一个 session：
+
+| 时机           | 什么时候发            | 预期                                                                         |
+| -------------- | --------------------- | ---------------------------------------------------------------------------- |
+| `when: 'step'` | 第 n 个模型回合进行中 | 消息并入当前 Run，插在这个回合的工具结果之后                                 |
+| `when: 'now'`  | 第 n 个模型回合进行中 | 这个回合被取消（`step_cancelled`），不进历史；插入消息后模型重新回答这个回合 |
+
+发送点在两处之间交替：模型正在回答时（在 faux 的应答里发），或者工具正在运行时（在这个回合的第一个工具调用里发）。每次发送都必须返回当前的 Run。steer 只加在带工具调用的回合上：纯文本回合结束后 agent 已经空闲，下一段排队的输入会在同一个边界投递。
+
+插话的位置是确定的，所以计划能精确算出每个请求应带的历史、最终历史、流式文本（被打断时已经流出的文本也算在内）和各项计数，下面的检查都按计划进行。`--steer 0 --interrupt 0` 只回放轨迹本身。
 
 ## 校验了什么
 
 每个 case 由 [`src/verify.ts`](src/verify.ts) 给出一组失败原因，为空即通过：
 
 - **结果**：run 以 `done` 结束，最终结果是脚本的最后一段文本。
-- **历史**：`state.messages` 与脚本逐条一致，包括用户输入、assistant 文本、工具调用（id / name / 参数），以及工具结果。
-- **统计**：`summary.turns`、`inputs`，以及各工具的调用次数与脚本一致，没有工具错误。
-- **事件协议**：[`src/ledger.ts`](src/ledger.ts) 边收事件边检查：step 不嵌套，同一 step 内的事件 `t` 相同；同一时刻最多一个 model 调用处于打开状态；工具只能在模型发出调用后启动，且只结束一次；`run_end` 恰好出现一次，并且在最后。`observe` 和 `for await (const e of run)` 看到的序列摘要必须相同。
-- **流式文本**：主模型的 text delta 拼起来等于脚本文本。
-- **插件系统**：[`src/probe.ts`](src/probe.ts) 挂在每一个钩子上。`state.reduce` 的计数要和脚本一致；`request` 看到的是已提交的完整历史，`ctx.own` 与历史一致；`toolCall` 拿回的结果对应它传下去的那个调用；`input` 和 `record` 的执行次数都要对得上。
-- **模型侧**：faux 在应答每个请求时检查自己收到的上下文（消息条数、最后一条的角色、system prompt）。这是唯一能看到 loop 实际发出了什么的位置。
-- **span**：挂 otel 时，每个 case 恰好一个 `invoke_agent`，每个模型回合一个 `chat`，每次工具调用一个 `execute_tool`，所有 span 都结束且只结束一次。
+- **历史**：`state.messages` 与计划逐条一致，包括用户输入和插话、assistant 文本、工具调用（id / name / 参数），以及工具结果；被取消的回合不留任何痕迹。
+- **统计**：`summary.turns`、`inputs`，以及各工具的调用次数与计划一致，没有工具错误。
+- **事件协议**：[`src/ledger.ts`](src/ledger.ts) 边收事件边检查：step 不嵌套，同一 step 内的事件 `t` 相同；同一时刻最多一个 model 调用处于打开状态；工具只能在模型发出调用后启动，且只结束一次；`step_cancelled.open` 恰好是当时还在运行的工具调用；`run_end` 恰好出现一次，并且在最后。`observe` 和 `for await (const e of run)` 看到的序列摘要必须相同。每次 interrupt 恰好对应一个 `step_cancelled`。
+- **流式文本**：主模型的 text delta 拼起来等于计划的文本。
+- **插件系统**：[`src/probe.ts`](src/probe.ts) 挂在每一个钩子上。`state.reduce` 的计数要和计划一致，包括空闲时插入的输入步数和 interrupt 之后插入的输入步数（`InputAction.idle` / `interrupted`）；`request` 看到的是已提交的完整历史，`ctx.own` 与历史一致；`toolCall` 拿回的结果对应它传下去的那个调用；`input`、`request` 和 `record` 的执行次数都要对得上。
+- **模型侧**：faux 在应答每个请求时检查自己收到的上下文（消息条数、最后一条的角色、system prompt）。这是唯一能看到 loop 实际发出了什么的位置。被打断的回合会被请求两次。
+- **span**：挂 otel 时，每个 case 恰好一个 `invoke_agent`，每次模型请求一个 `chat`，每次工具调用一个 `execute_tool`，所有 span 都结束且只结束一次。
 
-[`tests/suite.test.ts`](tests/suite.test.ts) 里有三个故意写坏的插件：丢工具结果的 `record`、只发部分历史的 `request`、篡改结果的 `toolCall`。每一个都会被上面的检查抓到，这证明这些检查确实有效。
+[`tests/suite.test.ts`](tests/suite.test.ts) 里有四个故意写坏的插件：丢工具结果的 `record`、只发部分历史的 `request`、丢掉 steer 消息的 `input`、篡改结果的 `toolCall`。每一个都会被上面的检查抓到，这证明这些检查确实有效。
 
 ## 压测你自己的插件
 

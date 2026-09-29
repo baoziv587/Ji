@@ -1,9 +1,10 @@
 // Runs selected cases through the agent loop and writes what happened:
 //
 //   cases (streamed) x repeat --pool(concurrency)--> runCase
-//     toScript -> replay (faux model, replay tools, probe, otel?, jsonl?) -> session.send(inputs)
+//     toScript -> planOf (+ steer / interrupt messages) -> replay (faux model, replay tools, probe, otel?, jsonl?)
+//     session.send(inputs); the replay sends the interjections while the run works
 //     for await (const e of run) -> ledger        observe -> probe's ledger, otel spans, jsonl events
-//     verify(script, observed) -> failures -> one row in cases.jsonl
+//     verify(plan, observed) -> failures -> one row in cases.jsonl
 //   then: Parquet (optional), summary.json, report.md
 //
 // The whole suite runs under one meter (CPU, heap and RSS peaks, GC, event-loop delay); each case also records its
@@ -28,6 +29,7 @@ import { otel } from '@ji.dev/plugin-otel'
 import { openDb } from './dataset.ts'
 import { createLedger } from './ledger.ts'
 import { percentile, startMeter } from './metrics.ts'
+import { planOf } from './plan.ts'
 import { replay } from './replay.ts'
 import { pluginNames, renderReport, summarize } from './report.ts'
 import { callsOf, toScript, turnsOf } from './script.ts'
@@ -73,6 +75,8 @@ export interface CaseRow {
   synthetic_turns: number
   tool_calls: number
   inputs: number
+  steers: number
+  interrupts: number
   history_messages: number
   events: number
   text_chars: number
@@ -150,6 +154,7 @@ interface Sinks {
 
 async function runCase(c: Case, repeat: number, runId: string, options: SuiteOptions, sinks: Sinks): Promise<CaseRow> {
   const script = toScript(c, { maxTurns: options.maxTurns })
+  const plan = planOf(script, options.interject)
   const turns = turnsOf(script)
   const resource: SpanResource = {
     replay_run_id: runId,
@@ -173,16 +178,17 @@ async function runCase(c: Case, repeat: number, runId: string, options: SuiteOpt
     observers.push(jsonl(line => events.writeLine(tag + line.slice(1))))
   }
 
-  const r = replay(script, c.model, { ...options, plugins: [options.plugins ?? [], observers] })
+  const r = replay(plan, c.model, { ...options, plugins: [options.plugins ?? [], observers] })
   const startedAt = new Date().toISOString()
   const cpu = process.cpuUsage()
   const heap = process.memoryUsage().heapUsed
   const start = performance.now()
 
   try {
-    const session = createSession(r.agent, { maxSteps: turns.length + script.segments.length + 2 })
+    const session = createSession(r.agent, { maxSteps: plan.steps.length + 2 })
     const [first, ...rest] = script.segments
     const run = session.send(first.input)
+    r.bind(session, run)
     for (const segment of rest) {
       session.send(segment.input, { when: 'idle' })
     }
@@ -213,7 +219,7 @@ async function runCase(c: Case, repeat: number, runId: string, options: SuiteOpt
     const wallMs = performance.now() - start
     const used = process.cpuUsage(cpu)
     const seen = ledger.finish()
-    const failures = verify(script, {
+    const failures = verify(plan, {
       outcome,
       run: seen,
       observed: r.probe.ledger.finish(),
@@ -232,6 +238,8 @@ async function runCase(c: Case, repeat: number, runId: string, options: SuiteOpt
       synthetic_turns: turns.filter(t => t.synthetic).length,
       tool_calls: callsOf(script).length,
       inputs: script.segments.length,
+      steers: plan.steers,
+      interrupts: plan.interrupts,
       history_messages: (outcome.ok ? outcome.state : outcome.error.state).messages.length,
       events: seen.events,
       text_chars: seen.text.length,

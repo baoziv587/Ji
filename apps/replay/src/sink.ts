@@ -48,6 +48,8 @@ const COLUMNS: Record<Exclude<Table, 'events'>, Record<string, string>> = {
     synthetic_turns: 'INTEGER',
     tool_calls: 'INTEGER',
     inputs: 'INTEGER',
+    steers: 'INTEGER',
+    interrupts: 'INTEGER',
     history_messages: 'INTEGER',
     events: 'INTEGER',
     text_chars: 'BIGINT',

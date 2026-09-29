@@ -1,7 +1,8 @@
 // A plugin that takes part in every hook and checks what each one is handed, so a replay exercises the plugin
 // system as well as the loop (RFC-0006):
 //
-//   state.reduce   counts turns by kind; after the run it must match the script
+//   state.reduce   counts turns by kind, and input steps inserted while idle or after an interrupt; after the run
+//                  they must match the plan
 //   input          sees each inserted message once
 //   request        (via `before`) sees the committed history, unchanged, and ctx.own agrees with it
 //   toolCall       (via `after`) gets back a result for the very call it passed on
@@ -20,6 +21,10 @@ export interface ProbeCounts {
   input: number
   rewrite: number
   results: number
+  /** Input steps inserted while the agent was idle. */
+  idle: number
+  /** Input steps at a boundary an interrupt produced. */
+  interrupted: number
 }
 
 export interface Probe {
@@ -30,7 +35,7 @@ export interface Probe {
   violations: string[]
 }
 
-export const NO_COUNTS: ProbeCounts = { model: 0, input: 0, rewrite: 0, results: 0 }
+export const NO_COUNTS: ProbeCounts = { model: 0, input: 0, rewrite: 0, results: 0, idle: 0, interrupted: 0 }
 
 export function probe(): Probe {
   const hooks = { input: 0, request: 0, toolCall: 0, record: 0 }
@@ -100,7 +105,12 @@ function countTurn(own: ProbeCounts, turn: Turn): ProbeCounts {
     case 'model':
       return { ...own, model: own.model + 1, results: own.results + turn.results.length }
     case 'input':
-      return { ...own, input: own.input + turn.messages.length }
+      return {
+        ...own,
+        input: own.input + turn.messages.length,
+        idle: own.idle + Number(turn.idle),
+        interrupted: own.interrupted + Number(turn.interrupted),
+      }
     case 'rewrite':
       return { ...own, rewrite: own.rewrite + 1 }
   }

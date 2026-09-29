@@ -160,6 +160,7 @@ async function runOptions(): Promise<string[]> {
         { value: 'checks', label: 'Determinism checks', hint: 'freezes state and runs reducers twice; slower' },
         { value: 'paced', label: 'Network-paced streaming', hint: '20k tokens/s: the loop yields between tokens' },
         { value: 'updates', label: 'Streamed tool output', hint: '4 tool_update events per call' },
+        { value: 'calm', label: 'No interjections', hint: 'skip the steer and interrupt messages sent mid-run' },
       ],
       initialValues: ['otel'],
       required: false,
@@ -183,6 +184,7 @@ async function runOptions(): Promise<string[]> {
     ...(extras.includes('checks') ? ['--checks'] : []),
     ...(extras.includes('paced') ? ['--tps', '20000'] : []),
     ...(extras.includes('updates') ? ['--tool-updates', '4'] : []),
+    ...(extras.includes('calm') ? ['--steer', '0', '--interrupt', '0'] : []),
     ...(format === 'parquet' ? [] : ['--format', format]),
   ]
 }

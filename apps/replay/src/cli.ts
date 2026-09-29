@@ -11,6 +11,7 @@
 // Filter: --agent a,b --model m --task t --id case_id --reward 0|1 --min-steps n --max-steps n
 //         --min-tool-calls n --max-tool-calls n --where "<sql>" --limit n --seed n
 // Run:    --concurrency 4 --repeat 1 --max-turns n --tps 0 --tool-updates 0 --tool-latency 0 --timeout 60000
+//         --steer 5 --interrupt 7 (every n-th model turn; 0 = never)
 //         --format parquet|jsonl --out dir --no-otel --events --checks
 //         --plugin ./my-plugin.ts   a plugin under test (repeatable): default export, a Plugin or a function making one
 //         --source file  runs straight from a parquet/JSONL file instead of the imported database
@@ -201,6 +202,7 @@ async function runCases(db: Db, args: Args): Promise<number> {
     toolUpdates: int(args, 'tool-updates'),
     toolLatencyMs: int(args, 'tool-latency'),
     checkDeterminism: args.checks,
+    interject: { steer: int(args, 'steer'), interrupt: int(args, 'interrupt') },
     plugins: await Promise.all(args.plugin.map(loadPlugin)),
     otel: !args['no-otel'],
     events: args.events,

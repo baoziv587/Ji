@@ -42,6 +42,7 @@ function optionsFor(name: string, patch: Partial<SuiteOptions> = {}): SuiteOptio
     toolUpdates: 0,
     toolLatencyMs: 0,
     checkDeterminism: true,
+    interject: { steer: 3, interrupt: 4 },
     otel: false,
     events: false,
     ...patch,
@@ -67,13 +68,21 @@ describe('runSuite', () => {
       expect(tables).toEqual(['cases', 'spans', 'events'])
       const [row] = await db.query(`
         SELECT (SELECT sum(model_turns) FROM cases) AS turns,
+               (SELECT sum(steers) FROM cases) AS steers,
+               (SELECT sum(interrupts) FROM cases) AS interrupts,
                (SELECT count(*) FROM spans WHERE attributes->>'gen_ai.operation.name' = 'chat') AS chats,
                (SELECT count(*) FROM spans WHERE parent_span_id IS NULL) AS roots,
+               (SELECT count(*) FROM events WHERE type = 'step_cancelled') AS cancelled,
                (SELECT count(*) FROM events WHERE type = 'tool_update') AS updates,
                (SELECT sum(tool_calls) FROM cases) AS calls`)
-      expect(Number(row.chats)).toBe(Number(row.turns))
+      expect(Number(row.steers)).toBeGreaterThan(0)
+      expect(Number(row.interrupts)).toBeGreaterThan(0)
+      // An interrupted turn is asked for twice
+      expect(Number(row.chats)).toBe(Number(row.turns) + Number(row.interrupts))
+      expect(Number(row.cancelled)).toBe(Number(row.interrupts))
       expect(Number(row.roots)).toBe(cases.length * 2)
-      expect(Number(row.updates)).toBe(Number(row.calls) * 3)
+      // Tools of a turn cancelled while they ran may have streamed some updates first
+      expect(Number(row.updates)).toBeGreaterThanOrEqual(Number(row.calls) * 3)
     } finally {
       db.close()
     }
@@ -98,6 +107,24 @@ describe('runSuite', () => {
     } finally {
       db.close()
     }
+  })
+
+  it('should replay the recording alone when nothing is sent mid-run', async () => {
+    // Act
+    const result = await runSuite(cases, optionsFor('calm', { interject: { steer: 0, interrupt: 0 } }))
+
+    // Assert
+    expect(result.rows.filter(r => !r.ok).map(r => r.failures)).toEqual([])
+    expect(result.stats.steers + result.stats.interrupts).toBe(0)
+  })
+
+  it('should interject on every turn, and at both sites', async () => {
+    // Act
+    const result = await runSuite(cases, optionsFor('busy', { interject: { steer: 1, interrupt: 1 } }))
+
+    // Assert
+    expect(result.rows.filter(r => !r.ok).map(r => r.failures)).toEqual([])
+    expect(result.stats.interrupts).toBe(result.stats.modelTurns)
   })
 
   it('should not be disturbed by a plugin whose observe throws', async () => {
@@ -134,6 +161,14 @@ describe('runSuite with a faulty plugin under test', () => {
       'a request hook that sends only part of the history',
       definePlugin({ name: 'window', request: before(req => ({ ...req, messages: req.messages.slice(-2) })) }),
       /^model: request \d+: 2 messages/m,
+    ],
+    [
+      'an input hook that drops steering messages',
+      definePlugin({
+        name: 'deaf',
+        input: messages => messages.filter(m => m.role !== 'user' || !String(m.content).startsWith('(steer')),
+      }),
+      /^history has \d+ messages, script has \d+/m,
     ],
     [
       'a toolCall hook that rewrites results',

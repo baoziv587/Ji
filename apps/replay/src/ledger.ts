@@ -1,6 +1,7 @@
 // Folds a run's event stream and checks the event protocol as it goes (RFC-0005 §3, RFC-0006 §5.4):
 //
-//   step_start ... step_end | step_cancelled      every in-step event carries the step's t; steps do not nest
+//   step_start ... step_end | step_cancelled      every in-step event carries the step's t; steps do not nest;
+//                                                 step_cancelled lists exactly the tool calls still running
 //   model_start ... model_end | model_error       at most one model call open at a time
 //   tool_call -> tool_start ... tool_end          a tool starts only for a call the model made, and ends once
 //   run_end                                       exactly once, last, outside any step
@@ -93,11 +94,16 @@ export function createLedger(): Ledger {
         }
         step = undefined
         break
-      case 'step_cancelled':
+      case 'step_cancelled': {
+        const open = e.open.map(c => c.id)
+        if (open.length !== openTools.size || open.some(id => !openTools.has(id))) {
+          violate(`${where}: open lists [${open.join(', ')}], running were [${[...openTools].join(', ')}]`)
+        }
         step = undefined
         modelOpen = false
         openTools.clear()
         break
+      }
       case 'model_start':
         if (modelOpen) {
           violate(`${where}: a model call is already open`)
