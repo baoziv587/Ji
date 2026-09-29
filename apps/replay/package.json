@@ -1,0 +1,19 @@
+{
+  "name": "@ji.dev/replay",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Replays Terminal-Bench trajectories through @ji.dev/llm on pi-ai's faux provider: checks, resource cost, OTEL spans",
+  "scripts": {
+    "replay": "node src/cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.8.1",
+    "@duckdb/node-api": "1.5.5-r.4",
+    "@ji.dev/llm": "workspace:*",
+    "@ji.dev/plugin-jsonl": "workspace:*",
+    "@ji.dev/plugin-otel": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}

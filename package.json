@@ -9,6 +9,8 @@
   "scripts": {
     "demo": "pnpm --filter @ji.dev/demo start",
     "repl": "pnpm --filter @ji.dev/examples repl",
+    "replay": "node apps/replay/src/cli.ts",
+    "replay:shell": "node apps/replay/src/cli.ts shell",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

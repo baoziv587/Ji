@@ -13,7 +13,7 @@ export default antfu(
   }),
   {
     // CLIs and examples print straight to the terminal
-    files: ['apps/demo/**', 'apps/examples/**', 'packages/**', 'plugins/**'],
+    files: ['apps/replay/**', 'apps/demo/**', 'apps/examples/**', 'packages/**', 'plugins/**'],
     rules: { 'no-console': 'off' },
   },
   // Dependencies only point down: packages/ <- plugins/ <- apps/ (RFC-0005 §4.3)
@@ -72,8 +72,8 @@ export default antfu(
     },
   },
   {
-    // The demo and examples are scripts run directly by node, so the entry uses top-level await
-    files: ['apps/demo/src/**', 'apps/examples/src/**'],
+    // The demo, examples and replay CLI are scripts run directly by node, so the entry uses top-level await
+    files: ['apps/replay/src/cli.ts', 'apps/demo/src/**', 'apps/examples/src/**'],
     rules: { 'antfu/no-top-level-await': 'off' },
   },
 )
