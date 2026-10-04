@@ -1,7 +1,11 @@
-// Minimal REPL: DEEPSEEK_API_KEY=sk-... pnpm --filter @ji.dev/examples repl
+// A chat REPL: DEEPSEEK_API_KEY=sk-... pnpm repl
 //
+//   It fills the terminal: a bar on top (model, thinking, workspace) and one at the bottom (the status, and the line
+//   you type in) stay put, and only the conversation between them scrolls, with the wheel or PgUp/PgDn. On exit the
+//   conversation is printed to the terminal, where it stays
 //   Enter sends; replies stream in, with one line per tool call and one per result as each call finishes
-//   Ctrl+C during a reply stops only that reply; Ctrl+C at the prompt or /exit quits
+//   Enter during a reply steers it: the message reaches the model after the step in progress, and shows above then
+//   Ctrl+C during a reply stops only that reply; Ctrl+C on an empty line or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=off turns thinking off (default high); /think <level> switches it mid-chat, thinking shows in gray
 //   The model can read and edit files: every read, and every change shown as a diff, waits for a yes
@@ -10,12 +14,23 @@
 //   The model can ask questions of its own, with options it writes; Esc dismisses any question
 //
 // Everything comes from @ji.dev/llm: the model, its thinking levels and the events need nothing from pi-ai.
-import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@ji.dev/llm'
+import type {
+  Agent,
+  AgentState,
+  Message,
+  Run,
+  ThinkingLevel,
+  ToolCall,
+  ToolResultMessage,
+  UsageTotals,
+} from '@ji.dev/llm'
 import type { Option, Preview, Questions, Reply } from '@ji.dev/plugin-choices'
+import type { Editing, Keypress } from './editing.ts'
+import type { Frame } from './screen.ts'
 import process from 'node:process'
 import { emitKeypressEvents } from 'node:readline'
 import { styleText } from 'node:util'
-import { cancel, intro, isCancel, log, outro, S_BAR, text } from '@clack/prompts'
+import { cancel, log, outro, S_BAR } from '@clack/prompts'
 import {
   createAgent,
   createSession,
@@ -28,6 +43,9 @@ import {
 import { choices, DISMISSED } from '@ji.dev/plugin-choices'
 import { terminal } from '@ji.dev/plugin-choices/terminal'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
+import truncatedWidth from 'fast-string-truncated-width'
+import { edit, EMPTY, textOf } from './editing.ts'
+import { Screen } from './screen.ts'
 
 const calc = tool({
   name: 'calc',
@@ -114,82 +132,66 @@ async function outsideRoot(call: ToolCall): Promise<boolean> {
  */
 const asking = choices({ answer, approve: [fileCalls] })
 
-// The terminal: the reply in progress and the status line, shared by the question and the reply
+// The terminal: the bars, the reply in progress and its status, shared by the question and the reply
 
 /** The run rejects with this when the user presses Ctrl+C to stop a reply. */
 const STOPPED = new Error('stopped by user')
 
-/** The reply being written, if any: what Ctrl+C stops. */
+/** The reply being written, if any: what Ctrl+C stops, and what Enter steers. */
 let current: Run | undefined
 
-/**
- * One status line: icon, label, and seconds waited.
- * Not clack's spinner: it takes Ctrl+C to exit the process instead of stopping the reply.
- */
+/** The bars around the conversation; drawn by drawFrame. */
+const screen = new Screen(drawFrame)
+
+/** What the reply is doing and for how long, spun in the bar while a reply runs. */
 class Status {
   private static readonly frames = ['◒', '◐', '◓', '◑']
   private timer: NodeJS.Timeout | undefined
   private label = ''
+  private detail = ''
   private since = 0
   private frame = 0
 
-  show(label: string): void {
-    this.label = label
-    if (this.timer !== undefined || !process.stdout.isTTY) {
-      return
+  /** A different label starts its own count; the detail, a tool's progress say, does not. */
+  show(label: string, detail = ''): void {
+    if (label !== this.label) {
+      this.label = label
+      this.since = performance.now()
     }
-
-    this.since = performance.now()
-    process.stdout.write('\x1B[?25l') // hide the cursor
-    this.draw()
-    this.timer = setInterval(() => this.draw(), 80)
+    this.detail = detail
+    this.timer ??= setInterval(() => {
+      this.frame++
+      screen.draw()
+    }, 80)
+    screen.draw()
   }
 
   hide(): void {
-    if (this.timer === undefined) {
-      return
-    }
-
     clearInterval(this.timer)
     this.timer = undefined
-    process.stdout.write('\r\x1B[2K\x1B[?25h') // clear the line, show the cursor
+    this.label = ''
+    screen.draw()
   }
 
-  private draw(): void {
-    const icon = styleText('magenta', Status.frames[this.frame++ % Status.frames.length])
+  /** `◐ Running calc 2s`, or empty while hidden. */
+  describe(): string {
+    if (this.timer === undefined) {
+      return ''
+    }
+
+    const icon = styleText('magenta', Status.frames[this.frame % Status.frames.length])
     const seconds = Math.floor((performance.now() - this.since) / 1000)
-    process.stdout.write(`\r\x1B[2K${icon}  ${this.label} ${dim(`${seconds}s`)}`)
+    const detail = this.detail === '' ? '' : ` · ${this.detail}`
+    return `${icon} ${this.label} ${dim(`${seconds}s`)}${detail}`
   }
 }
 
-/** One for the whole REPL: the approval question has to hide it too. */
 const status = new Status()
-
-// The spinner hides the cursor; whatever ends the process, it comes back
-process.on('exit', () => status.hide())
-
-/**
- * While a reply runs, keys are read raw, so Ctrl+C reaches the keypress listener as a key. As a SIGINT it would also
- * reach the parent process: `pnpm repl` would exit and leave the reply writing over the shell. A question's prompt
- * turns raw mode off when it closes, so it is turned on again after each one.
- */
-function readKeys(on: boolean): void {
-  if (!process.stdin.isTTY) {
-    return
-  }
-
-  process.stdin.setRawMode(on)
-  if (on) {
-    process.stdin.resume()
-  } else {
-    process.stdin.pause()
-  }
-}
 
 // Asking the person
 
 /** Draws the questions; Esc dismisses them, and Ctrl+C stops the reply through the keypress listener. */
-const ask = terminal({ paint: paintDiff })
+const ask = terminal({ paint: paintDiff, input: screen.keys })
 
 /** A yes that also changes what is asked from now on: what Shift+Tab or a second question would otherwise take. */
 const SHORTCUTS = {
@@ -206,14 +208,23 @@ let onModeSwitch: (() => void) | undefined
 /** The question on screen, if any; settled otherwise. */
 let question: Promise<unknown> = Promise.resolve()
 
+/** While a question is on screen, the keys are its own, not the input line's. */
+let questionOpen = false
+
 function answer(q: Questions, signal: AbortSignal): Promise<Reply> {
   const reply = choose(q, signal)
-  question = reply.catch(() => {})
+  questionOpen = true
+  question = reply
+    .catch(() => {})
+    .finally(() => {
+      questionOpen = false
+      screen.draw()
+    })
   return reply
 }
 
 async function choose(q: Questions, signal: AbortSignal): Promise<Reply> {
-  status.hide()
+  status.show('Waiting for your answer')
   const far = q.call !== undefined && (await outsideRoot(q.call))
 
   let shown = q
@@ -232,10 +243,8 @@ async function choose(q: Questions, signal: AbortSignal): Promise<Reply> {
       }
     } finally {
       onModeSwitch = undefined
-      // A question closed by the reply's end must not turn raw mode back on under the next prompt
-      if (current !== undefined) {
-        readKeys(true)
-      }
+      // A question's prompt pauses the keys when it closes
+      screen.keys.resume()
     }
     // Switching the mode leaves the question open: it shows again, without the detail already above it
     shown = { ...shown, questions: shown.questions.map(x => ({ ...x, detail: undefined })) }
@@ -280,6 +289,7 @@ async function answered(): Promise<void> {
 function switchMode(): void {
   mode = mode === 'ask' ? 'auto' : 'ask'
   onModeSwitch?.()
+  screen.draw()
 }
 
 /** Every hunk in its own colors; the diff has no context lines, see paintHunk. */
@@ -346,8 +356,9 @@ function underlineChange(line: string, other: string | undefined, color: 'green'
  *   |                          <- blank line before the first call of a turn only
  *   >  calc(expr: "17*23")     <- tool_call: the arguments are complete; the tool has not started yet
  *   v  calc  391               <- tool_end: one line per call as soon as it finishes, green (or red x on error)
- *   @  Running calc 1s         <- Status: one line redrawn in place, erased before anything else is written;
- *                                 timed from tool_start, so it never counts time the model was still writing
+ *   +  use vitest  · steer     <- a message, shown once it reaches the model; marked when it steered a reply
+ *
+ * The status (Running calc 1s) is in the bar, timed from tool_start, so it never counts time the model was writing.
  */
 async function render(r: Run, changed: Set<string>): Promise<void> {
   const started = performance.now()
@@ -356,32 +367,37 @@ async function render(r: Run, changed: Set<string>): Promise<void> {
   const running = new Map<string, string>()
   let afterCall = false
 
-  /** A different kind of wait starts its own timer. */
-  const wait = (label: string): void => {
-    status.hide()
-    status.show(label)
-  }
   const runningLabel = (): string => `Running ${[...new Set(running.values())].join(', ')}`
 
-  wait('Waiting')
+  status.show('Waiting')
   try {
     for await (const e of r) {
       await answered()
       switch (e.type) {
+        case 'step_end':
+          if (e.turn.kind === 'input') {
+            out.end()
+            // A message sent while the agent was busy steered it; one sent while idle simply started its turn
+            const steer = e.turn.idle ? '' : dim('  · steer')
+            for (const m of e.turn.messages) {
+              log.message(`${styleText('bold', contentOf(m))}${steer}`, { symbol: styleText('cyan', '●') })
+            }
+            afterCall = false
+          }
+          break
         case 'model_start':
           // The level actually sent, after any plugin and after mapping to what the model supports
-          wait(e.thinking === 'off' ? 'Waiting' : 'Thinking')
+          status.show(e.thinking === 'off' ? 'Waiting' : 'Thinking')
           afterCall = false
           speed.start()
           break
         case 'thinking':
         case 'text':
           speed.streaming()
-          status.hide()
+          status.show(e.type === 'text' ? 'Writing' : 'Thinking')
           out.write(e.delta, e.type)
           break
         case 'tool_call':
-          status.hide()
           out.end()
           // Calls from the same turn stay together without blank lines
           log.message(describeCall(e.call), { symbol: styleText('cyan', '▸'), spacing: afterCall ? 0 : 1 })
@@ -389,29 +405,27 @@ async function render(r: Run, changed: Set<string>): Promise<void> {
           break
         case 'tool_start':
           running.set(e.call.id, e.call.name)
-          wait(runningLabel())
+          status.show(runningLabel())
           break
         case 'tool_update':
-          status.show(`${runningLabel()} · ${clip(String(e.data))}`)
+          status.show(runningLabel(), clip(String(e.data)))
           break
         case 'tool_end':
           running.delete(e.call.id)
           if (!e.result.isError && e.call.name !== 'read' && FILE_TOOLS.has(e.call.name)) {
             changed.add(String(e.call.arguments.path))
           }
-          status.hide()
           log.message(describeResult(e.result), {
             symbol: e.result.isError ? styleText('red', '✗') : styleText('green', '✓'),
             spacing: 0,
           })
-          wait(running.size > 0 ? runningLabel() : 'Waiting')
+          status.show(running.size > 0 ? runningLabel() : 'Waiting')
           break
         case 'model_end':
           speed.end(e.message.usage.output)
           break
         case 'step_cancelled':
           running.clear()
-          status.hide()
           break
       }
     }
@@ -473,6 +487,14 @@ function describeCall(call: ToolCall): string {
     .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
     .join(', ')
   return `${styleText('bold', call.name)}${dim('(')}${clip(args)}${dim(')')}`
+}
+
+/** A message's text; images and other parts by their type. */
+function contentOf(m: Message): string {
+  if (typeof m.content === 'string') {
+    return m.content
+  }
+  return m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
 }
 
 /** Dim tool name and normal-colored result (red on error), to stand apart from the dim thinking and stats. */
@@ -581,7 +603,184 @@ const TOOL_NAMES = [calc, now, ...(fileTools.tools ?? []), ...(asking.tools ?? [
 const MISSING_KEY =
   'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
 
-// clack handles Ctrl+C at the prompt, and a reply reads it as a key; SIGINT comes only when stdin is not a terminal
+/** The input line. */
+let editing: Editing = EMPTY
+
+/** What the reply in progress was sent: its first message, then every steer. They go back in the input if it stops. */
+let sent: string[] = []
+
+/** The reply in progress, settled once it has written its last line. */
+let replying: Promise<void> = Promise.resolve()
+
+const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
+
+/** Enter: a command, a new reply, or a steer for the one in progress. */
+function submit(): void {
+  const message = textOf(editing).trim()
+  if (message !== '' && !message.startsWith('/') && !agent.model.hasEnvKey) {
+    // The message stays in the input, to send once the key is set
+    log.warn(MISSING_KEY)
+    return
+  }
+
+  editing = EMPTY
+  screen.follow()
+  if (message === '') {
+    return
+  }
+  if (message === '/exit') {
+    quit()
+    return
+  }
+  if (message === '/think' || message.startsWith('/think ')) {
+    think(message.slice('/think'.length).trim())
+    return
+  }
+
+  // 'step' reaches the model at the next step boundary: at once when idle, after the step in progress otherwise
+  const before = chat.state
+  const run = chat.send(message, { when: 'step' })
+  if (run === current) {
+    sent.push(message)
+    screen.draw()
+    return
+  }
+  sent = [message]
+  replying = converse(run, before)
+}
+
+function think(arg: string): void {
+  const level = agent.model.thinkingLevels.find(l => l === arg)
+  if (level === undefined) {
+    log.info(`Thinking: ${agent.thinking}. Change it with /think <${levels}>.`)
+    return
+  }
+  // Same conversation, new setting: the next model call uses it, in a reply in progress too
+  agent = agent.with({ thinking: level })
+  chat.use(agent)
+  log.success(`Thinking: ${agent.thinking}`)
+}
+
+async function converse(run: Run, before: AgentState): Promise<void> {
+  current = run
+  const changed = new Set<string>()
+  try {
+    await render(run, changed)
+  } catch (error) {
+    // Roll back to before the reply, so the next message doesn't pick up these unanswered ones
+    chat = createSession(agent, { state: before })
+    // Ahead of whatever was typed since, so nothing typed is lost
+    editing = { ...EMPTY, before: [...sent, textOf(editing)].filter(t => t !== '').join(' ') }
+
+    const back = sent.length === 1 ? 'Your message is back in the input.' : 'Your messages are back in the input.'
+    // The history goes back, the files do not: a resend should not take them for untouched
+    const stays = changed.size === 1 ? 'stays' : 'stay'
+    const kept = changed.size === 0 ? '' : `${[...changed].join(', ')} ${stays} changed. `
+    if (error instanceof RunError && error.kind === 'aborted' && error.cause === STOPPED) {
+      log.warn(`Stopped. ${kept}${back} Edit it or clear it.`)
+    } else {
+      log.error(`${error instanceof Error ? error.message : String(error)}\n${kept}${back} Press Enter to retry.`)
+    }
+  } finally {
+    current = undefined
+    screen.draw()
+  }
+}
+
+/** Ctrl+C: stops the reply; with none, clears the input; with an empty input, quits. */
+function interrupt(): void {
+  if (current !== undefined) {
+    current.abort(STOPPED)
+  } else if (textOf(editing) !== '') {
+    editing = EMPTY
+    screen.draw()
+  } else {
+    quit()
+  }
+}
+
+/** On top, the model and its settings; at the bottom, the status line and the input line with the cursor in it. */
+function drawFrame(columns: number): Frame {
+  // Short of the last column, so no line wraps
+  const width = columns - 1
+  const rule = dim('─'.repeat(width))
+  const title = `${styleText('bold', 'ji')} ${dim('·')} ${agent.model.provider}/${agent.model.id}`
+  const settings = dim(` · thinking ${agent.thinking} · ${ROOT}`)
+  const input = inputLine(width)
+  return {
+    top: [fit(title + settings, width), rule],
+    bottom: [rule, fit(statusLine(), width), input.line],
+    // Hidden while a question is open: the keys are its own
+    cursor: questionOpen ? undefined : { row: 2, column: input.column },
+  }
+}
+
+/** What runs and for how long, what is scrolled past, the mode, the steers not yet delivered, the keys that matter now. */
+function statusLine(): string {
+  // auto is the less careful mode, so it stands out in the warning color
+  const label = mode === 'auto' ? styleText('yellow', describeMode()) : dim(describeMode())
+  const queued = current === undefined ? 0 : chat.pending.length
+  const waiting = queued === 0 ? '' : styleText('cyan', `${queued} queued`)
+  const below = screen.below === 0 ? '' : styleText('yellow', `↓ ${screen.below} more lines · PgDn`)
+  const keys = current === undefined ? 'Shift+Tab switches · /exit quits' : 'Enter steers · Ctrl+C stops'
+  return [status.describe(), below, label, waiting, dim(keys)].filter(part => part !== '').join(dim(' · '))
+}
+
+/** The prompt, then the text around the cursor, scrolled sideways to keep the cursor in view. */
+function inputLine(width: number): { line: string; column: number } {
+  const prompt = `${styleText(questionOpen ? 'gray' : 'cyan', '›')} `
+  const room = width - 2
+  if (textOf(editing) === '') {
+    return { line: prompt + fit(dim(placeholder()), room), column: 2 }
+  }
+
+  // At least the cursor's own cell stays free after the text before it
+  const left = tail(editing.before, room - 1)
+  const right = fit(editing.after, room - widthOf(left))
+  const paint = questionOpen ? dim : (s: string): string => s
+  return { line: prompt + paint(left + right), column: 2 + widthOf(left) }
+}
+
+function placeholder(): string {
+  if (questionOpen) {
+    return 'Answer the question above'
+  }
+  return current === undefined ? 'Ask anything' : 'Steer the reply: it reads this after the step in progress'
+}
+
+function widthOf(text: string): number {
+  return truncatedWidth(text).width
+}
+
+/** As much of the start of `text` as fits in `width` columns. */
+function fit(text: string, width: number): string {
+  const { index, truncated } = truncatedWidth(text, { limit: width, ellipsis: '…', ellipsisWidth: 1 })
+  return truncated ? `${text.slice(0, index)}\x1B[0m…` : text
+}
+
+/** As much of the end of `text` as fits in `width` columns. */
+function tail(text: string, width: number): string {
+  let start = text.length
+  let used = 0
+  for (const { segment, index } of [...new Intl.Segmenter().segment(text)].reverse()) {
+    used += widthOf(segment)
+    if (used > width) {
+      break
+    }
+    start = index
+  }
+  return text.slice(start)
+}
+
+if (!process.stdin.isTTY || !process.stdout.isTTY) {
+  cancel('The REPL draws a bar at the bottom of a terminal: run it in one.')
+  process.exit(1)
+}
+
+// Whatever ends the process, the terminal is given back
+process.on('exit', () => screen.stop())
+
+// Ctrl+C reaches the keypress listener as a key; the SIGINT comes from a question's prompt, which passes it on
 process.on('SIGINT', () => {
   if (current === undefined) {
     process.exit(130)
@@ -589,98 +788,55 @@ process.on('SIGINT', () => {
   current.abort(STOPPED)
 })
 
-// Keys arrive while a prompt, a question or a reply has stdin in raw mode. This listener is added before any prompt's,
-// so the prompt redraws after the switch and shows the new mode.
-emitKeypressEvents(process.stdin)
-process.stdin.on('keypress', (_, key: { name?: string; shift?: boolean; ctrl?: boolean } | undefined) => {
+// This listener is added before any question's, so the question redraws after a mode switch and shows the new mode.
+// Pastes come between markers, so a pasted line break does not send.
+emitKeypressEvents(screen.keys)
+screen.keys.on('keypress', (char: string | undefined, key: (Keypress & { shift?: boolean }) | undefined) => {
+  if (key?.name === 'pageup' || key?.name === 'pagedown') {
+    screen.page(key.name === 'pageup' ? -1 : 1)
+    return
+  }
   if (key?.name === 'tab' && key.shift === true) {
     switchMode()
+    return
   }
   if (key?.name === 'c' && key.ctrl === true) {
-    current?.abort(STOPPED)
+    interrupt()
+    return
   }
+  if (questionOpen) {
+    return
+  }
+  if (key?.name === 'return' && !editing.pasting) {
+    submit()
+    return
+  }
+  editing = edit(editing, { ...key, char })
+  screen.draw()
 })
 
-const settings = `thinking: ${agent.thinking} · tools: ${TOOL_NAMES} · workspace: ${ROOT}`
-const keys = `/think <${levels}> · Shift+Tab switches ask/auto · Esc dismisses a question · Ctrl+C stops a reply · /exit quits`
-intro(`ji · ${agent.model.provider}/${agent.model.id}`)
-log.message(dim(`${settings}\n${keys}`), { spacing: 0 })
+screen.start()
+
+const keys = [
+  `/think <${levels}>`,
+  'Enter steers a reply',
+  'Shift+Tab switches ask/auto',
+  'Esc dismisses a question',
+  'Ctrl+C stops a reply',
+  'Wheel or PgUp/PgDn scrolls',
+  '/exit quits',
+].join(' · ')
+log.message(dim(`tools: ${TOOL_NAMES}\n${keys}`), { spacing: 0 })
 
 // The key is only needed to send, so its absence is pointed out without blocking anything else
 if (!agent.model.hasEnvKey) {
   log.warn(MISSING_KEY)
 }
 
-/** After a stop or an error, the unanswered message goes back into the input to edit and resend. */
-let retry = ''
+await quitting
+current?.abort(STOPPED)
+await replying
 
-for (;;) {
-  const input = await text({
-    // Read on every redraw, so Shift+Tab shows at once
-    get message() {
-      // auto is the less careful mode, so it stands out in the warning color
-      const label = `· ${describeMode()}`
-      return `${styleText('bold', 'You')} ${mode === 'auto' ? styleText('yellow', label) : dim(label)}`
-    },
-    placeholder: 'Ask anything',
-    initialValue: retry,
-  })
-  retry = ''
-
-  if (isCancel(input)) {
-    break
-  }
-
-  const message = (input ?? '').trim()
-  if (message === '/exit') {
-    break
-  }
-  if (message === '') {
-    continue
-  }
-  if (message === '/think' || message.startsWith('/think ')) {
-    const arg = message.slice('/think'.length).trim()
-    const level = agent.model.thinkingLevels.find(l => l === arg)
-    if (level) {
-      // Same conversation, new setting: the next model call uses it
-      agent = agent.with({ thinking: level })
-      chat.use(agent)
-      log.success(`Thinking: ${agent.thinking}`)
-    } else {
-      log.info(`Thinking: ${agent.thinking}. Change it with /think <${levels}>.`)
-    }
-    continue
-  }
-  if (!agent.model.hasEnvKey) {
-    log.warn(MISSING_KEY)
-    retry = message
-    continue
-  }
-
-  const before = chat.state
-  const changed = new Set<string>()
-  current = chat.send(message)
-  readKeys(true)
-  try {
-    await render(current, changed)
-  } catch (error) {
-    // Roll back to before the send, so the next message doesn't pick up this unanswered one
-    chat = createSession(agent, { state: before })
-    retry = message
-    // The history goes back, the files do not: a resend should not take them for untouched
-    const stays = changed.size === 1 ? 'stays' : 'stay'
-    const kept = changed.size === 0 ? '' : `${[...changed].join(', ')} ${stays} changed. `
-    if (error instanceof RunError && error.kind === 'aborted' && error.cause === STOPPED) {
-      log.warn(`Stopped. ${kept}Your message is back in the input. Edit it or clear it.`)
-    } else {
-      log.error(
-        `${error instanceof Error ? error.message : String(error)}\n${kept}Your message is back in the input. Press Enter to retry.`,
-      )
-    }
-  } finally {
-    current = undefined
-    readKeys(false)
-  }
-}
-
+await screen.settled()
+screen.stop()
 outro('Bye')

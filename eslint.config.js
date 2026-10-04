@@ -73,7 +73,7 @@ export default antfu(
   },
   {
     // RFC-0005 promise 9: the REPL needs nothing from pi-ai directly
-    files: ['apps/examples/src/repl.ts'],
+    files: ['apps/repl/src/**'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -82,8 +82,8 @@ export default antfu(
     },
   },
   {
-    // The demo, examples and replay CLI are scripts run directly by node, so the entry uses top-level await
-    files: ['apps/replay/src/cli.ts', 'apps/demo/src/**', 'apps/examples/src/**'],
+    // The demo, examples, REPL and replay CLI are scripts run directly by node, so the entry uses top-level await
+    files: ['apps/replay/src/cli.ts', 'apps/demo/src/**', 'apps/examples/src/**', 'apps/repl/src/repl.ts'],
     rules: { 'antfu/no-top-level-await': 'off' },
   },
 )
