@@ -283,6 +283,10 @@ importers:
   packages/utils: {}
 
   plugins/choices:
+    dependencies:
+      fast-wrap-ansi:
+        specifier: ^0.2.2
+        version: 0.2.2
     devDependencies:
       '@clack/core':
         specifier: ^1.5.1
