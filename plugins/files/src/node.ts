@@ -1,33 +1,72 @@
-// The local file system behind the Store port. Publishing writes a temporary file next to the target, syncs it and
+// The local file system behind the Workspace port. Publishing writes a temporary file next to the target, syncs it and
 // renames it over the target, so readers see the old file or the new one, never a mix.
 //
-//   Guarantee: within one store instance (wrapped in locked), a write from a stale version is always rejected. An
-//   outside process writing between the version check and the rename is not detected; that window remains.
+//   Guarantee: within one localWorkspace instance, a write from a stale version is always rejected. An outside process
+//   writing between the version check and the rename is not detected; that window remains.
 
-import type { Commit, Expected, Snapshot, Store, Version } from './store.ts'
+import type { Expected, Snapshot, Version, Workspace } from './workspace.ts'
 import { Buffer } from 'node:buffer'
 import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, open, realpath, rename, rm } from 'node:fs/promises'
-import { basename, dirname, join } from 'node:path'
-import { StoreError } from './store.ts'
+import { basename, dirname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path'
+import process from 'node:process'
+import { FileError } from './workspace.ts'
+
+export interface LocalOptions {
+  /** Which real paths may be read and written. Default: those inside root. */
+  allow?: (path: string) => boolean
+}
 
 interface Current extends Snapshot {
   mode: number
   links: number
 }
 
-export function localStore(): Store {
+/**
+ * The files under `root`; relative paths resolve against it. Everything keys on the real path: a symbolic link shares
+ * the lock and version of its target, and one that leads outside root is denied.
+ */
+export function localWorkspace(root: string = process.cwd(), { allow }: LocalOptions = {}): Workspace {
+  let top: Promise<string> | undefined
+  const tails = new Map<string, Promise<unknown>>()
+
+  async function resolve(path: string): Promise<string> {
+    const base = await (top ??= realPath(resolvePath(root)))
+    const real = await realPath(resolvePath(base, path))
+    if (!(allow ? allow(real) : inside(base, real))) {
+      throw new FileError('PATH_DENIED', `access to ${path} is not allowed`)
+    }
+    return real
+  }
+
+  /** Publishes to one file run one at a time: the version check and the rename are separate steps. */
+  function inTurn<T>(path: string, run: () => Promise<T>): Promise<T> {
+    const result = (tails.get(path) ?? Promise.resolve()).then(run)
+    const tail = result.catch(() => {})
+    tails.set(path, tail)
+    void tail.then(() => {
+      if (tails.get(path) === tail) {
+        tails.delete(path)
+      }
+    })
+    return result
+  }
+
   return {
+    resolve,
     async read(path, signal) {
-      const current = await inspect(path, signal)
+      const current = await inspect(await resolve(path), signal)
       return current && { bytes: current.bytes, version: current.version }
     },
-    publish,
+    async publish(path, expected, next, signal) {
+      const real = await resolve(path)
+      return inTurn(real, () => publish(real, expected, next, signal))
+    },
   }
 }
 
 /** realpath, extended to paths that do not exist yet: the nearest existing parent is resolved. */
-export async function realPath(path: string): Promise<string> {
+async function realPath(path: string): Promise<string> {
   try {
     return await realpath(path)
   } catch (e) {
@@ -39,13 +78,23 @@ export async function realPath(path: string): Promise<string> {
   }
 }
 
-async function publish(path: string, expected: Expected, next: Uint8Array, signal: AbortSignal): Promise<Commit> {
+function inside(root: string, path: string): boolean {
+  const rest = relative(root, path)
+  return rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest)
+}
+
+async function publish(
+  path: string,
+  expected: Expected,
+  next: Uint8Array,
+  signal: AbortSignal,
+): Promise<Version | 'stale'> {
   const current = await inspect(path, signal)
   if ((current?.version ?? 'absent') !== expected) {
-    return { state: 'stale', current: current?.version }
+    return 'stale'
   }
   if (current && current.links > 1) {
-    throw new StoreError('UNSUPPORTED_FILE', `${path} has other hard links, which replacing it would break`)
+    throw new FileError('UNSUPPORTED_FILE', `${path} has other hard links, which replacing it would break`)
   }
 
   await mkdir(dirname(path), { recursive: true })
@@ -72,7 +121,7 @@ async function publish(path: string, expected: Expected, next: Uint8Array, signa
     await rm(tmp, { force: true })
     throw e
   }
-  return { state: 'applied', version }
+  return version
 }
 
 async function inspect(path: string, signal: AbortSignal): Promise<Current | undefined> {
@@ -86,11 +135,12 @@ async function inspect(path: string, signal: AbortSignal): Promise<Current | und
     }
     throw e
   }
+  // resolve has followed every link that leads somewhere; one still here is dangling
   if (link.isSymbolicLink()) {
-    throw new StoreError('UNSUPPORTED_FILE', `${path} is a symbolic link; wrap the store in canonical(store, realPath)`)
+    throw new FileError('UNSUPPORTED_FILE', `${path} is a symbolic link to a file that does not exist`)
   }
   if (!link.isFile()) {
-    throw new StoreError('UNSUPPORTED_FILE', `${path} is not a regular file`)
+    throw new FileError('UNSUPPORTED_FILE', `${path} is not a regular file`)
   }
 
   const file = await open(path, 'r')

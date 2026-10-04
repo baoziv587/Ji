@@ -1,8 +1,11 @@
-// The pure core: the splice monoid (L1), order independence of plan (L2), byte preservation (L3) and inverses (L4)
-import type { Edit, PlanError, Splice } from '../src/index.ts'
+// The pure core: the splice monoid (L1), order independence of plan (L2) and byte preservation (L3)
+import type { Splice } from '../src/core/batch.ts'
+import type { Edit, PlanError } from '../src/core/plan.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { apply, batch, decode, encode, invert, plan, separable, view } from '../src/index.ts'
+import { apply, batch, separable } from '../src/core/batch.ts'
+import { plan } from '../src/core/plan.ts'
+import { decode, encode, view } from '../src/core/view.ts'
 
 // Pieces of text that cover the cases the view must keep: CRLF and LF, multi-byte and astral characters
 const piece = fc.constantFrom('a', 'b', 'c', ' ', '\t', '\n', '\r\n', 'é', '😀')
@@ -18,21 +21,6 @@ function splices(length: number): fc.Arbitrary<Splice[]> {
       .map(([a, b, text]) => ({ start: Math.min(a, b), end: Math.max(a, b), text })),
     { maxLength: 6 },
   )
-}
-
-/** Separable, non-empty splices: consecutive cut points, some of them adjacent. */
-function separableSplices(length: number): fc.Arbitrary<Splice[]> {
-  return fc
-    .uniqueArray(fc.nat(length), { maxLength: 8 })
-    .chain(cuts => {
-      const sorted = [...cuts].sort((a, b) => a - b)
-      const ranges = sorted.slice(1).map((end, i) => ({ start: sorted[i], end }))
-      return fc.tuple(
-        fc.subarray(ranges),
-        fc.array(fc.string({ maxLength: 3 }), { minLength: ranges.length, maxLength: ranges.length }),
-      )
-    })
-    .map(([ranges, texts]) => ranges.map((r, i) => ({ ...r, text: texts[i] })))
 }
 
 describe('batch (L1)', () => {
@@ -110,30 +98,6 @@ describe('batch (L1)', () => {
     // Assert
     expect(adjacent.ok).toBe(true)
     expect(inserts.ok).toBe(false)
-  })
-})
-
-describe('invert (L4)', () => {
-  it('should undo apply, and itself be a valid batch', () => {
-    fc.assert(
-      fc.property(
-        raw.chain(text => fc.tuple(fc.constant(text), separableSplices(text.length))),
-        ([text, ss]) => {
-          // Arrange
-          const joined = batch(ss)
-          if (!joined.ok) {
-            throw new Error('the arbitrary must produce separable splices')
-          }
-
-          // Act
-          const inverse = invert(text, joined.value)
-
-          // Assert
-          expect(apply(apply(text, joined.value), inverse)).toBe(text)
-          expect(batch(inverse).ok).toBe(true)
-        },
-      ),
-    )
   })
 })
 

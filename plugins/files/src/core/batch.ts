@@ -16,7 +16,7 @@ export interface Splice extends Range {
 
 declare const separableSplices: unique symbol
 
-/** Pairwise separable splices on one base text, sorted by position. Only batch, rewrite and invert make one. */
+/** Pairwise separable splices on one base text, sorted by position. Only batch makes one. */
 export type Batch = readonly Splice[] & { readonly [separableSplices]: true }
 
 /** Indices, into the array given to batch, of two splices that cannot both apply. */
@@ -56,11 +56,6 @@ export function batch(splices: readonly Splice[]): Result<Batch, Overlap[]> {
   return overlaps.length > 0 ? err(overlaps) : ok(asBatch(order.map(i => splices[i])))
 }
 
-/** The whole text replaced by `text`: what Write does, as a batch. */
-export function rewrite(raw: string, text: string): Batch {
-  return asBatch([{ start: 0, end: raw.length, text }])
-}
-
 export function apply(raw: string, p: Batch): string {
   let out = ''
   let pos = 0
@@ -69,30 +64,6 @@ export function apply(raw: string, p: Batch): string {
     pos = s.end
   }
   return out + raw.slice(pos)
-}
-
-/**
- * The inverse morphism of the version groupoid (RFC §3.3): applied to apply(raw, p), it gives back raw. Adjacent
- * splices are merged first; two adjacent deletions would otherwise invert to two inserts at one point.
- */
-export function invert(raw: string, p: Batch): Batch {
-  const merged: Splice[] = []
-  for (const s of p) {
-    const last = merged.at(-1)
-    if (last?.end === s.start) {
-      merged[merged.length - 1] = { start: last.start, end: s.end, text: last.text + s.text }
-    } else {
-      merged.push(s)
-    }
-  }
-
-  let shift = 0
-  const inverse = merged.map(s => {
-    const start = s.start + shift
-    shift += s.text.length - (s.end - s.start)
-    return { start, end: start + s.text.length, text: raw.slice(s.start, s.end) }
-  })
-  return asBatch(inverse)
 }
 
 /** Callers have checked that the splices are separable and sorted. */

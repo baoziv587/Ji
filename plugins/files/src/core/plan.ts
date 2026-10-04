@@ -23,7 +23,7 @@ export type PlanError =
 const MAX_LINES = 10
 
 /** Every occurrence, overlapping ones included. */
-export function locate(text: string, needle: string): Range[] {
+function locate(text: string, needle: string): Range[] {
   const found: Range[] = []
   for (let i = text.indexOf(needle); i !== -1; i = text.indexOf(needle, i + 1)) {
     found.push({ start: i, end: i + needle.length })
@@ -73,7 +73,7 @@ export function plan(v: TextView, edits: readonly Edit[]): Result<Batch, PlanErr
 }
 
 /** 1-based line of a text offset. */
-export function lineAt(text: string, offset: number): number {
+function lineAt(text: string, offset: number): number {
   let line = 1
   for (let i = text.indexOf('\n'); i !== -1 && i < offset; i = text.indexOf('\n', i + 1)) {
     line++

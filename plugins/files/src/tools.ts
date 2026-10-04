@@ -1,25 +1,45 @@
-// read and edit. Write is not a tool of its own: `edit` with `content` rewrites or creates a file (RFC §12).
+// read, edit, and fileTool, which makes a tool from a schema and a Transform. Write is not a tool of its own: `edit`
+// with `content` rewrites or creates a file (RFC §12).
 //
-//   expected_version is not in the schema the model sees. The files plugin sets it from what the model has read; an SDK
-//   caller passes it in the arguments directly.
+//   The version a change expects is not in any schema the model sees. The files plugin adds it to the call from what
+//   the model has read (withExpected); a call without it expects the file not to exist.
 
-import type { AgentTool, ToolCall, ToolOutput } from '@ji.dev/llm'
-import type { Expected, Reader, Store } from './store.ts'
-import { resolve } from 'node:path'
-import process from 'node:process'
+import type { AgentTool, ToolCall, ToolOutput, TSchema } from '@ji.dev/llm'
+import type { Hinter } from './hints.ts'
+import type { Transform } from './transform.ts'
+import type { Expected, Reader, Resolver, Workspace } from './workspace.ts'
 import { tool, Type } from '@ji.dev/llm'
-import { commit, editTransform, writeTransform } from './commit.ts'
+import { commit } from './commit.ts'
+import { err } from './core/result.ts'
 import { decode, view } from './core/view.ts'
+import { defaultHinters } from './hints.ts'
 import { render } from './render.ts'
-import { StoreError } from './store.ts'
+import { editTransform, writeTransform } from './transform.ts'
+import { FileError } from './workspace.ts'
 
-export interface ToolOptions {
-  /** Relative paths resolve against this. Default process.cwd(). */
-  cwd?: string
+/** A tool that changes files, waiting for the workspace it works in; the files plugin gives every tool the same one. */
+export type FileTool = (workspace: Workspace) => AgentTool
+
+type Args<T extends TSchema> = Parameters<AgentTool<T>['run']>[0]
+
+export interface FileToolSpec<T extends TSchema> {
+  name: string
+  description: string
+  /** Must have a string `path`: the file one call changes. */
+  parameters: T
+  /** The change one call asks for. Version check, atomic write and the result text are the same for every tool. */
+  transform: (args: Args<T>) => Transform
+}
+
+export interface EditOptions {
+  /** What suggests similar text when an old_text is not found. Default defaultHinters; [] for none. */
+  hinters?: readonly Hinter[]
 }
 
 /** Lines one read returns when no limit is given. */
 const DEFAULT_READ_LINES = 2000
+
+const EXPECTED = 'expected_version'
 
 const readParameters = Type.Object({
   path: Type.String({ description: 'File path, relative to the workspace or absolute' }),
@@ -51,32 +71,48 @@ const editParameters = Type.Object({
   ),
 })
 
-export function readTool(reader: Reader, { cwd = process.cwd() }: ToolOptions = {}): AgentTool<typeof readParameters> {
+export function fileTool<T extends TSchema>(spec: FileToolSpec<T>): FileTool {
+  const { transform, ...declared } = spec
+  return workspace =>
+    tool({
+      ...declared,
+      run: async (args, signal) => {
+        const { path } = args as { path: string }
+        return render(await commit(workspace, path, expectedOf({ arguments: args }), transform(args), signal), path)
+      },
+    })
+}
+
+export function readTool(workspace: Resolver & Reader): AgentTool<typeof readParameters> {
   return tool({
     name: 'read',
     description: 'Read a UTF-8 text file. Long files come in pages: pass offset and limit to read more.',
     parameters: readParameters,
     run: async ({ path, offset = 1, limit = DEFAULT_READ_LINES }, signal) => {
-      const absolute = resolve(cwd, path)
       try {
-        const snapshot = await reader.read(absolute, signal)
+        const real = await workspace.resolve(path)
+        const snapshot = await workspace.read(real, signal)
         if (!snapshot) {
-          return { text: `${path} does not exist.`, details: { code: 'NOT_FOUND' }, isError: true }
+          return failure(`${path} does not exist.`, 'NOT_FOUND')
         }
         const raw = decode(snapshot.bytes)
         if (raw === undefined) {
-          return { text: `${path} is not a UTF-8 text file.`, details: { code: 'UNSUPPORTED_FILE' }, isError: true }
+          return failure(`${path} is not a UTF-8 text file.`, 'UNSUPPORTED_FILE')
         }
-        return { text: page(view(raw).text, offset, limit), details: { path: absolute, version: snapshot.version } }
+        return { text: page(view(raw).text, offset, limit), details: { path: real, version: snapshot.version } }
       } catch (e) {
-        return storeFailure(e)
+        // Anything but a FileError is rethrown, so retry middleware sees it
+        if (e instanceof FileError) {
+          return failure(`${e.message}.`, e.code)
+        }
+        throw e
       }
     },
   })
 }
 
-export function editTool(store: Store, { cwd = process.cwd() }: ToolOptions = {}): AgentTool<typeof editParameters> {
-  return tool({
+export function editTool({ hinters = defaultHinters }: EditOptions = {}): FileTool {
+  return fileTool({
     name: 'edit',
     description: [
       'Edit a file with replacements against the same original file, or write a whole file with content.',
@@ -84,34 +120,24 @@ export function editTool(store: Store, { cwd = process.cwd() }: ToolOptions = {}
       'Edits must not overlap or depend on each other. Copy whitespace and punctuation exactly; only CRLF and LF are treated as equal.',
     ].join(' '),
     parameters: editParameters,
-    run: async (args, signal) => {
-      const { path, edits, content } = args
-      const absolute = resolve(cwd, path)
+    transform: ({ edits, content }) => {
       if ((edits === undefined) === (content === undefined)) {
-        return failure(path, 'Pass either edits or content, not both.', 'INVALID_INPUT')
+        return () => err([{ code: 'INVALID_INPUT', message: 'Pass either edits or content, not both.' }])
       }
-
-      const version = (args as { expected_version?: unknown }).expected_version
-      const expected = typeof version === 'string' ? (version as Expected) : undefined
-      if (edits && expected === undefined) {
-        return failure(path, `Read ${path} before editing it.`, 'NOT_OBSERVED')
-      }
-
-      try {
-        const f = edits ? editTransform(edits) : writeTransform(content!)
-        const outcome = await commit(store, absolute, expected ?? 'absent', f, signal)
-        return render(outcome, path, edits ? 'edit' : 'write')
-      } catch (e) {
-        return storeFailure(e)
-      }
+      return edits ? editTransform(edits, hinters) : writeTransform(content!)
     },
   })
 }
 
-/** The path of a read or edit call, resolved: what the files plugin keys versions by. */
-export function pathOf(call: ToolCall, cwd: string): string | undefined {
-  const path: unknown = call.arguments.path
-  return (call.name === 'read' || call.name === 'edit') && typeof path === 'string' ? resolve(cwd, path) : undefined
+/** The call with the version its file is expected to be at; whatever the model wrote there is replaced. */
+export function withExpected(call: ToolCall, expected: Expected): ToolCall {
+  return { ...call, arguments: { ...call.arguments, [EXPECTED]: expected } }
+}
+
+/** The version withExpected put on a call; 'absent' when there is none. */
+export function expectedOf(call: Pick<ToolCall, 'arguments'>): Expected {
+  const version: unknown = (call.arguments as Record<string, unknown>)[EXPECTED]
+  return typeof version === 'string' ? (version as Expected) : 'absent'
 }
 
 function page(text: string, offset: number, limit: number): string {
@@ -128,22 +154,6 @@ function page(text: string, offset: number, limit: number): string {
   return whole ? text : `${shown.join('\n')}\n\n[lines ${offset}-${last} of ${lines.length}; pass offset to read more]`
 }
 
-function failure(path: string, text: string, code: string): ToolOutput {
-  return {
-    text: `Edit failed; ${path} is unchanged.\n${text}`,
-    details: { commit_state: 'not_applied', errors: [{ code }] },
-    isError: true,
-  }
-}
-
-/** StoreError is for the model; anything else is rethrown, so retry middleware sees it. Nothing was written either way. */
-function storeFailure(e: unknown): ToolOutput {
-  if (e instanceof StoreError) {
-    return {
-      text: `${e.message}.`,
-      details: { commit_state: 'not_applied', errors: [{ code: e.code, message: e.message }] },
-      isError: true,
-    }
-  }
-  throw e
+function failure(text: string, code: string): ToolOutput {
+  return { text, details: { errors: [{ code }] }, isError: true }
 }
