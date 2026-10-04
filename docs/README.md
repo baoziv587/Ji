@@ -31,4 +31,4 @@ Sessions covers usage, plugins covers extension, and concepts explains execution
 
 ## Runnable examples
 
-The [examples guide](../apps/examples/README.md) (Chinese) includes a chat REPL, compaction, interjections and plugin scenarios. Copy and adapt the [example plugins](../apps/examples/src/plugins), or use the reusable workspace packages in [`plugins/`](../plugins). These packages are not published to npm yet.
+The [examples guide](../apps/examples/README.md) (Chinese) covers compaction, interjections and plugin scenarios, and [`apps/repl`](../apps/repl/README.md) is a chat REPL. Copy and adapt the [example plugins](../apps/examples/src/plugins), or use the reusable workspace packages in [`plugins/`](../plugins). These packages are not published to npm yet.

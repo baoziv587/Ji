@@ -8,7 +8,7 @@
   },
   "scripts": {
     "demo": "pnpm --filter @ji.dev/demo start",
-    "repl": "pnpm --filter @ji.dev/examples repl",
+    "repl": "pnpm --filter @ji.dev/repl repl",
     "replay": "node apps/replay/src/cli.ts",
     "replay:shell": "node apps/replay/src/cli.ts shell",
     "test": "vitest run",

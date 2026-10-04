@@ -9,6 +9,7 @@
 // Esc dismisses the questions; Ctrl+C is a SIGINT, as anywhere else in a terminal program.
 
 import type { State } from '@clack/core'
+import type { Readable } from 'node:stream'
 import type { Choosing } from './choosing.ts'
 import type { Answers, Question, Questions, Reply } from './index.ts'
 import { once } from 'node:events'
@@ -32,10 +33,12 @@ import { DISMISSED } from './index.ts'
 export interface TerminalOptions {
   /** How a detail is drawn: a diff in colors, say. Default: as it is. */
   paint?: (detail: string) => string
+  /** Where the keys come from: a stream already in raw mode, say, with something else taken out. Default: stdin. */
+  input?: Readable
 }
 
 /** An `answer` for choices: it always answers, so no question reaches the layers outside. */
-export function terminal({ paint = detail => detail }: TerminalOptions = {}): (
+export function terminal({ paint = detail => detail, input }: TerminalOptions = {}): (
   questions: Questions,
   signal: AbortSignal,
 ) => Promise<Reply> {
@@ -46,7 +49,7 @@ export function terminal({ paint = detail => detail }: TerminalOptions = {}): (
       log.message(paint(first.detail))
     }
 
-    const prompt = new ChoicesPrompt(questions, paint, signal)
+    const prompt = new ChoicesPrompt(questions, paint, signal, input)
     const answers = await prompt.prompt()
     if (!isCancel(answers) && answers !== undefined) {
       return answers
@@ -201,10 +204,11 @@ class ChoicesPrompt extends Prompt<Answers> {
   private readonly look: Look
   private readonly signal: AbortSignal
 
-  constructor(questions: Question[], paint: (detail: string) => string, signal: AbortSignal) {
+  constructor(questions: Question[], paint: (detail: string) => string, signal: AbortSignal, input?: Readable) {
     super(
       {
         signal,
+        input,
         render(this: unknown) {
           const prompt = this as ChoicesPrompt
           return draw(prompt.choosing, prompt.phase(), prompt.look)
@@ -224,19 +228,8 @@ class ChoicesPrompt extends Prompt<Answers> {
       this.choosing = press(this.choosing, { ...key, char })
     })
 
-    // Added before clack's own listener, which closes the prompt without drawing it, so the open frame would stay.
-    // render is private to clack; were it gone, the prompt would only lose this last frame
-    signal.addEventListener(
-      'abort',
-      () => {
-        this.state = 'cancel'
-        const render: unknown = Reflect.get(this, 'render')
-        if (typeof render === 'function') {
-          render.call(this)
-        }
-      },
-      { once: true },
-    )
+    // Added before clack's own listener, which closes the prompt without drawing it, so the open frame would stay
+    signal.addEventListener('abort', this.onAbort, { once: true })
   }
 
   /** Read by Prompt right after the 'key' event, so it sees what this Enter did. */
@@ -247,11 +240,24 @@ class ChoicesPrompt extends Prompt<Answers> {
     return this.choosing.done
   }
 
-  /** Once: a key that aborts the signal still reaches the prompt it closed, which would close it again. */
+  /**
+   * Once: a key that aborts the signal still reaches the prompt it closed, which would close it again. The signal
+   * outlives the prompt, so an abort after an answer must not draw it again.
+   */
   protected override close(): void {
     if (!this.closed) {
       this.closed = true
+      this.signal.removeEventListener('abort', this.onAbort)
       super.close()
+    }
+  }
+
+  /** render is private to clack; were it gone, the prompt would only lose this last frame. */
+  private readonly onAbort = (): void => {
+    this.state = 'cancel'
+    const render: unknown = Reflect.get(this, 'render')
+    if (typeof render === 'function') {
+      render.call(this)
     }
   }
 

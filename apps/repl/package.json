@@ -1,0 +1,20 @@
+{
+  "name": "@ji.dev/repl",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A full-screen chat REPL on @ji.dev/llm: DeepSeek, file tools with approval, and steering while a reply runs",
+  "scripts": {
+    "repl": "node src/repl.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clack/core": "^1.5.1",
+    "@clack/prompts": "^1.8.1",
+    "@ji.dev/llm": "workspace:*",
+    "@ji.dev/plugin-choices": "workspace:*",
+    "@ji.dev/plugin-files": "workspace:*",
+    "@xterm/headless": "^6.0.0",
+    "fast-string-truncated-width": "^3.0.3"
+  }
+}
