@@ -722,19 +722,25 @@ function interrupt(): void {
   }
 }
 
-/** On top, the model and its settings; at the bottom, the status line and the input line with the cursor in it. */
+/**
+ * On top, the model and its settings; at the bottom, the status line and the input line with the cursor in it. Both
+ * bars keep a blank row at the terminal's edge and a column on each side of their text; only the rules run across.
+ */
 function drawFrame(columns: number): Frame {
   // Short of the last column, so no line wraps
   const width = columns - 1
+  const inner = width - 2
   const rule = dim('─'.repeat(width))
+
   const title = `${styleText('bold', 'ji')} ${dim('·')} ${agent.model.provider}/${agent.model.id}`
   const settings = dim(` · thinking ${agent.thinking} · ${ROOT}`)
-  const input = inputLine(width)
+  const input = inputLine(inner)
+
   return {
-    top: [fit(title + settings, width), rule],
-    bottom: [usageRule(width), fit(statusLine(), width), input.line],
+    top: ['', ` ${fit(title + settings, inner)}`, rule],
+    bottom: [usageRule(width), ` ${fit(statusLine(), inner)}`, ` ${input.line}`, ''],
     // Hidden while a question is open: the keys are its own
-    cursor: questionOpen ? undefined : { row: 2, column: input.column },
+    cursor: questionOpen ? undefined : { row: 2, column: input.column + 1 },
   }
 }
 
