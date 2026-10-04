@@ -14,8 +14,8 @@ import type { Choosing } from './choosing.ts'
 import type { Answers, Question, Questions, Reply } from './index.ts'
 import { once } from 'node:events'
 import process from 'node:process'
-import { styleText } from 'node:util'
-import { isCancel, Prompt, wrapTextWithPrefix } from '@clack/core'
+import { stripVTControlCharacters, styleText } from 'node:util'
+import { getColumns, isCancel, Prompt } from '@clack/core'
 import {
   log,
   S_BAR,
@@ -27,6 +27,7 @@ import {
   S_RADIO_INACTIVE,
   symbol,
 } from '@clack/prompts'
+import { wrapAnsi } from 'fast-wrap-ansi'
 import { onOther, onSend, press, sent, start } from './choosing.ts'
 import { DISMISSED } from './index.ts'
 
@@ -94,7 +95,7 @@ function draw(s: Choosing, phase: Phase, look: Look): string {
   const color = failed ? 'yellow' : 'cyan'
   const head = several ? tabBar(s) : title
   const body = onSend(s) ? review(s) : options(s, look.paint)
-  const footer = failed ? styleText('yellow', s.error) : dim(keys(s))
+  const footer = failed ? styleText('yellow', s.error) : keys(s)
   return `${frame(head, [...body, footer], failed ? 'error' : 'active', color, look)}\n${styleText(color, S_BAR_END)}\n`
 }
 
@@ -106,6 +107,16 @@ function frame(head: string, lines: string[], state: State, color: 'gray' | 'cya
     look.wrap(head, bar, `${symbol(state)}  `),
     ...lines.map(line => look.wrap(line, bar, bar)),
   ].join('\n')
+}
+
+/**
+ * clack's wrapTextWithPrefix takes the prefix's length for its width, colors and all, so a colored rail wrapped every
+ * line some ten columns early: this one measures what shows.
+ */
+function wrapWithPrefix(columns: number, text: string, prefix: string, first: string): string {
+  const width = columns - stripVTControlCharacters(prefix).length
+  const lines = wrapAnsi(text, width, { hard: true, trim: false }).split('\n')
+  return lines.map((line, i) => (i === 0 ? first : prefix) + line).join('\n')
 }
 
 /** ← Storage  ✓ Auth  Send →, the current one inverted. */
@@ -152,22 +163,31 @@ function review(s: Choosing): string[] {
   })
 }
 
+/** The keys that work here, each in bold before the dim words for what it does. */
 function keys(s: Choosing): string {
-  const esc = 'Esc dismisses'
+  const esc: Hint = ['Esc', 'dismisses']
   if (onSend(s)) {
-    return ['Enter sends', '←/→ questions', esc].join(' · ')
+    return hints([['Enter', 'sends'], ['←/→', 'questions'], esc])
   }
 
   const several = s.questions.length > 1
-  return [
-    '↑/↓ choose',
-    s.questions[s.tab].multiple === true ? 'Space picks' : '',
-    several ? '←/→ questions' : '',
-    several ? 'Enter next' : 'Enter confirms',
-    esc,
-  ]
-    .filter(part => part !== '')
-    .join(' · ')
+  const list: Hint[] = [['↑/↓', 'choose']]
+  if (s.questions[s.tab].multiple === true) {
+    list.push(['Space', 'picks'])
+  }
+  if (several) {
+    list.push(['←/→', 'questions'], ['Enter', 'next'])
+  } else {
+    list.push(['Enter', 'confirms'])
+  }
+  list.push(esc)
+  return hints(list)
+}
+
+type Hint = [key: string, action: string]
+
+function hints(list: Hint[]): string {
+  return list.map(([key, action]) => `${styleText('bold', key)} ${dim(action)}`).join(dim(' · '))
 }
 
 function headers(s: Choosing): string[] {
@@ -217,7 +237,7 @@ class ChoicesPrompt extends Prompt<Answers> {
       false,
     )
     this.choosing = start(questions)
-    this.look = { paint, wrap: (text, prefix, first) => wrapTextWithPrefix(this.output, text, prefix, first) }
+    this.look = { paint, wrap: (text, prefix, first) => wrapWithPrefix(getColumns(this.output), text, prefix, first) }
     this.signal = signal
 
     this.on('key', (char, key) => {

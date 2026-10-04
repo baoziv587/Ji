@@ -260,7 +260,7 @@ function approval(q: Questions, far: boolean): Questions {
       shortcuts.push(SHORTCUTS.reads)
     }
   }
-  const title = `${only.title}? ${dim(`· ${describeMode()} · Shift+Tab switches`)}`
+  const title = `${only.title}? ${dim(`· ${describeMode()} ·`)} ${hint('Shift+Tab', 'switches')}`
   return { ...q, questions: [{ ...only, title, options: [yes, ...shortcuts, no] }] }
 }
 
@@ -597,6 +597,24 @@ function dim(s: string): string {
   return styleText('dim', s)
 }
 
+/** A key and what it does. */
+type Hint = [key: string, action: string]
+
+/**
+ * The key in bold, so it stands out from the dim words around it; in `color` too where its part of the line has one.
+ * Weight, not a color of its own: the colors already say who or what (cyan you, yellow a warning).
+ */
+function hint(key: string, action: string, color?: 'cyan' | 'yellow'): string {
+  if (color === undefined) {
+    return `${styleText('bold', key)} ${dim(action)}`
+  }
+  return `${styleText([color, 'bold'], key)} ${styleText(color, action)}`
+}
+
+function hints(list: Hint[]): string {
+  return list.map(([key, action]) => hint(key, action)).join(dim(' · '))
+}
+
 /** The model and level are checked here, so a typo stops the REPL before the first prompt, with the choices listed. */
 function startAgent(): Agent {
   try {
@@ -762,22 +780,40 @@ function usageRule(width: number): string {
  * delivered, the keys that matter now.
  */
 function statusLine(): string {
-  const details = screen.view === 'full' ? styleText('cyan', 'details · Ctrl+O hides') : ''
+  let details = ''
+  if (screen.view === 'full') {
+    details = `${styleText('cyan', 'details')} ${hint('Ctrl+O', 'hides', 'cyan')}`
+  }
+
   // auto is the less careful mode, so it stands out in the warning color
   const label = mode === 'auto' ? styleText('yellow', describeMode()) : dim(describeMode())
   const queued = current === undefined ? 0 : chat.pending.length
   const waiting = queued === 0 ? '' : styleText('cyan', `${queued} queued`)
-  const below = screen.below === 0 ? '' : styleText('yellow', `↓ ${screen.below} more lines · PgDn`)
 
-  let keys = 'Enter steers · Ctrl+C stops'
+  let below = ''
+  if (screen.below > 0) {
+    below = `${styleText('yellow', `↓ ${screen.below} more lines`)} ${styleText(['yellow', 'bold'], 'PgDn')}`
+  }
+
+  let keys: Hint[] = [
+    ['Enter', 'steers'],
+    ['Ctrl+C', 'stops'],
+  ]
+  if (questionOpen) {
+    // Its keys are its own, listed under it; Ctrl+C still stops the whole reply
+    keys = [['Ctrl+C', 'stops']]
+  }
   if (current === undefined) {
-    keys = 'Shift+Tab switches · /exit quits'
+    keys = [
+      ['Shift+Tab', 'switches'],
+      ['/exit', 'quits'],
+    ]
   }
   if (current === undefined && screen.view === 'brief') {
-    keys = `Ctrl+O details · ${keys}`
+    keys = [['Ctrl+O', 'details'], ...keys]
   }
 
-  return [details, status.describe(), below, label, waiting, dim(keys)].filter(part => part !== '').join(dim(' · '))
+  return [details, status.describe(), below, label, waiting, hints(keys)].filter(part => part !== '').join(dim(' · '))
 }
 
 /** The prompt, then the text around the cursor, scrolled sideways to keep the cursor in view. */
@@ -806,10 +842,17 @@ function widthOf(text: string): number {
   return truncatedWidth(text).width
 }
 
-/** As much of the start of `text` as fits in `width` columns. */
+/**
+ * As much of the start of `text` as fits in `width` columns. The ellipsis's column is kept apart: given one, the library
+ * returns an index of -Infinity when the cut falls on a color code.
+ */
 function fit(text: string, width: number): string {
-  const { index, truncated } = truncatedWidth(text, { limit: width, ellipsis: '…', ellipsisWidth: 1 })
-  return truncated ? `${text.slice(0, index)}\x1B[0m…` : text
+  if (widthOf(text) <= width) {
+    return text
+  }
+
+  const { index } = truncatedWidth(text, { limit: width - 1 })
+  return `${text.slice(0, index)}\x1B[0m…`
 }
 
 /** As much of the end of `text` as fits in `width` columns. */
@@ -875,17 +918,17 @@ screen.keys.on('keypress', (char: string | undefined, key: (Keypress & { shift?:
 
 screen.start()
 
-const keys = [
-  `/think <${levels}>`,
-  'Enter steers a reply',
-  'Shift+Tab switches ask/auto',
-  'Esc dismisses a question',
-  'Ctrl+C stops a reply',
-  'Ctrl+O shows details',
-  'Wheel or PgUp/PgDn scrolls',
-  '/exit quits',
-].join(' · ')
-log.message(dim(`tools: ${TOOL_NAMES}\n${keys}`), { spacing: 0 })
+const help = hints([
+  [`/think <${levels}>`, 'sets thinking'],
+  ['Enter', 'steers a reply'],
+  ['Shift+Tab', 'switches ask/auto'],
+  ['Esc', 'dismisses a question'],
+  ['Ctrl+C', 'stops a reply'],
+  ['Ctrl+O', 'shows details'],
+  ['Wheel, PgUp/PgDn', 'scroll'],
+  ['/exit', 'quits'],
+])
+log.message(`${dim(`tools: ${TOOL_NAMES}`)}\n${help}`, { spacing: 0 })
 
 // The key is only needed to send, so its absence is pointed out without blocking anything else
 if (!agent.model.hasEnvKey) {
