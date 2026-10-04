@@ -4,8 +4,9 @@
 //   Ctrl+C during a reply stops only that reply; Ctrl+C at the prompt or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=high turns thinking on (default off); /think <level> switches it mid-chat, thinking shows in gray
-//   The model can read and edit the files under the directory the command was run from, and nothing outside it
-//   Every read of a file, and every change shown as a diff, waits for a yes; Shift+Tab switches to auto-approve and back
+//   The model can read and edit files: every read, and every change shown as a diff, waits for a yes
+//   Shift+Tab switches to auto-approve and back; auto-approve covers only the directory the command was run from, and
+//   a call reaching outside it is still asked about
 //
 // Everything comes from @ji.dev/llm: the model, its thinking levels and the events need nothing from pi-ai.
 import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@ji.dev/llm'
@@ -46,13 +47,69 @@ const now = tool({
   run: () => new Date().toString(),
 })
 
+// What is asked about: the files the model may touch, and the mode Shift+Tab switches
+
 /** Where the command was run from: pnpm --filter starts the script in the package's own directory. */
 const ROOT = process.env.INIT_CWD ?? process.cwd()
 
-/** read and edit, limited to the files under ROOT. */
-const fileTools = files(localWorkspace(ROOT))
+/** read and edit, on any file: what lies outside ROOT is asked about, not refused. */
+const fileTools = files(localWorkspace(ROOT, { allow: () => true }))
 
-const TOOL_NAMES = [calc, now, ...(fileTools.tools ?? [])].map(t => t.name).join(', ')
+/** Used only to tell where a path leads: it refuses every path outside ROOT. */
+const rooted = localWorkspace(ROOT)
+
+const FILE_TOOLS = new Set(fileTools.tools?.map(t => t.name))
+
+type Mode = 'ask' | 'auto'
+
+/** Each starts with the mode's name, the word the help line uses for it. */
+const MODES: Record<Mode, string> = {
+  ask: 'ask: before every file read and change',
+  auto: 'auto: approves inside the workspace, asks outside it',
+}
+
+/** Shift+Tab switches it, at the prompt or at a question. */
+let mode: Mode = 'ask'
+
+/** The files plugin's preview covers only changes; reads are asked about too. */
+const reading: Preview = call => (call.name === 'read' ? { title: `Read ${String(call.arguments.path)}` } : undefined)
+
+/**
+ * Which file calls are asked about: inside ROOT, only in ask mode; outside it, always, so auto mode never reaches past
+ * ROOT unseen. The mode decides what is asked, not how it is answered: every question goes to the person.
+ */
+const fileCalls: Preview = async (call, signal) => {
+  const far = await outsideRoot(call)
+  if (mode === 'auto' && !far) {
+    return undefined
+  }
+
+  const proposal = (await fileTools.preview(call, signal)) ?? (await reading(call, signal))
+  if (!far || proposal === undefined || 'role' in proposal) {
+    return proposal
+  }
+  // The riskiest kind of call, so it is the one question that stands out
+  return { ...proposal, title: `${proposal.title} ${styleText('yellow', '(outside the workspace)')}` }
+}
+
+async function outsideRoot(call: ToolCall): Promise<boolean> {
+  const path: unknown = call.arguments.path
+  if (!FILE_TOOLS.has(call.name) || typeof path !== 'string') {
+    return false
+  }
+  return rooted.resolve(path).then(
+    () => false,
+    () => true,
+  )
+}
+
+/**
+ * approval asks before a call by yielding a question; answerer replies to it from outside the tools (RFC-0007 §5).
+ * Neither knows about files or about the terminal: the preview says what a call does, `answer` asks the person.
+ */
+const approvals = [approval({ previews: [fileCalls] }), answerer({ answer })]
+
+// The terminal: the reply in progress and the status line, shared by the question and the reply
 
 /** The run rejects with this when the user presses Ctrl+C to stop a reply. */
 const STOPPED = new Error('stopped by user')
@@ -62,7 +119,7 @@ let current: Run | undefined
 
 /**
  * One status line: icon, label, and seconds waited.
- * Not clack's spinner: it puts stdin in raw mode, so Ctrl+C would exit the process instead of stopping the reply.
+ * Not clack's spinner: it takes Ctrl+C to exit the process instead of stopping the reply.
  */
 class Status {
   private static readonly frames = ['◒', '◐', '◓', '◑']
@@ -103,36 +160,36 @@ class Status {
 /** One for the whole REPL: the approval question has to hide it too. */
 const status = new Status()
 
-type Mode = 'ask' | 'auto'
+// The spinner hides the cursor; whatever ends the process, it comes back
+process.on('exit', () => status.hide())
 
-const MODES: Record<Mode, string> = {
-  ask: 'ask before file reads and changes',
-  auto: 'auto-approve',
+/**
+ * While a reply runs, keys are read raw, so Ctrl+C reaches the keypress listener as a key. As a SIGINT it would also
+ * reach the parent process: `pnpm repl` would exit and leave the reply writing over the shell. A question's prompt
+ * turns raw mode off when it closes, so it is turned on again after each one.
+ */
+function readKeys(on: boolean): void {
+  if (!process.stdin.isTTY) {
+    return
+  }
+
+  process.stdin.setRawMode(on)
+  if (on) {
+    process.stdin.resume()
+  } else {
+    process.stdin.pause()
+  }
 }
 
-/** Shift+Tab switches it, at the prompt or at a question. */
-let mode: Mode = 'ask'
+// Asking the person
 
-/** Set while a question is on screen: switching the mode answers it again under the new mode. */
+/** Set while a question is on screen: switching the mode shows it again under the new mode. */
 let onModeSwitch: (() => void) | undefined
 
 /** The question on screen, if any; settled otherwise. */
 let question: Promise<unknown> = Promise.resolve()
 
-/** The files plugin's preview covers only changes; reads are asked about too. */
-const reading: Preview = call => (call.name === 'read' ? { title: `Read ${String(call.arguments.path)}` } : undefined)
-
-/**
- * approval asks before a call by yielding a question; answerer replies to it from outside the tools (RFC-0007 §5).
- * Neither knows about files or about the terminal: the previews say what a call does, `answer` asks the person.
- */
-const approvals = [approval({ previews: [fileTools.preview, reading] }), answerer({ answer })]
-
 function answer(q: ChoiceQuestion, signal: AbortSignal): Promise<string | undefined> {
-  if (mode === 'auto' && q.choices.some(c => c.value === 'yes')) {
-    return Promise.resolve('yes')
-  }
-
   const choice = choose(q, signal)
   question = choice.catch(() => {})
   return choice
@@ -144,27 +201,33 @@ async function choose(q: ChoiceQuestion, signal: AbortSignal): Promise<string | 
     log.message(paintDiff(q.detail), { symbol: styleText('yellow', '±') })
   }
 
-  const switched = new AbortController()
-  onModeSwitch = () => switched.abort()
-  try {
+  // Switching the mode leaves this question open: it shows again, and the new mode applies to the calls after it
+  for (;;) {
+    const switched = new AbortController()
+    onModeSwitch = () => switched.abort()
     const choice = await select({
-      message: `${q.title}? ${dim('Shift+Tab: auto-approve')}`,
+      message: `${q.title}? ${dim(`· ${MODES[mode]} · Shift+Tab switches`)}`,
       options: q.choices.map(({ value, label, hint }) => ({ value, label, hint })),
       signal: AbortSignal.any([signal, switched.signal]),
+    }).finally(() => {
+      onModeSwitch = undefined
+      // A question closed by the reply's end must not turn raw mode back on under the next prompt
+      if (current !== undefined) {
+        readKeys(true)
+      }
     })
+
     if (!isCancel(choice)) {
       return choice
     }
-    if (switched.signal.aborted && !signal.aborted) {
-      return await answer(q, signal)
+    if (!switched.signal.aborted || signal.aborted) {
+      break
     }
-
-    // Ctrl+C at the question stops the whole reply, like Ctrl+C anywhere else in it
-    current?.abort(STOPPED)
-    return undefined
-  } finally {
-    onModeSwitch = undefined
   }
+
+  // Ctrl+C at the question stops the whole reply, like Ctrl+C anywhere else in it
+  current?.abort(STOPPED)
+  return undefined
 }
 
 /** Resolves once no question is on screen, so nothing is drawn over one. */
@@ -180,11 +243,57 @@ function switchMode(): void {
   onModeSwitch?.()
 }
 
+/** Every hunk in its own colors; the diff has no context lines, see paintHunk. */
 function paintDiff(patch: string): string {
-  const color = (line: string): string =>
-    line.startsWith('+') ? styleText('green', line) : line.startsWith('-') ? styleText('red', line) : dim(line)
-  return patch.split('\n').map(color).join('\n')
+  return patch
+    .split(/\n(?=@@)/)
+    .map(paintHunk)
+    .join('\n')
 }
+
+/**
+ * Without context lines a hunk is its removed lines, then its added ones: the k-th added line replaced the k-th
+ * removed one, so the part where the two differ is underlined.
+ */
+function paintHunk(hunk: string): string {
+  const [header, ...lines] = hunk.split('\n')
+  const removed = lines.filter(line => line.startsWith('-'))
+  const added = lines.filter(line => line.startsWith('+'))
+
+  const body = lines.map((line, i) => {
+    if (line.startsWith('-')) {
+      return underlineChange(line, added[i], 'red')
+    }
+    if (line.startsWith('+')) {
+      return underlineChange(line, removed[i - removed.length], 'green')
+    }
+    return dim(line)
+  })
+  return [styleText('cyan', header), ...body].join('\n')
+}
+
+/** The line in `color`, with what differs from `other` underlined; skips the leading + or -. */
+function underlineChange(line: string, other: string | undefined, color: 'green' | 'red'): string {
+  if (other === undefined) {
+    return styleText(color, line)
+  }
+
+  let start = 1
+  while (start < line.length && line[start] === other[start]) {
+    start++
+  }
+  let end = 0
+  while (end < line.length - start && end < other.length - start && line.at(-1 - end) === other.at(-1 - end)) {
+    end++
+  }
+
+  const stop = line.length - end
+  const same = (part: string): string => styleText(color, part)
+  const changed = styleText([color, 'underline'], line.slice(start, stop))
+  return `${same(line.slice(0, start))}${changed}${same(line.slice(stop))}`
+}
+
+// Showing a reply
 
 /**
  * Maps run events to terminal lines. ASCII stand-ins for the real glyphs; every kind differs in shape as well as
@@ -203,6 +312,7 @@ function paintDiff(patch: string): string {
  */
 async function render(r: Run): Promise<void> {
   const started = performance.now()
+  const speed = new Speed()
   const out = new Gutter()
   const running = new Map<string, string>()
   let afterCall = false
@@ -223,9 +333,11 @@ async function render(r: Run): Promise<void> {
           // The level actually sent, after any plugin and after mapping to what the model supports
           wait(e.thinking === 'off' ? 'Waiting' : 'Thinking')
           afterCall = false
+          speed.start()
           break
         case 'thinking':
         case 'text':
+          speed.streaming()
           status.hide()
           out.write(e.delta, e.type)
           break
@@ -252,6 +364,9 @@ async function render(r: Run): Promise<void> {
           })
           wait(running.size > 0 ? runningLabel() : 'Waiting')
           break
+        case 'model_end':
+          speed.end(e.message.usage.output)
+          break
         case 'step_cancelled':
           running.clear()
           status.hide()
@@ -265,15 +380,49 @@ async function render(r: Run): Promise<void> {
 
   const { usage } = await r.summary
   const seconds = ((performance.now() - started) / 1000).toFixed(1)
-  log.message(dim(`${seconds}s · ${describeUsage(usage)}`))
+  log.message(dim(`${seconds}s · ${describeUsage(usage, speed.describe())}`))
+}
+
+/**
+ * Output tokens per second while the model writes: each call is timed from its first thinking or text, so the wait for
+ * the first token is left out. A call that streams neither (only tool calls) is timed from its start.
+ */
+class Speed {
+  private tokens = 0
+  private ms = 0
+  private from = 0
+  private streamed = false
+
+  start(): void {
+    this.from = performance.now()
+    this.streamed = false
+  }
+
+  streaming(): void {
+    if (!this.streamed) {
+      this.from = performance.now()
+      this.streamed = true
+    }
+  }
+
+  end(tokens: number): void {
+    this.tokens += tokens
+    this.ms += performance.now() - this.from
+  }
+
+  /** `38.4 tok/s`, or empty before any call has ended. */
+  describe(): string {
+    return this.ms > 0 ? `${((this.tokens / this.ms) * 1000).toFixed(1)} tok/s` : ''
+  }
 }
 
 /** pi-ai's input excludes cache hits, so the prompt tokens sent to the model = input + cacheRead + cacheWrite. */
-function describeUsage(usage: UsageTotals): string {
+function describeUsage(usage: UsageTotals, speed: string): string {
   const prompt = usage.input + usage.cacheRead + usage.cacheWrite
   const rate = prompt === 0 ? 0 : Math.round((usage.cacheRead / prompt) * 100)
   const n = (x: number): string => x.toLocaleString('en-US')
-  return `in ${n(prompt)} · out ${n(usage.output)} · cached ${n(usage.cacheRead)} (${rate}%) · $${usage.cost.toFixed(4)}`
+  const out = speed === '' ? n(usage.output) : `${n(usage.output)} at ${speed}`
+  return `in ${n(prompt)} · out ${out} · cached ${n(usage.cacheRead)} (${rate}%) · $${usage.cost.toFixed(4)}`
 }
 
 /** Formats as a call: calc(expr: "17*23") */
@@ -286,7 +435,8 @@ function describeCall(call: ToolCall): string {
 
 /** Dim tool name and normal-colored result (red on error), to stand apart from the dim thinking and stats. */
 function describeResult(result: ToolResultMessage): string {
-  const body = clip(result.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join(''))
+  const text = result.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
+  const body = clip(text)
   return `${dim(result.toolName)}  ${result.isError ? styleText('red', body) : body}`
 }
 
@@ -383,29 +533,37 @@ function startAgent(): Agent {
 
 let agent = startAgent()
 let chat = createSession(agent)
+
 const levels = agent.model.thinkingLevels.join('|')
+const TOOL_NAMES = [calc, now, ...(fileTools.tools ?? [])].map(t => t.name).join(', ')
 const MISSING_KEY =
   'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
 
-// clack handles Ctrl+C at the prompt (returning a cancel), so SIGINT only arrives here mid-reply
-process.on('SIGINT', () => (current ? current.abort(STOPPED) : process.exit(130)))
+// clack handles Ctrl+C at the prompt, and a reply reads it as a key; SIGINT comes only when stdin is not a terminal
+process.on('SIGINT', () => {
+  if (current === undefined) {
+    process.exit(130)
+  }
+  current.abort(STOPPED)
+})
 
-// Keys arrive only while a prompt or a question has stdin in raw mode. This listener is added before any prompt's, so
-// the prompt redraws after the switch and shows the new mode.
+// Keys arrive while a prompt, a question or a reply has stdin in raw mode. This listener is added before any prompt's,
+// so the prompt redraws after the switch and shows the new mode.
 emitKeypressEvents(process.stdin)
-process.stdin.on('keypress', (_, key: { name?: string; shift?: boolean } | undefined) => {
+process.stdin.on('keypress', (_, key: { name?: string; shift?: boolean; ctrl?: boolean } | undefined) => {
   if (key?.name === 'tab' && key.shift === true) {
     switchMode()
   }
+  if (key?.name === 'c' && key.ctrl === true) {
+    current?.abort(STOPPED)
+  }
 })
 
+const settings = `thinking: ${agent.thinking} · tools: ${TOOL_NAMES} · workspace: ${ROOT}`
+const keys = `/think <${levels}> · Shift+Tab switches ask/auto · Ctrl+C stops a reply · /exit quits`
 intro(`ji · ${agent.model.provider}/${agent.model.id}`)
-log.message(
-  dim(
-    `thinking: ${agent.thinking} · tools: ${TOOL_NAMES} · files: ${ROOT}\n/think <${levels}> · Shift+Tab switches approval · Ctrl+C stops a reply · /exit quits`,
-  ),
-  { spacing: 0 },
-)
+log.message(dim(`${settings}\n${keys}`), { spacing: 0 })
+
 // The key is only needed to send, so its absence is pointed out without blocking anything else
 if (!agent.model.hasEnvKey) {
   log.warn(MISSING_KEY)
@@ -418,12 +576,15 @@ for (;;) {
   const input = await text({
     // Read on every redraw, so Shift+Tab shows at once
     get message() {
-      return `You ${dim(`· ${MODES[mode]}`)}`
+      // auto is the less careful mode, so it stands out in the warning color
+      const label = `· ${MODES[mode]}`
+      return `${styleText('bold', 'You')} ${mode === 'auto' ? styleText('yellow', label) : dim(label)}`
     },
     placeholder: 'Ask anything',
     initialValue: retry,
   })
   retry = ''
+
   if (isCancel(input)) {
     break
   }
@@ -456,6 +617,7 @@ for (;;) {
 
   const before = chat.state
   current = chat.send(message)
+  readKeys(true)
   try {
     await render(current)
   } catch (error) {
@@ -471,6 +633,7 @@ for (;;) {
     }
   } finally {
     current = undefined
+    readKeys(false)
   }
 }
 

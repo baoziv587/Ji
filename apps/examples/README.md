@@ -197,6 +197,7 @@ DEEPSEEK_THINKING=high ...           # 打开思考，默认 off；可用档位 
 - `/think <档位>` 在对话中切换思考档位：用新档位 `createAgent`，再用 `createSession(agent, { state: chat.state })` 接着聊。思考过程（`thinking`）灰色显示。
 - 在输入框按 Ctrl+C 或输入 `/exit` 退出。
 - 装了 [`@ji.dev/plugin-files`](../../plugins/files/src/index.ts) 的 `read` 和 `edit`：模型可以读写运行命令时所在目录下的文件，目录之外的路径会被拒绝。回答被 Ctrl+C 停止时会话回滚，但已经写入磁盘的修改不会撤销；模型下次修改那个文件前会被要求重新读取。
-- 每次读文件前、每次改文件写入前（先显示 diff）都要等你选 Yes / No。Shift+Tab 在“逐个确认”和“自动同意”之间切换：输入框标题会显示当前模式；在确认问题上按 Shift+Tab 会切到自动同意并同意这一个。
-- 审批按 RFC-0007 的写法：`approval({ previews: [fileTools.preview, reading] })` 在 `toolCall` 层 `yield` 一个 `ask:choice` 事件，这个 `yield` 的值就是选择；`answerer({ answer })` 在 `toolCalls` 层回答它，`answer` 负责问人或在自动模式下直接回答 `yes`。两个插件都不认识文件和终端：`preview` 说明一次调用将做什么。换成 `previews: [named('bash')]` 或不传，就能审批任何工具。
+- 每次读文件前、每次改文件写入前（先显示 diff）都要等你选 Yes / No。Shift+Tab 在“逐个确认”和“自动同意”之间切换，输入框和确认问题的标题都会显示当前模式；在确认问题上切换只影响之后的调用，这个问题仍要你来回答。
+- 启动目录之外的文件也能读写，但无论哪种模式都要先确认，问题标题末尾会用黄色标出 `(outside the workspace)`。自动同意只覆盖启动目录。
+- 审批按 RFC-0007 的写法：`approval({ previews: [fileCalls] })` 在 `toolCall` 层 `yield` 一个 `ask:choice` 事件，这个 `yield` 的值就是选择；`answerer({ answer })` 在 `toolCalls` 层回答它，`answer` 只负责问人。模式决定的是“问不问”（`fileCalls` 这个 preview 在自动模式下对启动目录内的调用返回 `undefined`），不是“怎么答”。两个插件都不认识文件和终端：`preview` 说明一次调用将做什么。换成 `previews: [named('bash')]` 或不传，就能审批任何工具。
 - 状态行没有用 clack 的 `spinner`：它把 stdin 切到 raw 模式，Ctrl+C 会直接退出进程。
