@@ -1,11 +1,12 @@
 // What the model reads: a short line, then the diff or one line per error with what to do next (RFC §6.1).
 // Machine-readable fields go in details, which the model never sees.
 
-import type { EditError, Outcome, Prepared } from './commit.ts'
+import type { Applied, Prepared } from './commit.ts'
+import type { Result } from './core/result.ts'
+import type { EditError } from './transform.ts'
 import { structuredPatch } from 'diff'
-import { lineAt } from './core/plan.ts'
 
-/** The diff is cut after this many lines; counts, states and error codes never are. */
+/** The diff is cut after this many lines; counts and error codes never are. */
 const MAX_DIFF_LINES = 200
 
 export interface Rendered {
@@ -14,49 +15,42 @@ export interface Rendered {
   isError: boolean
 }
 
-/** `shown` is the path as the model wrote it; details carry the absolute one. */
-export function render(outcome: Outcome, shown: string, mode: 'edit' | 'write'): Rendered {
-  switch (outcome.state) {
-    case 'applied': {
-      const { prepared, version } = outcome
-      const details = {
-        commit_state: 'applied',
-        path: prepared.path,
-        version,
-        version_before: prepared.version,
-        replacements: prepared.batch.length,
-        lines: prepared.batch.map(s => lineAt(prepared.base, s.start)),
-      }
-      return { text: applied(prepared, shown, mode), details, isError: false }
-    }
-    case 'not_applied': {
-      const lines = outcome.errors.map(e => explain(e, shown))
-      const text = [`Edit failed; ${shown} is unchanged.`, ...lines].join('\n')
-      return { text, details: { commit_state: 'not_applied', errors: outcome.errors }, isError: true }
-    }
-    case 'unknown': {
-      const text = `The write to ${shown} may or may not have happened (${String(outcome.error)}). Read the file to check before trying again.`
-      return { text, details: { commit_state: 'unknown', path: outcome.prepared.path }, isError: true }
-    }
+/** `shown` is the path as the model wrote it; details carry the file's identity. */
+export function render(result: Result<Applied, EditError[]>, shown: string): Rendered {
+  if (result.ok) {
+    const { path, version } = result.value
+    return { text: applied(result.value, shown), details: { path, version }, isError: false }
   }
+
+  const lines = result.error.map(e => explain(e, shown))
+  const text = [`Edit failed; ${shown} is unchanged.`, ...lines, ...similar(result.error)].join('\n')
+  return { text, details: { errors: result.error }, isError: true }
 }
 
 /** Hunks without context lines, numbered as in the file before and after. */
 export function diff(prepared: Prepared): string {
-  const { hunks } = structuredPatch('', '', prepared.base, prepared.next, '', '', { context: 0, stripTrailingCr: true })
-  const out = hunks.flatMap(h => [`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`, ...h.lines])
+  const out = hunksOf(prepared).flatMap(h => [
+    `@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@`,
+    ...h.lines,
+  ])
   return out.length > MAX_DIFF_LINES
     ? [...out.slice(0, MAX_DIFF_LINES), '… (diff truncated)'].join('\n')
     : out.join('\n')
 }
 
-function applied(prepared: Prepared, shown: string, mode: 'edit' | 'write'): string {
-  if (mode === 'write') {
-    const lines = lineCount(prepared.next)
-    return `${prepared.version === 'absent' ? 'Created' : 'Rewrote'} ${shown} (${lines} line${lines === 1 ? '' : 's'}).`
+function hunksOf({ base, next }: Prepared): ReturnType<typeof structuredPatch>['hunks'] {
+  return structuredPatch('', '', base, next, '', '', { context: 0, stripTrailingCr: true }).hunks
+}
+
+function applied(a: Applied, shown: string): string {
+  if (a.expected === 'absent') {
+    const lines = lineCount(a.next)
+    return `Created ${shown} (${lines} line${lines === 1 ? '' : 's'}).`
   }
-  const n = prepared.batch.length
-  return `Edited ${shown} (${n} replacement${n === 1 ? '' : 's'}).\n${diff(prepared)}`
+  const changed = hunksOf(a).flatMap(h => h.lines)
+  const added = changed.filter(l => l.startsWith('+')).length
+  const removed = changed.filter(l => l.startsWith('-')).length
+  return `Edited ${shown} (+${added} -${removed}).\n${diff(a)}`
 }
 
 function explain(e: EditError, shown: string): string {
@@ -70,16 +64,14 @@ function explain(e: EditError, shown: string): string {
         ? `edits[${e.edits[0]}]: its matches overlap each other; use a longer old_text.`
         : `edits[${e.edits[0]}] and edits[${e.edits[1]}] overlap; merge them into one edit.`
     case 'NO_CHANGE':
-      return 'The edits leave the file as it is.'
-    case 'NOT_OBSERVED':
-      return `Read ${shown} before editing it.`
+      return 'The change leaves the file as it is.'
     case 'STALE_VERSION':
       if (e.expected === 'absent') {
-        return `${shown} already exists. Read it before rewriting it, or edit it instead.`
+        return `${shown} exists and you have not read it. Read it before changing it.`
       }
-      return e.current === undefined
+      return e.current === 'absent'
         ? `${shown} no longer exists.`
-        : 'The file changed after you last read it. Read it again before editing.'
+        : 'The file is not at the version you last read: it changed, or an earlier write of yours went through. Read it again before changing it.'
     case 'UNSUPPORTED_FILE':
     case 'PATH_DENIED':
       return `${e.message}.`
@@ -97,6 +89,14 @@ function matchCount(e: Extract<EditError, { code: 'MATCH_COUNT' }>): string {
       ? 'Include nearby lines so it matches only once.'
       : 'Check every match, then fix count or split it into separate edits.'
   return `${head}old_text occurs ${where}; expected ${e.expected}. ${fix}`
+}
+
+/** Where text like a missing old_text is. Only shown: nothing here was applied. */
+function similar(errors: readonly EditError[]): string[] {
+  const lines = errors.flatMap(e =>
+    e.code === 'MATCH_COUNT' ? (e.hints ?? []).map(h => `  edits[${e.edit}], line ${h.line}: ${h.reason}`) : [],
+  )
+  return lines.length > 0 ? ['Similar text (not applied):', ...lines, 'Read those lines and copy them exactly.'] : []
 }
 
 /** A final line break does not start another line. */

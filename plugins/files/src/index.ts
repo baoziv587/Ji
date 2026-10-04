@@ -1,55 +1,39 @@
 // @ji.dev/plugin-files: read and edit tools with strict matching, version checks and atomic writes
 // (rfcs/tools/edit-tool-algebra.md)
 //
-//   const store = canonical(guarded(locked(localStore()), allow), realPath)
-//   createAgent({ model, plugins: [files(store), matchHints(store)] })
+//   createAgent({ model, plugins: [files(localWorkspace(root))] })
 //
-//   core/     pure and import-free: locate, plan, batch, apply, invert, view
-//   store     the IO port, memStore and the decorators; node: localStore, realPath
-//   commit    prepare (no writing) and commit = prepare, then publish
-//   tools     read and edit; plugin: files (tools + ledger) and matchHints
+//   Workspace   the IO port: resolve, read, publish. localWorkspace for the file system, memWorkspace for tests
+//   Transform   the file's new text from its current text: editTransform, writeTransform, chain, or your own
+//   commit      publish ∘ transform ∘ read; prepare is commit without the publish
+//   fileTool    a tool from a schema and a Transform; files is the plugin: read + file tools + the ledger
 
-export {
-  commit,
-  type EditError,
-  editTransform,
-  type Outcome,
-  prepare,
-  type Prepared,
-  type Transform,
-  writeTransform,
-} from './commit.ts'
-export {
-  apply,
-  batch,
-  type Batch,
-  invert,
-  type Overlap,
-  type Range,
-  rewrite,
-  separable,
-  type Splice,
-} from './core/batch.ts'
-export { type Edit, lineAt, locate, plan, type PlanError } from './core/plan.ts'
+export { type Applied, commit, prepare, type Prepared } from './commit.ts'
+export type { Edit } from './core/plan.ts'
 export { err, ok, type Result } from './core/result.ts'
-export { decode, encode, type TextView, view } from './core/view.ts'
 export { type Candidate, defaultHinters, type Hinter, lineHinter } from './hints.ts'
-export { localStore, realPath } from './node.ts'
-export { files, type HintOptions, type Ledger, matchHints } from './plugin.ts'
+export { type LocalOptions, localWorkspace } from './node.ts'
+export { files, type FilesOptions, type Ledger } from './plugin.ts'
 export { diff } from './render.ts'
 export {
-  canonical,
-  type Commit,
+  type EditOptions,
+  editTool,
+  expectedOf,
+  type FileTool,
+  fileTool,
+  type FileToolSpec,
+  readTool,
+} from './tools.ts'
+export { chain, type EditError, editTransform, type Transform, writeTransform } from './transform.ts'
+export {
   type Expected,
-  guarded,
-  locked,
-  type MemStore,
-  memStore,
+  FileError,
+  type MemWorkspace,
+  memWorkspace,
   type Publisher,
   type Reader,
+  type Resolver,
   type Snapshot,
-  type Store,
-  StoreError,
   type Version,
-} from './store.ts'
-export { editTool, readTool, type ToolOptions } from './tools.ts'
+  type Workspace,
+} from './workspace.ts'
