@@ -3,7 +3,9 @@
 //   It fills the terminal: a bar on top (model, thinking, workspace) and one at the bottom (the status, and the line
 //   you type in) stay put, and only the conversation between them scrolls, with the wheel or PgUp/PgDn. On exit the
 //   conversation is printed to the terminal, where it stays
-//   Enter sends; replies stream in, with one line per tool call and one per result as each call finishes
+//   Enter sends; replies stream in, with one line per tool call as it finishes. Thinking shows as one line with its
+//   length; Ctrl+O shows it in full, and every call's arguments and result, and back
+//   The line above the status adds up the session: tokens in and out, cache hits, speed, cost
 //   Enter during a reply steers it: the message reaches the model after the step in progress, and shows above then
 //   Ctrl+C during a reply stops only that reply; Ctrl+C on an empty line or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
@@ -14,17 +16,9 @@
 //   The model can ask questions of its own, with options it writes; Esc dismisses any question
 //
 // Everything comes from @ji.dev/llm: the model, its thinking levels and the events need nothing from pi-ai.
-import type {
-  Agent,
-  AgentState,
-  Message,
-  Run,
-  ThinkingLevel,
-  ToolCall,
-  ToolResultMessage,
-  UsageTotals,
-} from '@ji.dev/llm'
+import type { Agent, AgentState, Message, Run, ThinkingLevel, ToolCall, ToolResultMessage } from '@ji.dev/llm'
 import type { Option, Preview, Questions, Reply } from '@ji.dev/plugin-choices'
+import type { Writable } from 'node:stream'
 import type { Editing, Keypress } from './editing.ts'
 import type { Frame } from './screen.ts'
 import process from 'node:process'
@@ -46,6 +40,7 @@ import { files, localWorkspace } from '@ji.dev/plugin-files'
 import truncatedWidth from 'fast-string-truncated-width'
 import { edit, EMPTY, textOf } from './editing.ts'
 import { Screen } from './screen.ts'
+import { count, Meter } from './usage.ts'
 
 const calc = tool({
   name: 'calc',
@@ -142,6 +137,9 @@ let current: Run | undefined
 
 /** The bars around the conversation; drawn by drawFrame. */
 const screen = new Screen(drawFrame)
+
+/** What the session has spent, on the line above the status. */
+const meter = new Meter()
 
 /** What the reply is doing and for how long, spun in the bar while a reply runs. */
 class Status {
@@ -345,27 +343,29 @@ function underlineChange(line: string, other: string | undefined, color: 'green'
 // Showing a reply
 
 /**
- * Maps run events to terminal lines. ASCII stand-ins for the real glyphs; every kind differs in shape as well as
- * color, so the output still reads without color.
+ * Maps run events to terminal lines, in two views (Ctrl+O switches). ASCII stand-ins for the real glyphs; every kind
+ * differs in shape as well as color, so the output still reads without color.
  *
- *   |                          <- Gutter opens a block with a bare rail
- *   o  Thinking                <- title, thinking blocks only
- *   :  The user wants 17*23    <- thinking: gray rail, dim italic text
- *   |
- *   |  Let me compute that.    <- text: plain rail, normal text
- *   |                          <- blank line before the first call of a turn only
- *   >  calc(expr: "17*23")     <- tool_call: the arguments are complete; the tool has not started yet
- *   v  calc  391               <- tool_end: one line per call as soon as it finishes, green (or red x on error)
- *   +  use vitest  · steer     <- a message, shown once it reaches the model; marked when it steered a reply
+ *   brief, by default                          full
+ *
+ *   |                                          |                          <- Gutter opens a block with a bare rail
+ *   o  Thought for 4s · 1.2k chars             o  Thinking                <- title
+ *                                              :  The user wants 17*23    <- thinking: gray rail, dim italic text
+ *   |                                          |
+ *   |  Let me compute that.                    |  Let me compute that.    <- text: plain rail, normal text
+ *   |                                          |                          <- blank line before a turn's first call
+ *                                              >  calc(expr: "17*23")     <- tool_call: the tool has not started yet
+ *   v  calc(expr: "17*23")                     v  calc  391               <- tool_end: green, or red x with the error
+ *   +  use vitest  · steer                     +  use vitest  · steer     <- a message, once it reaches the model
  *
  * The status (Running calc 1s) is in the bar, timed from tool_start, so it never counts time the model was writing.
  */
 async function render(r: Run, changed: Set<string>): Promise<void> {
-  const started = performance.now()
-  const speed = new Speed()
   const out = new Gutter()
   const running = new Map<string, string>()
+  // Each view's first tool line in a turn has a blank line before it
   let afterCall = false
+  let afterDone = false
 
   const runningLabel = (): string => `Running ${[...new Set(running.values())].join(', ')}`
 
@@ -383,24 +383,36 @@ async function render(r: Run, changed: Set<string>): Promise<void> {
               log.message(`${styleText('bold', contentOf(m))}${steer}`, { symbol: styleText('cyan', '●') })
             }
             afterCall = false
+            afterDone = false
           }
           break
         case 'model_start':
           // The level actually sent, after any plugin and after mapping to what the model supports
           status.show(e.thinking === 'off' ? 'Waiting' : 'Thinking')
           afterCall = false
-          speed.start()
+          afterDone = false
+          if (e.by === undefined) {
+            meter.start()
+          }
           break
         case 'thinking':
+          meter.streaming()
+          out.write(e.delta, 'thinking')
+          status.show('Thinking', out.describeThought())
+          break
         case 'text':
-          speed.streaming()
-          status.show(e.type === 'text' ? 'Writing' : 'Thinking')
-          out.write(e.delta, e.type)
+          meter.streaming()
+          status.show('Writing')
+          out.write(e.delta, 'text')
           break
         case 'tool_call':
           out.end()
           // Calls from the same turn stay together without blank lines
-          log.message(describeCall(e.call), { symbol: styleText('cyan', '▸'), spacing: afterCall ? 0 : 1 })
+          log.message(describeCall(e.call), {
+            symbol: styleText('cyan', '▸'),
+            spacing: afterCall ? 0 : 1,
+            output: screen.full,
+          })
           afterCall = true
           break
         case 'tool_start':
@@ -410,21 +422,28 @@ async function render(r: Run, changed: Set<string>): Promise<void> {
         case 'tool_update':
           status.show(runningLabel(), clip(String(e.data)))
           break
-        case 'tool_end':
+        case 'tool_end': {
           running.delete(e.call.id)
           if (!e.result.isError && e.call.name !== 'read' && FILE_TOOLS.has(e.call.name)) {
             changed.add(String(e.call.arguments.path))
           }
-          log.message(describeResult(e.result), {
-            symbol: e.result.isError ? styleText('red', '✗') : styleText('green', '✓'),
-            spacing: 0,
-          })
+
+          const symbol = e.result.isError ? styleText('red', '✗') : styleText('green', '✓')
+          log.message(describeResult(e.result), { symbol, spacing: 0, output: screen.full })
+          log.message(describeDone(e.call, e.result), { symbol, spacing: afterDone ? 0 : 1, output: screen.brief })
+          afterDone = true
+
           status.show(running.size > 0 ? runningLabel() : 'Waiting')
           break
+        }
         case 'model_end':
-          speed.end(e.message.usage.output)
+          meter.end(e.message.usage)
+          break
+        case 'model_error':
+          meter.dropped(e.usage)
           break
         case 'step_cancelled':
+          meter.dropped()
           running.clear()
           break
       }
@@ -433,52 +452,6 @@ async function render(r: Run, changed: Set<string>): Promise<void> {
     status.hide()
     out.end()
   }
-
-  const { usage } = await r.summary
-  const seconds = ((performance.now() - started) / 1000).toFixed(1)
-  log.message(dim(`${seconds}s · ${describeUsage(usage, speed.describe())}`))
-}
-
-/**
- * Output tokens per second while the model writes: each call is timed from its first thinking or text, so the wait for
- * the first token is left out. A call that streams neither (only tool calls) is timed from its start.
- */
-class Speed {
-  private tokens = 0
-  private ms = 0
-  private from = 0
-  private streamed = false
-
-  start(): void {
-    this.from = performance.now()
-    this.streamed = false
-  }
-
-  streaming(): void {
-    if (!this.streamed) {
-      this.from = performance.now()
-      this.streamed = true
-    }
-  }
-
-  end(tokens: number): void {
-    this.tokens += tokens
-    this.ms += performance.now() - this.from
-  }
-
-  /** `38.4 tok/s`, or empty before any call has ended. */
-  describe(): string {
-    return this.ms > 0 ? `${((this.tokens / this.ms) * 1000).toFixed(1)} tok/s` : ''
-  }
-}
-
-/** pi-ai's input excludes cache hits, so the prompt tokens sent to the model = input + cacheRead + cacheWrite. */
-function describeUsage(usage: UsageTotals, speed: string): string {
-  const prompt = usage.input + usage.cacheRead + usage.cacheWrite
-  const rate = prompt === 0 ? 0 : Math.round((usage.cacheRead / prompt) * 100)
-  const n = (x: number): string => x.toLocaleString('en-US')
-  const out = speed === '' ? n(usage.output) : `${n(usage.output)} at ${speed}`
-  return `in ${n(prompt)} · out ${out} · cached ${n(usage.cacheRead)} (${rate}%) · $${usage.cost.toFixed(4)}`
 }
 
 /** Formats as a call: calc(expr: "17*23") */
@@ -497,11 +470,22 @@ function contentOf(m: Message): string {
   return m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
 }
 
-/** Dim tool name and normal-colored result (red on error), to stand apart from the dim thinking and stats. */
+/** Dim tool name and normal-colored result (red on error), to stand apart from the dim thinking. */
 function describeResult(result: ToolResultMessage): string {
-  const text = result.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
-  const body = clip(text)
+  const body = clip(resultText(result))
   return `${dim(result.toolName)}  ${result.isError ? styleText('red', body) : body}`
+}
+
+/** The brief view's one line for a call: the call itself, and on error what went wrong, since that matters. */
+function describeDone(call: ToolCall, result: ToolResultMessage): string {
+  if (!result.isError) {
+    return describeCall(call)
+  }
+  return `${describeCall(call)}  ${styleText('red', clip(resultText(result)))}`
+}
+
+function resultText(result: ToolResultMessage): string {
+  return result.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
 }
 
 /** Collapses to one line clipped to the terminal width, so wrapping doesn't break the left rail. */
@@ -513,14 +497,26 @@ function clip(s: string): string {
 
 type BlockKind = 'thinking' | 'text'
 
-const BLOCKS: Record<BlockKind, { title?: string; rail: string; paint: (s: string) => string }> = {
+interface Block {
+  title?: string
+  rail: string
+  paint: (s: string) => string
+  output: Writable
+}
+
+/** Thinking is written in full to the full view only; the brief one gets a line for it once it ends. */
+const BLOCKS: Record<BlockKind, Block> = {
   thinking: {
     title: `${styleText('gray', '◌')}  ${styleText(['dim', 'italic'], 'Thinking')}`,
     rail: styleText('gray', '┊'),
     paint: s => styleText(['dim', 'italic'], s),
+    output: screen.full,
   },
-  text: { rail: bar(), paint: s => s },
+  text: { rail: bar(), paint: s => s, output: process.stdout },
 }
+
+/** Enough of the thinking's end to fill the status. */
+const RECENT = 200
 
 /**
  * Writes streamed text to the right of clack's rail, lined up with the prompts above and below. Thinking and
@@ -530,37 +526,64 @@ const BLOCKS: Record<BlockKind, { title?: string; rail: string; paint: (s: strin
 class Gutter {
   private open: BlockKind | undefined
   private atLineStart = true
+  /** The thinking block in progress: how long and how much, and its last words for the status. */
+  private thought: { since: number; chars: number; recent: string } | undefined
 
   write(chunk: string, kind: BlockKind): void {
-    const { title, rail, paint } = BLOCKS[kind]
+    const { title, rail, paint, output } = BLOCKS[kind]
     if (this.open !== kind) {
       this.end()
-      process.stdout.write(`${bar()}\n${title === undefined ? '' : `${title}\n`}`)
+      output.write(`${bar()}\n${title === undefined ? '' : `${title}\n`}`)
       this.open = kind
+    }
+
+    if (kind === 'thinking') {
+      this.thought ??= { since: performance.now(), chars: 0, recent: '' }
+      this.thought.chars += [...chunk].length
+      this.thought.recent = (this.thought.recent + chunk).slice(-RECENT)
     }
 
     chunk.split('\n').forEach((part, i) => {
       if (i > 0) {
         // Blank lines get a rail too, so paragraphs stay connected
-        process.stdout.write(this.atLineStart ? `${rail}\n` : '\n')
+        output.write(this.atLineStart ? `${rail}\n` : '\n')
         this.atLineStart = true
       }
       if (part === '') {
         return
       }
       if (this.atLineStart) {
-        process.stdout.write(`${rail}  `)
+        output.write(`${rail}  `)
         this.atLineStart = false
       }
-      process.stdout.write(paint(part))
+      output.write(paint(part))
     })
   }
 
-  /** Closes the current block so the next output starts on a fresh line. */
+  /** `1.2k chars · …so I'll call calc`: how much it has thought, and its last words; empty while not thinking. */
+  describeThought(): string {
+    if (this.thought === undefined) {
+      return ''
+    }
+
+    const words = this.thought.recent.replaceAll(/\s+/g, ' ').trim()
+    return dim(`${count(this.thought.chars)} chars · …${tail(words, 48)}`)
+  }
+
+  /** Closes the current block so the next output starts on a fresh line; a thinking one gets its line in brief. */
   end(): void {
     if (this.open && !this.atLineStart) {
-      process.stdout.write('\n')
+      BLOCKS[this.open].output.write('\n')
     }
+
+    if (this.thought !== undefined) {
+      const seconds = Math.max(1, Math.round((performance.now() - this.thought.since) / 1000))
+      const title = styleText(['dim', 'italic'], `Thought for ${seconds}s`)
+      const length = dim(`· ${count(this.thought.chars)} chars`)
+      screen.brief.write(`${bar()}\n${styleText('gray', '◌')}  ${title} ${length}\n`)
+      this.thought = undefined
+    }
+
     this.open = undefined
     this.atLineStart = true
   }
@@ -709,21 +732,46 @@ function drawFrame(columns: number): Frame {
   const input = inputLine(width)
   return {
     top: [fit(title + settings, width), rule],
-    bottom: [rule, fit(statusLine(), width), input.line],
+    bottom: [usageRule(width), fit(statusLine(), width), input.line],
     // Hidden while a question is open: the keys are its own
     cursor: questionOpen ? undefined : { row: 2, column: input.column },
   }
 }
 
-/** What runs and for how long, what is scrolled past, the mode, the steers not yet delivered, the keys that matter now. */
+/** A rule with the session's usage at its right end, as much of it as fits; a plain one before any model call. */
+function usageRule(width: number): string {
+  const parts = meter.parts()
+  for (let shown = parts.length; shown > 0; shown--) {
+    const label = ` ${parts.slice(0, shown).join(' · ')} `
+    const left = width - widthOf(label) - 1
+    if (left >= 8) {
+      return dim(`${'─'.repeat(left)}${label}─`)
+    }
+  }
+  return dim('─'.repeat(width))
+}
+
+/**
+ * The view, if it is the full one; what runs and for how long, what is scrolled past, the mode, the steers not yet
+ * delivered, the keys that matter now.
+ */
 function statusLine(): string {
+  const details = screen.view === 'full' ? styleText('cyan', 'details · Ctrl+O hides') : ''
   // auto is the less careful mode, so it stands out in the warning color
   const label = mode === 'auto' ? styleText('yellow', describeMode()) : dim(describeMode())
   const queued = current === undefined ? 0 : chat.pending.length
   const waiting = queued === 0 ? '' : styleText('cyan', `${queued} queued`)
   const below = screen.below === 0 ? '' : styleText('yellow', `↓ ${screen.below} more lines · PgDn`)
-  const keys = current === undefined ? 'Shift+Tab switches · /exit quits' : 'Enter steers · Ctrl+C stops'
-  return [status.describe(), below, label, waiting, dim(keys)].filter(part => part !== '').join(dim(' · '))
+
+  let keys = 'Enter steers · Ctrl+C stops'
+  if (current === undefined) {
+    keys = 'Shift+Tab switches · /exit quits'
+  }
+  if (current === undefined && screen.view === 'brief') {
+    keys = `Ctrl+O details · ${keys}`
+  }
+
+  return [details, status.describe(), below, label, waiting, dim(keys)].filter(part => part !== '').join(dim(' · '))
 }
 
 /** The prompt, then the text around the cursor, scrolled sideways to keep the cursor in view. */
@@ -800,6 +848,10 @@ screen.keys.on('keypress', (char: string | undefined, key: (Keypress & { shift?:
     switchMode()
     return
   }
+  if (key?.name === 'o' && key.ctrl === true) {
+    screen.toggle()
+    return
+  }
   if (key?.name === 'c' && key.ctrl === true) {
     interrupt()
     return
@@ -823,6 +875,7 @@ const keys = [
   'Shift+Tab switches ask/auto',
   'Esc dismisses a question',
   'Ctrl+C stops a reply',
+  'Ctrl+O shows details',
   'Wheel or PgUp/PgDn scrolls',
   '/exit quits',
 ].join(' · ')

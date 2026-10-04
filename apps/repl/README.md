@@ -14,16 +14,18 @@ DEEPSEEK_THINKING=off ...            # 关闭思考，默认 high；可用档位
 ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：模型、思考档位、工作目录
 ──────────────────────────────────────────────────────────
 ●  read it                                                 ┃  ← 对话：只有这一块滚动，右边是滚动条
-▸  read(path: "package.json")                              ┃
-✓  read  { "name": … }                                     │
-──────────────────────────────────────────────────────────
+◌  Thought for 4s · 1.2k chars                             ┃
+✓  read(path: "package.json")                              │
+──── in 48.2k · out 3.1k · cache 86% · 41 tok/s · $0.0123 ─   ← 整个会话的用量
 ◐ Writing 2s · ask: before every file read and change · …     ← 状态行：在做什么、等了几秒、模式、待送达的插话
 › Steer the reply: it reads this after the step in progress   ← 输入行
 ```
 
 - 打开时占满当前终端窗口（终端的 alternate screen，和 vim、htop 一样），顶栏和底栏固定，只有中间的对话滚动。
 - 鼠标滚轮或 PgUp/PgDn 滚动对话；往回翻的时候状态行会提示下面还有多少行，按 Enter 发消息会回到最底部。
-- 鼠标被 REPL 用来滚动，所以在窗口里用鼠标选字要按住修饰键（iTerm2 是 Option，VS Code 要开 `terminal.integrated.macOptionClickForcesSelection`）。退出时整段对话会打印回普通终端，在那里可以照常选择、复制、往回翻。
+- 对话默认是简洁视图：思考只留一行（用了几秒、多少字），工具调用一次一行，出错时带上错误信息。Ctrl+O 切到详细视图，看完整的思考和每次调用的参数、结果，再按一次切回来；状态行开头的 `details · Ctrl+O hides` 表示正在看详细视图。两个视图的行对不上，所以切换后回到底部。思考进行中，状态行显示已经写了多少字和最后几个词。
+- 状态行上面那条线的右端是整个会话的用量，每次模型调用结束时更新：发给模型的 token（含命中缓存的部分）、输出 token、缓存命中率、平均输出速度（不算等第一个 token 的时间）、花费。插件的模型调用、出错和被停掉的回答已经花掉的都算在内。宽度不够时依次隐藏花费、速度、命中率。
+- 鼠标被 REPL 用来滚动，所以在窗口里用鼠标选字要按住修饰键（iTerm2 是 Option，VS Code 要开 `terminal.integrated.macOptionClickForcesSelection`）。退出时整段对话（当前视图）会打印回普通终端，在那里可以照常选择、复制、往回翻。
 
 ## 对话
 
@@ -49,7 +51,10 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 | [`repl.ts`](src/repl.ts)       | 入口：agent、插件、按键、两条栏的内容                                                                                                    |
 | [`screen.ts`](src/screen.ts)   | 终端的三块布局。程序写到 stdout 的内容进一个 [`@xterm/headless`](https://github.com/xtermjs/xterm.js) 虚拟终端，再按滚动位置画出其中一屏 |
 | [`cells.ts`](src/cells.ts)     | 把虚拟终端的一行连同颜色、粗体等还原成 ANSI 文本                                                                                         |
+| [`usage.ts`](src/usage.ts)     | 会话用量的累计和显示                                                                                                                     |
 | [`editing.ts`](src/editing.ts) | 输入行的编辑状态，纯函数 `edit(state, key)`，和绘制分开                                                                                  |
+
+简洁和详细两个视图各是一个虚拟终端：stdout 同时写进两边，`screen.brief` 和 `screen.full` 只写进其中一边（clack `log` 的 `output` 选项），确认问题在两边一样地重画，所以切换视图不需要重放对话。
 
 对程序来说，stdout 就是中间那块对话区：`write` 写进虚拟终端，`columns` 和 `rows` 是对话区的大小。所以 [clack](https://bomb.sh/docs/clack/basics/getting-started/) 的输出和确认问题不用改，照常在里面换行、重画。stdin 先经过 `Screen`，滚轮事件被取走，剩下的按键从 `screen.keys` 给 REPL 和确认问题。
 
