@@ -220,6 +220,12 @@ importers:
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/plugin-approval':
+        specifier: workspace:*
+        version: link:../../plugins/approval
+      '@ji.dev/plugin-files':
+        specifier: workspace:*
+        version: link:../../plugins/files
       '@mariozechner/pi-ai':
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.3)(zod@4.6.5)
@@ -261,6 +267,15 @@ importers:
 
   packages/utils: {}
 
+  plugins/approval:
+    devDependencies:
+      '@ji.dev/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+      '@mariozechner/pi-ai':
+        specifier: ^0.73.1
+        version: 0.73.1(ws@8.21.3)(zod@4.6.5)
+
   plugins/files:
     dependencies:
       diff:
@@ -270,6 +285,9 @@ importers:
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/plugin-approval':
+        specifier: workspace:*
+        version: link:../approval
       '@mariozechner/pi-ai':
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.3)(zod@4.6.5)

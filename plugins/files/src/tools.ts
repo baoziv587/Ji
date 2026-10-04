@@ -1,8 +1,9 @@
-// read, edit, and fileTool, which makes a tool from a schema and a Transform. Write is not a tool of its own: `edit`
+// read, edit, and fileTool, which declares a tool as a schema and a Transform. Write is not a tool of its own: `edit`
 // with `content` rewrites or creates a file (RFC §12).
 //
-//   The version a change expects is not in any schema the model sees. The files plugin adds it to the call from what
-//   the model has read (withExpected); a call without it expects the file not to exist.
+//   Two things travel on a call without being in any schema the model sees. The files plugin adds the version the file
+//   is expected to be at, from what the model has read (withExpected); a call without it expects the file not to exist.
+//   The plugin's preview adds the text it showed (withApproved); the tool then writes that text and nothing else.
 
 import type { AgentTool, ToolCall, ToolOutput, TSchema } from '@ji.dev/llm'
 import type { Hinter } from './hints.ts'
@@ -17,18 +18,23 @@ import { render } from './render.ts'
 import { editTransform, writeTransform } from './transform.ts'
 import { FileError } from './workspace.ts'
 
-/** A tool that changes files, waiting for the workspace it works in; the files plugin gives every tool the same one. */
-export type FileTool = (workspace: Workspace) => AgentTool
-
 type Args<T extends TSchema> = Parameters<AgentTool<T>['run']>[0]
 
-export interface FileToolSpec<T extends TSchema> {
+/**
+ * A tool that changes files, as data: the files plugin turns it into an agent tool on its workspace. Version check,
+ * atomic write and the result text are the same for every file tool.
+ */
+export interface FileTool<T extends TSchema = TSchema> {
   name: string
   description: string
   /** Must have a string `path`: the file one call changes. */
   parameters: T
-  /** The change one call asks for. Version check, atomic write and the result text are the same for every tool. */
-  transform: (args: Args<T>) => Transform
+  /**
+   * The change one call asks for. Must be pure: the same arguments and text give the same result.
+   * Method syntax on purpose, as in AgentTool: FileTool<SpecificSchema> fits in FileTool[].
+   */
+  // eslint-disable-next-line ts/method-signature-style
+  transform(args: Args<T>): Transform
 }
 
 export interface EditOptions {
@@ -40,6 +46,7 @@ export interface EditOptions {
 const DEFAULT_READ_LINES = 2000
 
 const EXPECTED = 'expected_version'
+const APPROVED = 'approved_text'
 
 const readParameters = Type.Object({
   path: Type.String({ description: 'File path, relative to the workspace or absolute' }),
@@ -71,16 +78,23 @@ const editParameters = Type.Object({
   ),
 })
 
-export function fileTool<T extends TSchema>(spec: FileToolSpec<T>): FileTool {
-  const { transform, ...declared } = spec
-  return workspace =>
-    tool({
-      ...declared,
-      run: async (args, signal) => {
-        const { path } = args as { path: string }
-        return render(await commit(workspace, path, expectedOf({ arguments: args }), transform(args), signal), path)
-      },
-    })
+/** Identity; exists so `transform`'s arguments are inferred from the schema. */
+export const fileTool = <T extends TSchema>(t: FileTool<T>): FileTool<T> => t
+
+/** The agent tool of a file tool: one commit of its transform, or of the approved text when the call carries one. */
+export function agentTool(workspace: Workspace, spec: FileTool): AgentTool {
+  return tool({
+    name: spec.name,
+    description: spec.description,
+    parameters: spec.parameters,
+    run: async (args, signal) => {
+      const call = { arguments: args as Record<string, unknown> }
+      const path = String(call.arguments.path)
+      const approved = approvedOf(call)
+      const f = approved === undefined ? spec.transform(args) : writeTransform(approved)
+      return render(await commit(workspace, path, expectedOf(call), f, signal), path)
+    },
+  })
 }
 
 export function readTool(workspace: Resolver & Reader): AgentTool<typeof readParameters> {
@@ -129,14 +143,28 @@ export function editTool({ hinters = defaultHinters }: EditOptions = {}): FileTo
   })
 }
 
-/** The call with the version its file is expected to be at; whatever the model wrote there is replaced. */
+/**
+ * The call with the version its file is expected to be at. Whatever the model wrote there is replaced, and an approved
+ * text it made up is dropped.
+ */
 export function withExpected(call: ToolCall, expected: Expected): ToolCall {
-  return { ...call, arguments: { ...call.arguments, [EXPECTED]: expected } }
+  const { [APPROVED]: _fromModel, ...args } = call.arguments
+  return { ...call, arguments: { ...args, [EXPECTED]: expected } }
+}
+
+/** The call with the new text of its file fixed: the tool writes `text` instead of running its transform again. */
+export function withApproved(call: ToolCall, text: string): ToolCall {
+  return { ...call, arguments: { ...call.arguments, [APPROVED]: text } }
+}
+
+function approvedOf(call: Pick<ToolCall, 'arguments'>): string | undefined {
+  const text: unknown = call.arguments[APPROVED]
+  return typeof text === 'string' ? text : undefined
 }
 
 /** The version withExpected put on a call; 'absent' when there is none. */
 export function expectedOf(call: Pick<ToolCall, 'arguments'>): Expected {
-  const version: unknown = (call.arguments as Record<string, unknown>)[EXPECTED]
+  const version: unknown = call.arguments[EXPECTED]
   return typeof version === 'string' ? (version as Expected) : 'absent'
 }
 

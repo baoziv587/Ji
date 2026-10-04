@@ -42,15 +42,24 @@ function hunksOf({ base, next }: Prepared): ReturnType<typeof structuredPatch>['
   return structuredPatch('', '', base, next, '', '', { context: 0, stripTrailingCr: true }).hunks
 }
 
+/** What a change does, before it is written: `Edit x (+2 -1)`, or `Create x (12 lines)` for a new file. */
+export function summary(p: Prepared, shown: string): string {
+  return `${p.expected === 'absent' ? 'Create' : 'Edit'} ${shown} ${size(p)}`
+}
+
 function applied(a: Applied, shown: string): string {
-  if (a.expected === 'absent') {
-    const lines = lineCount(a.next)
-    return `Created ${shown} (${lines} line${lines === 1 ? '' : 's'}).`
+  return a.expected === 'absent' ? `Created ${shown} ${size(a)}.` : `Edited ${shown} ${size(a)}.\n${diff(a)}`
+}
+
+function size(p: Prepared): string {
+  if (p.expected === 'absent') {
+    const lines = lineCount(p.next)
+    return `(${lines} line${lines === 1 ? '' : 's'})`
   }
-  const changed = hunksOf(a).flatMap(h => h.lines)
+  const changed = hunksOf(p).flatMap(h => h.lines)
   const added = changed.filter(l => l.startsWith('+')).length
   const removed = changed.filter(l => l.startsWith('-')).length
-  return `Edited ${shown} (+${added} -${removed}).\n${diff(a)}`
+  return `(+${added} -${removed})`
 }
 
 function explain(e: EditError, shown: string): string {

@@ -158,12 +158,12 @@ Compose result trimming, call interception and [progress throttling](plugins/thr
 
 ### More capabilities, ready to compose
 
-| Capability       | Examples                                                                                                                            |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Manage context   | [Compaction](apps/examples/src/plugins/compaction.ts), [shorter tool results](apps/examples/src/plugins/truncate-tool-results.ts)   |
-| Keep work moving | [Auto-continue](apps/examples/src/plugins/keep-going.ts), [retrieval and fallback](apps/examples/src/hooks.ts)                      |
-| Control tools    | [Sequential execution](apps/examples/src/plugins/sequential-tools.ts), [progress throttling](plugins/throttle-updates/src/index.ts) |
-| Export events    | [OpenTelemetry](plugins/otel/src/index.ts), [JSONL](plugins/jsonl/src/index.ts)                                                     |
+| Capability       | Examples                                                                                                                                                                                     |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Manage context   | [Compaction](apps/examples/src/plugins/compaction.ts), [shorter tool results](apps/examples/src/plugins/truncate-tool-results.ts)                                                            |
+| Keep work moving | [Auto-continue](apps/examples/src/plugins/keep-going.ts), [retrieval and fallback](apps/examples/src/hooks.ts)                                                                               |
+| Control tools    | [Sequential execution](apps/examples/src/plugins/sequential-tools.ts), [progress throttling](plugins/throttle-updates/src/index.ts), [approval before a call](plugins/approval/src/index.ts) |
+| Export events    | [OpenTelemetry](plugins/otel/src/index.ts), [JSONL](plugins/jsonl/src/index.ts)                                                                                                              |
 
 <br>
 

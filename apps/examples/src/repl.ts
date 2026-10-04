@@ -4,12 +4,15 @@
 //   Ctrl+C during a reply stops only that reply; Ctrl+C at the prompt or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=high turns thinking on (default off); /think <level> switches it mid-chat, thinking shows in gray
+//   The model can read and edit the files under the directory the command was run from, and nothing outside it
+//   Every change to a file is shown as a diff and waits for a yes; /approve turns the question off and on
 //
 // Everything comes from @ji.dev/llm: the model, its thinking levels and the events need nothing from pi-ai.
 import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@ji.dev/llm'
+import type { Question } from '@ji.dev/plugin-approval'
 import process from 'node:process'
 import { styleText } from 'node:util'
-import { cancel, intro, isCancel, log, outro, S_BAR, text } from '@clack/prompts'
+import { cancel, intro, isCancel, log, outro, S_BAR, select, text } from '@clack/prompts'
 import {
   createAgent,
   createSession,
@@ -19,6 +22,8 @@ import {
   UnknownModelError,
   UnsupportedThinkingError,
 } from '@ji.dev/llm'
+import { approval } from '@ji.dev/plugin-approval'
+import { files, localWorkspace } from '@ji.dev/plugin-files'
 
 const calc = tool({
   name: 'calc',
@@ -40,8 +45,120 @@ const now = tool({
   run: () => new Date().toString(),
 })
 
+/** Where the command was run from: pnpm --filter starts the script in the package's own directory. */
+const ROOT = process.env.INIT_CWD ?? process.cwd()
+
+/** read and edit, limited to the files under ROOT. */
+const fileTools = files(localWorkspace(ROOT))
+
+const TOOL_NAMES = [calc, now, ...(fileTools.tools ?? [])].map(t => t.name).join(', ')
+
 /** The run rejects with this when the user presses Ctrl+C to stop a reply. */
 const STOPPED = new Error('stopped by user')
+
+/** The reply being written, if any: what Ctrl+C stops. */
+let current: Run | undefined
+
+/**
+ * One status line: icon, label, and seconds waited.
+ * Not clack's spinner: it puts stdin in raw mode, so Ctrl+C would exit the process instead of stopping the reply.
+ */
+class Status {
+  private static readonly frames = ['◒', '◐', '◓', '◑']
+  private timer: NodeJS.Timeout | undefined
+  private label = ''
+  private since = 0
+  private frame = 0
+
+  show(label: string): void {
+    this.label = label
+    if (this.timer !== undefined || !process.stdout.isTTY) {
+      return
+    }
+
+    this.since = performance.now()
+    process.stdout.write('\x1B[?25l') // hide the cursor
+    this.draw()
+    this.timer = setInterval(() => this.draw(), 80)
+  }
+
+  hide(): void {
+    if (this.timer === undefined) {
+      return
+    }
+
+    clearInterval(this.timer)
+    this.timer = undefined
+    process.stdout.write('\r\x1B[2K\x1B[?25h') // clear the line, show the cursor
+  }
+
+  private draw(): void {
+    const icon = styleText('magenta', Status.frames[this.frame++ % Status.frames.length])
+    const seconds = Math.floor((performance.now() - this.since) / 1000)
+    process.stdout.write(`\r\x1B[2K${icon}  ${this.label} ${dim(`${seconds}s`)}`)
+  }
+}
+
+/** One for the whole REPL: the approval question has to hide it too. */
+const status = new Status()
+
+/** /approve toggles it; "yes, and stop asking" turns it off. */
+let approving = true
+
+/** The question on screen, if any; settled otherwise. */
+let question: Promise<unknown> = Promise.resolve()
+
+/**
+ * Asks before a call runs. The approval plugin knows nothing about files: fileTools.preview tells it what a call would
+ * change, so only changes to files are asked about. Leaving the plugin out is how approval is switched off for good.
+ */
+const approvals = approval({ ask, previews: [fileTools.preview] })
+
+function ask({ title, detail }: Question): Promise<boolean | string> {
+  if (!approving) {
+    return Promise.resolve(true)
+  }
+
+  const answer = (async () => {
+    status.hide()
+    if (detail !== undefined) {
+      log.message(paintDiff(detail), { symbol: styleText('yellow', '±') })
+    }
+    const choice = await select({
+      message: `${title}?`,
+      options: [
+        { value: 'yes', label: 'Yes' },
+        { value: 'always', label: 'Yes, and stop asking', hint: '/approve turns it back on' },
+        { value: 'no', label: 'No' },
+      ],
+    })
+    // Ctrl+C at the question stops the whole reply, like Ctrl+C anywhere else in it
+    if (isCancel(choice)) {
+      current?.abort(STOPPED)
+      return false
+    }
+    if (choice === 'always') {
+      approving = false
+    }
+    return choice === 'no' ? 'The user rejected this change. Ask what they want instead.' : true
+  })()
+  question = answer.catch(() => {})
+  return answer
+}
+
+/** Resolves once no question is on screen, so nothing is drawn over one. */
+async function answered(): Promise<void> {
+  for (let seen; seen !== question;) {
+    seen = question
+    await seen
+  }
+}
+
+function paintDiff(patch: string): string {
+  const color = (line: string): string =>
+    line.startsWith('+') ? styleText('green', line) : line.startsWith('-') ? styleText('red', line) : dim(line)
+  return patch.split('\n').map(color).join('\n')
+}
 
 /**
  * Maps run events to terminal lines. ASCII stand-ins for the real glyphs; every kind differs in shape as well as
@@ -61,7 +178,6 @@ const STOPPED = new Error('stopped by user')
 async function render(r: Run): Promise<void> {
   const started = performance.now()
   const out = new Gutter()
-  const status = new Status()
   const running = new Map<string, string>()
   let afterCall = false
 
@@ -75,6 +191,7 @@ async function render(r: Run): Promise<void> {
   wait('Waiting')
   try {
     for await (const e of r) {
+      await answered()
       switch (e.type) {
         case 'model_start':
           // The level actually sent, after any plugin and after mapping to what the model supports
@@ -209,46 +326,6 @@ class Gutter {
   }
 }
 
-/**
- * One status line: icon, label, and seconds waited.
- * Not clack's spinner: it puts stdin in raw mode, so Ctrl+C would exit the process instead of stopping the reply.
- */
-class Status {
-  private static readonly frames = ['◒', '◐', '◓', '◑']
-  private timer: NodeJS.Timeout | undefined
-  private label = ''
-  private since = 0
-  private frame = 0
-
-  show(label: string): void {
-    this.label = label
-    if (this.timer !== undefined || !process.stdout.isTTY) {
-      return
-    }
-
-    this.since = performance.now()
-    process.stdout.write('\x1B[?25l') // hide the cursor
-    this.draw()
-    this.timer = setInterval(() => this.draw(), 80)
-  }
-
-  hide(): void {
-    if (this.timer === undefined) {
-      return
-    }
-
-    clearInterval(this.timer)
-    this.timer = undefined
-    process.stdout.write('\r\x1B[2K\x1B[?25h') // clear the line, show the cursor
-  }
-
-  private draw(): void {
-    const icon = styleText('magenta', Status.frames[this.frame++ % Status.frames.length])
-    const seconds = Math.floor((performance.now() - this.since) / 1000)
-    process.stdout.write(`\r\x1B[2K${icon}  ${this.label} ${dim(`${seconds}s`)}`)
-  }
-}
-
 function bar(): string {
   return styleText('gray', S_BAR)
 }
@@ -263,8 +340,9 @@ function startAgent(): Agent {
     return createAgent({
       model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`,
       thinking: (process.env.DEEPSEEK_THINKING ?? 'off') as ThinkingLevel,
-      system: 'You are a concise assistant running in a terminal. Use tools when they help.',
+      system: `You are a concise assistant running in a terminal. Use tools when they help. File paths are relative to ${ROOT}.`,
       tools: [calc, now],
+      plugins: [fileTools, approvals],
     })
   } catch (error) {
     if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
@@ -284,12 +362,13 @@ const MISSING_KEY =
   'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
 
 // clack handles Ctrl+C at the prompt (returning a cancel), so SIGINT only arrives here mid-reply
-let current: Run | undefined
 process.on('SIGINT', () => (current ? current.abort(STOPPED) : process.exit(130)))
 
 intro(`ji · ${agent.model.provider}/${agent.model.id}`)
 log.message(
-  dim(`thinking: ${agent.thinking} · tools: calc, now\n/think <${levels}> · Ctrl+C stops a reply · /exit quits`),
+  dim(
+    `thinking: ${agent.thinking} · tools: ${TOOL_NAMES} · files: ${ROOT}\n/think <${levels}> · /approve · Ctrl+C stops a reply · /exit quits`,
+  ),
   { spacing: 0 },
 )
 // The key is only needed to send, so its absence is pointed out without blocking anything else
@@ -312,6 +391,11 @@ for (;;) {
     break
   }
   if (message === '') {
+    continue
+  }
+  if (message === '/approve') {
+    approving = !approving
+    log.success(`Approval before file changes: ${approving ? 'on' : 'off'}`)
     continue
   }
   if (message === '/think' || message.startsWith('/think ')) {

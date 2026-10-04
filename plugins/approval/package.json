@@ -1,9 +1,9 @@
 {
-  "name": "@ji.dev/plugin-files",
+  "name": "@ji.dev/plugin-approval",
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "description": "Read and edit tools with strict matching, version checks and atomic writes (rfcs/tools/edit-tool-algebra.md)",
+  "description": "Asks a person before a tool call runs",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -13,12 +13,8 @@
   "peerDependencies": {
     "@ji.dev/llm": "workspace:*"
   },
-  "dependencies": {
-    "diff": "^9.0.0"
-  },
   "devDependencies": {
     "@ji.dev/llm": "workspace:*",
-    "@ji.dev/plugin-approval": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }
 }
