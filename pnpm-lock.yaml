@@ -312,6 +312,9 @@ importers:
 
   plugins/throttle-updates:
     devDependencies:
+      '@ji.dev/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm

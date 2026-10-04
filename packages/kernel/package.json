@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./advanced": "./src/advanced.ts",
-    "./reduce": "./src/reduce.ts"
+    "./reduce": "./src/reduce.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

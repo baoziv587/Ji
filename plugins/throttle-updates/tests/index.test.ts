@@ -1,5 +1,6 @@
-import type { AgentTool, Api, Model, PluginList, RunEvent } from '@ji.dev/llm'
-import { createAgent, createSession, tool, Type } from '@ji.dev/llm'
+import type { AgentTool, Api, HookContext, Model, Payload, PluginList, RunEvent, ToolCall } from '@ji.dev/llm'
+import { answerAll, recorder } from '@ji.dev/kernel/testing'
+import { createAgent, createSession, tool, toolResult, Type } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -53,6 +54,25 @@ describe('throttleUpdates', () => {
       }),
       { numRuns: 50 },
     )
+  })
+
+  it('should hand replies back to the events it lets through, and none to the updates it drops (I15)', async () => {
+    // Arrange: updates at 0, 40, 120 ms around a plugin event
+    const call: ToolCall = { type: 'toolCall', id: 'c', name: 'updating', arguments: {} }
+    const update = (data: number): Payload => ({ type: 'tool_update', call, data })
+    const deltas: Payload[] = [update(0), update(1), { type: 'tool_start', call }, update(2)]
+    const inner = recorder(deltas, toolResult(call, 'done'))
+    const toolCall = throttleUpdates({ ms: 100, now: scriptedClock([0, 40, 120]) }).toolCall!
+
+    // Act
+    const { sent } = await answerAll(
+      toolCall(call, () => inner.stream, {} as HookContext),
+      (_, i) => `reply ${i}`,
+    )
+
+    // Assert
+    expect(sent).toHaveLength(3)
+    expect(inner.got.map(x => x.reply)).toEqual(['reply 0', undefined, 'reply 1', 'reply 2'])
   })
 })
 

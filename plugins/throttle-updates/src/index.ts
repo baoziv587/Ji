@@ -21,26 +21,30 @@ export function throttleUpdates({ ms = 100, now = () => performance.now() }: Thr
   })
 }
 
-/** One call's stream: an update closer than `ms` to the last one let through is dropped. */
+/** One call's stream: an update closer than `ms` to the last one let through is dropped and gets no reply (I15). */
 async function* dropUpdatesWithin<T>(events: Stream<Payload, T>, ms: number, now: () => number): Stream<Payload, T> {
   let last: number | undefined
-  try {
-    for (;;) {
-      const next = await events.next()
-      if (next.done) {
-        return next.value
-      }
-
-      const e = next.value
-      if (e.type === 'tool_update') {
-        const time = now()
-        if (last !== undefined && time - last < ms) {
-          continue
-        }
-        last = time
-      }
-      yield e
+  const keep = (e: Payload): boolean => {
+    if (e.type !== 'tool_update') {
+      return true
     }
+
+    const time = now()
+    if (last !== undefined && time - last < ms) {
+      return false
+    }
+    last = time
+    return true
+  }
+
+  try {
+    let next = await events.next()
+    while (!next.done) {
+      const e = next.value
+      const reply = keep(e) ? yield e : undefined
+      next = await events.next(reply)
+    }
+    return next.value
   } finally {
     // Cancelling the throttled stream cancels the tool behind it
     await events.return(undefined as never)
