@@ -1,9 +1,11 @@
 // The files plugin against pi-ai's faux provider: the scenarios of RFC §2, as the model sees them
 import type { AgentState, Api, Model, ToolResultMessage } from '@ji.dev/llm'
+import type { Ask, Question } from '@ji.dev/plugin-approval'
 import type { FauxResponseStep } from '@mariozechner/pi-ai'
 import type { FilesOptions, MemWorkspace } from '../src/index.ts'
 import { posix } from 'node:path'
 import { createAgent, createSession, Type } from '@ji.dev/llm'
+import { approval } from '@ji.dev/plugin-approval'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
 import { editTool, files, fileTool, memWorkspace, ok } from '../src/index.ts'
@@ -239,6 +241,145 @@ describe('fileTool', () => {
   })
 })
 
+describe('preview, with the approval plugin', () => {
+  const editOne = ['edit', { path: 'a.ts', edits: [{ old_text: 'one', new_text: 'two' }] }] as const
+
+  it('should show the change before anything is written, and leave the file alone when it is refused (scenario 2.10)', async () => {
+    // Arrange
+    const workspace = rooted({ '/w/a.ts': 'one\n' })
+    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
+    const asked: Pick<Question, 'title' | 'detail'>[] = []
+
+    // Act
+    const results = await approving(workspace, model, ({ title, detail }) => {
+      asked.push({ title, detail })
+      return 'The user rejected this change.'
+    })
+
+    // Assert
+    expect(asked).toEqual([{ title: 'Edit a.ts (+1 -1)', detail: '@@ -1,1 +1,1 @@\n-one\n+two' }])
+    expect(results[1]).toMatchObject({ isError: true, content: [{ text: 'The user rejected this change.' }] })
+    expect(workspace.get('/w/a.ts')).toBe('one\n')
+  })
+
+  it('should write the change once it is approved, and show a new file as one', async () => {
+    // Arrange
+    const workspace = rooted({ '/w/a.ts': 'one\n' })
+    const model = faux([
+      calls(['read', { path: 'a.ts' }]),
+      calls([...editOne], ['edit', { path: 'new.ts', content: 'a\nb\n' }]),
+      fauxAssistantMessage('done'),
+    ])
+    const titles: string[] = []
+
+    // Act
+    const results = await approving(workspace, model, ({ title }) => {
+      titles.push(title)
+      return true
+    })
+
+    // Assert
+    expect(titles).toEqual(['Edit a.ts (+1 -1)', 'Create new.ts (2 lines)'])
+    expect(text(results[1])).toMatch(/^Edited a\.ts \(\+1 -1\)\./)
+    expect(workspace.get('/w/a.ts')).toBe('two\n')
+    expect(workspace.get('/w/new.ts')).toBe('a\nb\n')
+  })
+
+  it('should not ask about calls that change no file, nor about a change the tool refuses', async () => {
+    // Arrange
+    const workspace = rooted({ '/w/a.ts': 'one\n', '/w/b.ts': 'b\n' })
+    const model = faux([
+      calls(['read', { path: 'a.ts' }], ['edit', { path: 'b.ts', content: 'unread' }]),
+      calls(['edit', { path: 'a.ts', edits: [{ old_text: 'missing', new_text: 'x' }] }]),
+      calls(['edit', { path: 'a.ts', edits: 'not a list' }]),
+      calls(['edit', { edits: [{ old_text: 'one', new_text: 'two' }] }]),
+      fauxAssistantMessage('done'),
+    ])
+    let asked = 0
+
+    // Act
+    const results = await approving(workspace, model, () => {
+      asked++
+      return true
+    })
+
+    // Assert
+    expect(asked).toBe(0)
+    expect(results.map(r => r.isError)).toEqual([false, true, true, true, true])
+    expect(text(results[1])).toContain('b.ts exists and you have not read it.')
+    expect(text(results[2])).toContain('old_text not found')
+    expect(text(results[4])).toContain('path must be a string.')
+    expect(workspace.get('/w/b.ts')).toBe('b\n')
+  })
+
+  it('should write the text that was shown, not what a second run of the transform gives (E9)', async () => {
+    // Arrange: a transform that breaks the rule and returns something new every time
+    let runs = 0
+    const stamp = fileTool({
+      name: 'stamp',
+      description: 'Write a run number to a file.',
+      parameters: Type.Object({ path: Type.String() }),
+      transform: () => () => ok(`run ${++runs}\n`),
+    })
+    const workspace = rooted({})
+    const model = faux([calls(['stamp', { path: 'n.txt' }]), fauxAssistantMessage('done')])
+    const shown: (string | undefined)[] = []
+
+    // Act
+    await approving(
+      workspace,
+      model,
+      ({ detail }) => {
+        shown.push(detail)
+        return true
+      },
+      { tools: [stamp] },
+    )
+
+    // Assert
+    expect(shown).toEqual(['@@ -1,0 +1,1 @@\n+run 1'])
+    expect(workspace.get('/w/n.txt')).toBe('run 1\n')
+  })
+
+  it('should write nothing when the file changes while the person is deciding', async () => {
+    // Arrange
+    const workspace = rooted({ '/w/a.ts': 'one\n' })
+    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
+
+    // Act
+    const results = await approving(workspace, model, () => {
+      workspace.set('/w/a.ts', 'one, edited by hand\n')
+      return true
+    })
+
+    // Assert
+    expect(text(results[1])).toContain('The file is not at the version you last read')
+    expect(workspace.get('/w/a.ts')).toBe('one, edited by hand\n')
+  })
+
+  it('should ask the same whichever of the two plugins comes first', async () => {
+    // Arrange
+    const workspace = rooted({ '/w/a.ts': 'one\n' })
+    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
+    const fileTools = files(workspace)
+    const titles: string[] = []
+    const asking = approval({
+      ask: ({ title }) => {
+        titles.push(title)
+        return true
+      },
+      previews: [fileTools.preview],
+    })
+
+    // Act
+    await createSession(createAgent({ model, plugins: [asking, fileTools] })).send('go').state
+
+    // Assert
+    expect(titles).toEqual(['Edit a.ts (+1 -1)'])
+    expect(workspace.get('/w/a.ts')).toBe('two\n')
+  })
+})
+
 // Helpers
 
 const registrations: { unregister: () => void }[] = []
@@ -272,6 +413,19 @@ async function resultsOf(
   options?: FilesOptions,
 ): Promise<ToolResultMessage[]> {
   const state = await createSession(createAgent({ model, plugins: [files(workspace, options)] })).send('go').state
+  return toolResults(state)
+}
+
+/** The files plugin, and the approval plugin asking about what its preview shows. */
+async function approving(
+  workspace: MemWorkspace,
+  model: Model<Api>,
+  ask: Ask,
+  options?: FilesOptions,
+): Promise<ToolResultMessage[]> {
+  const fileTools = files(workspace, options)
+  const plugins = [fileTools, approval({ ask, previews: [fileTools.preview] })]
+  const state = await createSession(createAgent({ model, plugins })).send('go').state
   return toolResults(state)
 }
 

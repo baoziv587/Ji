@@ -6,24 +6,17 @@
 //   Workspace   the IO port: resolve, read, publish. localWorkspace for the file system, memWorkspace for tests
 //   Transform   the file's new text from its current text: editTransform, writeTransform, chain, or your own
 //   commit      publish ∘ transform ∘ read; prepare is commit without the publish
-//   fileTool    a tool from a schema and a Transform; files is the plugin: read + file tools + the ledger
+//   fileTool    a tool as a schema and a Transform; files is the plugin: read + file tools + the ledger
+//   approval    another plugin: approval({ ask, previews: [fileTools.preview] }) of @ji.dev/plugin-approval
 
 export { type Applied, commit, prepare, type Prepared } from './commit.ts'
 export type { Edit } from './core/plan.ts'
 export { err, ok, type Result } from './core/result.ts'
 export { type Candidate, defaultHinters, type Hinter, lineHinter } from './hints.ts'
 export { type LocalOptions, localWorkspace } from './node.ts'
-export { files, type FilesOptions, type Ledger } from './plugin.ts'
+export { type ChangePreview, files, type FilesOptions, type FilesPlugin, type Ledger } from './plugin.ts'
 export { diff } from './render.ts'
-export {
-  type EditOptions,
-  editTool,
-  expectedOf,
-  type FileTool,
-  fileTool,
-  type FileToolSpec,
-  readTool,
-} from './tools.ts'
+export { type EditOptions, editTool, type FileTool, fileTool, readTool } from './tools.ts'
 export { chain, type EditError, editTransform, type Transform, writeTransform } from './transform.ts'
 export {
   type Expected,

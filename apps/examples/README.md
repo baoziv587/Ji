@@ -196,4 +196,6 @@ DEEPSEEK_THINKING=high ...           # 打开思考，默认 off；可用档位 
 - 回答中按 Ctrl+C 调用 `r.abort()`，只停止这一次回答；会话回到发送前的状态，那条消息填回输入框，可以改了再发。出错时也一样。
 - `/think <档位>` 在对话中切换思考档位：用新档位 `createAgent`，再用 `createSession(agent, { state: chat.state })` 接着聊。思考过程（`thinking`）灰色显示。
 - 在输入框按 Ctrl+C 或输入 `/exit` 退出。
+- 装了 [`@ji.dev/plugin-files`](../../plugins/files/src/index.ts) 的 `read` 和 `edit`：模型可以读写运行命令时所在目录下的文件，目录之外的路径会被拒绝。回答被 Ctrl+C 停止时会话回滚，但已经写入磁盘的修改不会撤销；模型下次修改那个文件前会被要求重新读取。
+- 每次修改写入前先显示 diff，再问“应用 / 应用并不再询问 / 拒绝”；`/approve` 开关这个询问。审批是通用插件 `@ji.dev/plugin-approval`，不认识文件：`approval({ ask, previews: [fileTools.preview] })`，`preview` 说明一次调用将做什么，`ask` 负责问人。换成 `previews: [named('bash')]` 或不传，就能审批任何工具。
 - 状态行没有用 clack 的 `spinner`：它把 stdin 切到 raw 模式，Ctrl+C 会直接退出进程。
