@@ -8,11 +8,15 @@
 // To the program, stdout is the content area: its writes go to the headless terminal, and its columns and rows are
 // that terminal's, so clack wraps and redraws there as in any terminal of that size. Keys come from `keys`, which is
 // stdin without the mouse's reports. On stop, the content is printed to the normal screen and stays in its scrollback.
+//
+// The content comes in two views, each its own headless terminal, and toggle() shows the other one. stdout writes
+// to both; `brief` and `full` write to one only, for what each view shows its own way. A question redraws in both
+// alike, so switching never needs the conversation written again.
 
 import type { IBufferCell, Terminal } from '@xterm/headless'
 import { Buffer } from 'node:buffer'
 import process from 'node:process'
-import { PassThrough } from 'node:stream'
+import { PassThrough, Writable } from 'node:stream'
 import xterm from '@xterm/headless'
 import { lineOf, textOf } from './cells.ts'
 
@@ -23,6 +27,9 @@ export interface Frame {
   /** Row and column in the bottom bar; without one the cursor is hidden. */
   cursor?: { row: number; column: number }
 }
+
+/** brief leaves out what full shows in detail. */
+export type View = 'brief' | 'full'
 
 /** Lines the wheel scrolls per notch. */
 const WHEEL = 3
@@ -46,7 +53,7 @@ const TRACK = '\x1B[2m│\x1B[0m'
 
 /** What the screen holds while it is on. */
 interface Running {
-  term: Terminal
+  terms: Record<View, Terminal>
   /** Reused for every cell read, to spare allocating one each time. */
   cell: IBufferCell
   /** stdout's own write. */
@@ -58,9 +65,13 @@ interface Running {
 export class Screen {
   /** stdin without the mouse's reports: what the program and its prompts read keys from. */
   readonly keys = new PassThrough()
+  /** Writes to one view only. */
+  readonly brief = this.only('brief')
+  readonly full = this.only('full')
 
   private readonly frame: (columns: number) => Frame
   private running: Running | undefined
+  private shownView: View = 'brief'
 
   /** The first line shown, while scrolled back; undefined while following the end. */
   private top: number | undefined
@@ -82,24 +93,28 @@ export class Screen {
 
     // A CommonJS package, so its classes come from the default export. A terminal's driver turns \n into \r\n, and
     // convertEol does the same; buffer is a proposed API
-    const term = new xterm.Terminal({
-      cols: columns - 1,
-      rows: this.contentRows(columns, rows),
-      scrollback: 10_000,
-      convertEol: true,
-      allowProposedApi: true,
-    })
+    const view = (): Terminal =>
+      new xterm.Terminal({
+        cols: columns - 1,
+        rows: this.contentRows(columns, rows),
+        scrollback: 10_000,
+        convertEol: true,
+        allowProposedApi: true,
+      })
+    const terms = { brief: view(), full: view() }
 
     const write = out.write.bind(out)
     const original = out.write
     // Node sets columns and rows to the real size on a resize, and getWindowSize reads them back: the setters keep it
     Object.defineProperties(out, {
-      columns: { get: () => term.cols, set: (n: number) => (this.size.columns = n), configurable: true },
-      rows: { get: () => term.rows, set: (n: number) => (this.size.rows = n), configurable: true },
+      columns: { get: () => terms.brief.cols, set: (n: number) => (this.size.columns = n), configurable: true },
+      rows: { get: () => terms.brief.rows, set: (n: number) => (this.size.rows = n), configurable: true },
     })
     out.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
       const callback = rest.find(arg => typeof arg === 'function') as (() => void) | undefined
-      term.write(typeof chunk === 'string' ? chunk : Buffer.from(chunk), () => {
+      const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk)
+      terms.brief.write(text, () => this.draw())
+      terms.full.write(text, () => {
         callback?.()
         this.draw()
       })
@@ -123,32 +138,51 @@ export class Screen {
       stdin.pause()
     }
 
-    this.running = { term, cell: term.buffer.active.getNullCell(), write, restore }
+    this.running = { terms, cell: terms.brief.buffer.active.getNullCell(), write, restore }
     write(ENTER)
     this.draw()
   }
 
   /** Resolves once everything written so far is in the content. */
-  settled(): Promise<void> {
-    const term = this.running?.term
-    return new Promise(resolve => (term === undefined ? resolve() : term.write('', resolve)))
+  async settled(): Promise<void> {
+    if (this.running === undefined) {
+      return
+    }
+
+    const { brief, full } = this.running.terms
+    await Promise.all([brief, full].map(term => new Promise<void>(resolve => term.write('', resolve))))
   }
 
-  /** Back to the normal screen, with the content printed there; whatever is still unparsed is left out. */
+  /**
+   * Back to the normal screen, with the content printed there in the view on screen; whatever is still unparsed is
+   * left out.
+   */
   stop(): void {
     if (this.running === undefined) {
       return
     }
 
-    const { term, cell, write, restore } = this.running
+    const { terms, cell, write, restore } = this.running
     this.running = undefined
     restore()
 
-    const buffer = term.buffer.active
+    const buffer = terms[this.shownView].buffer.active
     const lines = Array.from({ length: buffer.length }, (_, y) => buffer.getLine(y))
     const text = textOf(lines, cell)
     write(`${LEAVE}${text}${text === '' ? '' : '\n'}`)
-    term.dispose()
+    terms.brief.dispose()
+    terms.full.dispose()
+  }
+
+  /** The view on screen. */
+  get view(): View {
+    return this.shownView
+  }
+
+  /** Shows the other view, at its end: its lines are not the same as this one's, so the place scrolled to is not kept. */
+  toggle(): void {
+    this.shownView = this.shownView === 'brief' ? 'full' : 'brief'
+    this.follow()
   }
 
   /** Redraws on the next turn of the event loop, once for everything that changed until then. */
@@ -170,7 +204,7 @@ export class Screen {
       return
     }
 
-    const end = this.running.term.buffer.active.baseY
+    const end = this.running.terms[this.shownView].buffer.active.baseY
     const top = Math.min(Math.max((this.top ?? end) + lines, 0), end)
     this.top = top === end ? undefined : top
     this.draw()
@@ -178,7 +212,7 @@ export class Screen {
 
   /** Scrolls by a page, keeping a line of the last one. */
   page(direction: 1 | -1): void {
-    this.scroll(direction * Math.max(1, (this.running?.term.rows ?? 1) - 1))
+    this.scroll(direction * Math.max(1, (this.running?.terms.brief.rows ?? 1) - 1))
   }
 
   /** Follows the end again. */
@@ -192,7 +226,7 @@ export class Screen {
     if (this.running === undefined || this.top === undefined) {
       return 0
     }
-    return this.running.term.buffer.active.baseY - this.top
+    return this.running.terms[this.shownView].buffer.active.baseY - this.top
   }
 
   private paint(): void {
@@ -222,7 +256,8 @@ export class Screen {
   }
 
   /** The window of the content, each row with its piece of the scrollbar. */
-  private content({ term, cell }: Running): string[] {
+  private content({ terms, cell }: Running): string[] {
+    const term = terms[this.shownView]
     const buffer = term.buffer.active
     const top = Math.min(this.top ?? buffer.baseY, buffer.baseY)
     const bar = scrollbar(term.rows, buffer.length, top)
@@ -232,6 +267,19 @@ export class Screen {
   private contentRows(columns: number, rows: number): number {
     const frame = this.frame(columns)
     return Math.max(1, rows - frame.top.length - frame.bottom.length)
+  }
+
+  /** A stream into one view, for clack's `output`; it wraps at the content's width as stdout does. */
+  private only(view: View): Writable {
+    const stream = new Writable({
+      write: (chunk: Buffer, _encoding, done) => {
+        this.running?.terms[view].write(chunk, () => this.draw())
+        // At once, so the next write is not held back behind this one, out of order with stdout's
+        done()
+      },
+    })
+    Object.defineProperty(stream, 'columns', { get: () => process.stdout.columns })
+    return stream
   }
 
   /** Takes the wheel out of stdin; the rest are keys. */
@@ -256,7 +304,9 @@ export class Screen {
     }
 
     const { columns, rows } = this.size
-    this.running.term.resize(columns - 1, this.contentRows(columns, rows))
+    for (const term of Object.values(this.running.terms)) {
+      term.resize(columns - 1, this.contentRows(columns, rows))
+    }
     this.shown = []
     this.running.write('\x1B[2J')
     this.draw()
