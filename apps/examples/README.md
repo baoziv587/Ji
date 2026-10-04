@@ -188,7 +188,7 @@ usageOf(chat.state) // 整段对话
 ```bash
 DEEPSEEK_API_KEY=sk-... pnpm --filter @ji.dev/examples repl
 DEEPSEEK_MODEL=deepseek-v4-pro ...   # 换模型，默认 deepseek-v4-flash
-DEEPSEEK_THINKING=high ...           # 打开思考，默认 off；可用档位 off / high / xhigh
+DEEPSEEK_THINKING=off ...            # 关闭思考，默认 high；可用档位 off / high / xhigh
 ```
 
 用 [clack](https://bomb.sh/docs/clack/basics/getting-started/) 读输入。一个会话接一个 `send`，读 `Run` 本身（`for await (const e of r)`）：`text` 边生成边写出，`tool_call` 显示工具名和参数，`tool_end` 显示工具结果，等待模型或工具时显示状态行和已等待的秒数。
@@ -197,7 +197,8 @@ DEEPSEEK_THINKING=high ...           # 打开思考，默认 off；可用档位 
 - `/think <档位>` 在对话中切换思考档位：用新档位 `createAgent`，再用 `createSession(agent, { state: chat.state })` 接着聊。思考过程（`thinking`）灰色显示。
 - 在输入框按 Ctrl+C 或输入 `/exit` 退出。
 - 装了 [`@ji.dev/plugin-files`](../../plugins/files/src/index.ts) 的 `read` 和 `edit`：模型可以读写运行命令时所在目录下的文件，目录之外的路径会被拒绝。回答被 Ctrl+C 停止时会话回滚，但已经写入磁盘的修改不会撤销；模型下次修改那个文件前会被要求重新读取。
-- 每次读文件前、每次改文件写入前（先显示 diff）都要等你选 Yes / No。Shift+Tab 在“逐个确认”和“自动同意”之间切换，输入框和确认问题的标题都会显示当前模式；在确认问题上切换只影响之后的调用，这个问题仍要你来回答。
-- 启动目录之外的文件也能读写，但无论哪种模式都要先确认，问题标题末尾会用黄色标出 `(outside the workspace)`。自动同意只覆盖启动目录。
-- 审批按 RFC-0007 的写法：`approval({ previews: [fileCalls] })` 在 `toolCall` 层 `yield` 一个 `ask:choice` 事件，这个 `yield` 的值就是选择；`answerer({ answer })` 在 `toolCalls` 层回答它，`answer` 只负责问人。模式决定的是“问不问”（`fileCalls` 这个 preview 在自动模式下对启动目录内的调用返回 `undefined`），不是“怎么答”。两个插件都不认识文件和终端：`preview` 说明一次调用将做什么。换成 `previews: [named('bash')]` 或不传，就能审批任何工具。
+- 每次读文件前、每次改文件写入前（先显示 diff）都要等你确认。Shift+Tab 在“逐个确认”和“自动同意”之间切换，输入框和确认问题的标题都会显示当前模式；在确认问题上切换只影响之后的调用，这个问题仍要你来回答。确认问题里还有两个快捷选项：“Yes, and approve the rest inside the workspace”（同意并切到自动），以及读文件时的“Yes, and stop asking about reads inside the workspace”。
+- 启动目录之外的文件也能读写，但无论哪种模式都要先确认，问题标题末尾会用黄色标出 `(outside the workspace)`，光标默认停在 No。自动同意只覆盖启动目录。
+- 模型可以用 `ask_user` 工具自己提问、自己给选项：一个问题是单选或多选，几个问题就是 Tabs（←/→ 切换，最后一个 Tab 汇总提交），每个问题都能选 Other 自己输入。任何问题按 Esc 都只是关掉这一个（审批算 No），回复继续；Ctrl+C 停掉整个回复。停掉时如果已经改过文件，提示里会列出来。
+- 这些都来自一个插件：`choices({ answer, approve: [fileCalls] })`。它带上 `ask_user` 工具，在 `toolCall` 层对 `approve` 里的 preview 提出的调用 `yield` 一个 `ask:choices` 事件，并在 `toolCalls` 层用 `answer` 回答所有问题（RFC-0007 §5）；`@ji.dev/plugin-choices/terminal` 的 `terminal()` 就是一个在终端里画问题的 `answer`。模式决定的是“问不问”（`fileCalls` 在自动模式下对启动目录内的调用返回 `undefined`），不是“怎么答”。换成 `approve: [named('bash')]` 或 `[everyCall]`，就能审批任何工具。
 - 状态行没有用 clack 的 `spinner`：它把 stdin 切到 raw 模式，Ctrl+C 会直接退出进程。

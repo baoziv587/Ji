@@ -3,18 +3,19 @@
 //   Enter sends; replies stream in, with one line per tool call and one per result as each call finishes
 //   Ctrl+C during a reply stops only that reply; Ctrl+C at the prompt or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
-//   DEEPSEEK_THINKING=high turns thinking on (default off); /think <level> switches it mid-chat, thinking shows in gray
+//   DEEPSEEK_THINKING=off turns thinking off (default high); /think <level> switches it mid-chat, thinking shows in gray
 //   The model can read and edit files: every read, and every change shown as a diff, waits for a yes
 //   Shift+Tab switches to auto-approve and back; auto-approve covers only the directory the command was run from, and
-//   a call reaching outside it is still asked about
+//   a call reaching outside it is still asked about, with No under the cursor
+//   The model can ask questions of its own, with options it writes; Esc dismisses any question
 //
 // Everything comes from @ji.dev/llm: the model, its thinking levels and the events need nothing from pi-ai.
 import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@ji.dev/llm'
-import type { ChoiceQuestion, Preview } from '@ji.dev/plugin-approval'
+import type { Option, Preview, Questions, Reply } from '@ji.dev/plugin-choices'
 import process from 'node:process'
 import { emitKeypressEvents } from 'node:readline'
 import { styleText } from 'node:util'
-import { cancel, intro, isCancel, log, outro, S_BAR, select, text } from '@clack/prompts'
+import { cancel, intro, isCancel, log, outro, S_BAR, text } from '@clack/prompts'
 import {
   createAgent,
   createSession,
@@ -24,7 +25,8 @@ import {
   UnknownModelError,
   UnsupportedThinkingError,
 } from '@ji.dev/llm'
-import { answerer, approval } from '@ji.dev/plugin-approval'
+import { choices, DISMISSED } from '@ji.dev/plugin-choices'
+import { terminal } from '@ji.dev/plugin-choices/terminal'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
 
 const calc = tool({
@@ -60,27 +62,30 @@ const rooted = localWorkspace(ROOT)
 
 const FILE_TOOLS = new Set(fileTools.tools?.map(t => t.name))
 
-type Mode = 'ask' | 'auto'
-
-/** Each starts with the mode's name, the word the help line uses for it. */
-const MODES: Record<Mode, string> = {
-  ask: 'ask: before every file read and change',
-  auto: 'auto: approves inside the workspace, asks outside it',
-}
-
 /** Shift+Tab switches it, at the prompt or at a question. */
-let mode: Mode = 'ask'
+let mode: 'ask' | 'auto' = 'ask'
+
+/** In ask mode, until the person answers a read with "stop asking about reads". */
+let askReads = true
+
+/** Starts with the mode's name, the word the help line uses for it. */
+function describeMode(): string {
+  if (mode === 'auto') {
+    return 'auto: approves inside the workspace, asks outside it'
+  }
+  return `ask: before every file ${askReads ? 'read and change' : 'change'}`
+}
 
 /** The files plugin's preview covers only changes; reads are asked about too. */
 const reading: Preview = call => (call.name === 'read' ? { title: `Read ${String(call.arguments.path)}` } : undefined)
 
 /**
- * Which file calls are asked about: inside ROOT, only in ask mode; outside it, always, so auto mode never reaches past
- * ROOT unseen. The mode decides what is asked, not how it is answered: every question goes to the person.
+ * Which file calls are asked about: inside ROOT, only what the mode asks about; outside it, always, so auto mode never
+ * reaches past ROOT unseen. The mode decides what is asked, not how it is answered: every question goes to the person.
  */
 const fileCalls: Preview = async (call, signal) => {
   const far = await outsideRoot(call)
-  if (mode === 'auto' && !far) {
+  if (!far && (mode === 'auto' || (call.name === 'read' && !askReads))) {
     return undefined
   }
 
@@ -88,8 +93,8 @@ const fileCalls: Preview = async (call, signal) => {
   if (!far || proposal === undefined || 'role' in proposal) {
     return proposal
   }
-  // The riskiest kind of call, so it is the one question that stands out
-  return { ...proposal, title: `${proposal.title} ${styleText('yellow', '(outside the workspace)')}` }
+  // The riskiest kind of call, so it is the one question that stands out, and a yes has to be chosen
+  return { ...proposal, title: `${proposal.title} ${styleText('yellow', '(outside the workspace)')}`, initial: 'no' }
 }
 
 async function outsideRoot(call: ToolCall): Promise<boolean> {
@@ -104,10 +109,10 @@ async function outsideRoot(call: ToolCall): Promise<boolean> {
 }
 
 /**
- * approval asks before a call by yielding a question; answerer replies to it from outside the tools (RFC-0007 §5).
- * Neither knows about files or about the terminal: the preview says what a call does, `answer` asks the person.
+ * The model asks with ask_user, and fileCalls says which calls wait for a yes (RFC-0007 §5). Neither knows about the
+ * terminal: `answer` puts every question to the person.
  */
-const approvals = [approval({ previews: [fileCalls] }), answerer({ answer })]
+const asking = choices({ answer, approve: [fileCalls] })
 
 // The terminal: the reply in progress and the status line, shared by the question and the reply
 
@@ -183,51 +188,85 @@ function readKeys(on: boolean): void {
 
 // Asking the person
 
-/** Set while a question is on screen: switching the mode shows it again under the new mode. */
+/** Draws the questions; Esc dismisses them, and Ctrl+C stops the reply through the keypress listener. */
+const ask = terminal({ paint: paintDiff })
+
+/** A yes that also changes what is asked from now on: what Shift+Tab or a second question would otherwise take. */
+const SHORTCUTS = {
+  auto: { value: 'auto', label: 'Yes, and approve the rest inside the workspace' },
+  reads: { value: 'reads', label: 'Yes, and stop asking about reads inside the workspace' },
+}
+
+/** The ask closes with this when Shift+Tab switches the mode, to show the question again under the new one. */
+const SWITCHED = new Error('mode switched')
+
+/** Set while a question is on screen. */
 let onModeSwitch: (() => void) | undefined
 
 /** The question on screen, if any; settled otherwise. */
 let question: Promise<unknown> = Promise.resolve()
 
-function answer(q: ChoiceQuestion, signal: AbortSignal): Promise<string | undefined> {
-  const choice = choose(q, signal)
-  question = choice.catch(() => {})
-  return choice
+function answer(q: Questions, signal: AbortSignal): Promise<Reply> {
+  const reply = choose(q, signal)
+  question = reply.catch(() => {})
+  return reply
 }
 
-async function choose(q: ChoiceQuestion, signal: AbortSignal): Promise<string | undefined> {
+async function choose(q: Questions, signal: AbortSignal): Promise<Reply> {
   status.hide()
-  if (q.detail !== undefined) {
-    log.message(paintDiff(q.detail), { symbol: styleText('yellow', '±') })
-  }
+  const far = q.call !== undefined && (await outsideRoot(q.call))
 
-  // Switching the mode leaves this question open: it shows again, and the new mode applies to the calls after it
+  let shown = q
   for (;;) {
     const switched = new AbortController()
-    onModeSwitch = () => switched.abort()
-    const choice = await select({
-      message: `${q.title}? ${dim(`· ${MODES[mode]} · Shift+Tab switches`)}`,
-      options: q.choices.map(({ value, label, hint }) => ({ value, label, hint })),
-      signal: AbortSignal.any([signal, switched.signal]),
-    }).finally(() => {
+    onModeSwitch = () => switched.abort(SWITCHED)
+    try {
+      const reply = await ask(
+        q.call === undefined ? shown : approval(shown, far),
+        AbortSignal.any([signal, switched.signal]),
+      )
+      return q.call === undefined ? reply : takeShortcut(reply)
+    } catch (error) {
+      if (error !== SWITCHED || signal.aborted) {
+        throw error
+      }
+    } finally {
       onModeSwitch = undefined
       // A question closed by the reply's end must not turn raw mode back on under the next prompt
       if (current !== undefined) {
         readKeys(true)
       }
-    })
-
-    if (!isCancel(choice)) {
-      return choice
     }
-    if (!switched.signal.aborted || signal.aborted) {
-      break
+    // Switching the mode leaves the question open: it shows again, without the detail already above it
+    shown = { ...shown, questions: shown.questions.map(x => ({ ...x, detail: undefined })) }
+  }
+}
+
+/** The approval as the person sees it: the mode it is asked under, and the shortcuts that mode offers. */
+function approval(q: Questions, far: boolean): Questions {
+  const [only] = q.questions
+  const [yes, no] = only.options
+  const shortcuts: Option[] = []
+  if (mode === 'ask' && !far) {
+    shortcuts.push(SHORTCUTS.auto)
+    if (q.call?.name === 'read') {
+      shortcuts.push(SHORTCUTS.reads)
     }
   }
+  const title = `${only.title}? ${dim(`· ${describeMode()} · Shift+Tab switches`)}`
+  return { ...q, questions: [{ ...only, title, options: [yes, ...shortcuts, no] }] }
+}
 
-  // Ctrl+C at the question stops the whole reply, like Ctrl+C anywhere else in it
-  current?.abort(STOPPED)
-  return undefined
+function takeShortcut(reply: Reply): Reply {
+  const value = reply === DISMISSED ? undefined : reply[0][0]
+  if (value === SHORTCUTS.auto.value) {
+    mode = 'auto'
+  } else if (value === SHORTCUTS.reads.value) {
+    askReads = false
+  } else {
+    return reply
+  }
+  return [['yes']]
 }
 
 /** Resolves once no question is on screen, so nothing is drawn over one. */
@@ -310,7 +349,7 @@ function underlineChange(line: string, other: string | undefined, color: 'green'
  *   @  Running calc 1s         <- Status: one line redrawn in place, erased before anything else is written;
  *                                 timed from tool_start, so it never counts time the model was still writing
  */
-async function render(r: Run): Promise<void> {
+async function render(r: Run, changed: Set<string>): Promise<void> {
   const started = performance.now()
   const speed = new Speed()
   const out = new Gutter()
@@ -357,6 +396,9 @@ async function render(r: Run): Promise<void> {
           break
         case 'tool_end':
           running.delete(e.call.id)
+          if (!e.result.isError && e.call.name !== 'read' && FILE_TOOLS.has(e.call.name)) {
+            changed.add(String(e.call.arguments.path))
+          }
           status.hide()
           log.message(describeResult(e.result), {
             symbol: e.result.isError ? styleText('red', '✗') : styleText('green', '✓'),
@@ -515,10 +557,10 @@ function startAgent(): Agent {
   try {
     return createAgent({
       model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`,
-      thinking: (process.env.DEEPSEEK_THINKING ?? 'off') as ThinkingLevel,
+      thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
       system: `You are a concise assistant running in a terminal. Use tools when they help. File paths are relative to ${ROOT}.`,
       tools: [calc, now],
-      plugins: [fileTools, ...approvals],
+      plugins: [fileTools, asking],
     })
   } catch (error) {
     if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
@@ -535,7 +577,7 @@ let agent = startAgent()
 let chat = createSession(agent)
 
 const levels = agent.model.thinkingLevels.join('|')
-const TOOL_NAMES = [calc, now, ...(fileTools.tools ?? [])].map(t => t.name).join(', ')
+const TOOL_NAMES = [calc, now, ...(fileTools.tools ?? []), ...(asking.tools ?? [])].map(t => t.name).join(', ')
 const MISSING_KEY =
   'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
 
@@ -560,7 +602,7 @@ process.stdin.on('keypress', (_, key: { name?: string; shift?: boolean; ctrl?: b
 })
 
 const settings = `thinking: ${agent.thinking} · tools: ${TOOL_NAMES} · workspace: ${ROOT}`
-const keys = `/think <${levels}> · Shift+Tab switches ask/auto · Ctrl+C stops a reply · /exit quits`
+const keys = `/think <${levels}> · Shift+Tab switches ask/auto · Esc dismisses a question · Ctrl+C stops a reply · /exit quits`
 intro(`ji · ${agent.model.provider}/${agent.model.id}`)
 log.message(dim(`${settings}\n${keys}`), { spacing: 0 })
 
@@ -577,7 +619,7 @@ for (;;) {
     // Read on every redraw, so Shift+Tab shows at once
     get message() {
       // auto is the less careful mode, so it stands out in the warning color
-      const label = `· ${MODES[mode]}`
+      const label = `· ${describeMode()}`
       return `${styleText('bold', 'You')} ${mode === 'auto' ? styleText('yellow', label) : dim(label)}`
     },
     placeholder: 'Ask anything',
@@ -616,19 +658,23 @@ for (;;) {
   }
 
   const before = chat.state
+  const changed = new Set<string>()
   current = chat.send(message)
   readKeys(true)
   try {
-    await render(current)
+    await render(current, changed)
   } catch (error) {
     // Roll back to before the send, so the next message doesn't pick up this unanswered one
     chat = createSession(agent, { state: before })
     retry = message
+    // The history goes back, the files do not: a resend should not take them for untouched
+    const stays = changed.size === 1 ? 'stays' : 'stay'
+    const kept = changed.size === 0 ? '' : `${[...changed].join(', ')} ${stays} changed. `
     if (error instanceof RunError && error.kind === 'aborted' && error.cause === STOPPED) {
-      log.warn('Stopped. Your message is back in the input. Edit it or clear it.')
+      log.warn(`Stopped. ${kept}Your message is back in the input. Edit it or clear it.`)
     } else {
       log.error(
-        `${error instanceof Error ? error.message : String(error)}\nYour message is back in the input. Press Enter to retry.`,
+        `${error instanceof Error ? error.message : String(error)}\n${kept}Your message is back in the input. Press Enter to retry.`,
       )
     }
   } finally {

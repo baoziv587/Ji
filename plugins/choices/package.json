@@ -1,0 +1,33 @@
+{
+  "name": "@ji.dev/plugin-choices",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Puts questions with fixed options to a person: from the model, a tool, or before a tool call runs",
+  "exports": {
+    ".": "./src/index.ts",
+    "./terminal": "./src/terminal.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@clack/core": "^1.5.1",
+    "@clack/prompts": "^1.8.1",
+    "@ji.dev/llm": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "@clack/core": {
+      "optional": true
+    },
+    "@clack/prompts": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@clack/core": "^1.5.1",
+    "@clack/prompts": "^1.8.1",
+    "@ji.dev/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}

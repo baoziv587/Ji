@@ -24,9 +24,9 @@ export interface FilesOptions {
 
 export interface FilesPlugin extends Plugin<Ledger> {
   /**
-   * What a call is about to change, before anything is written; give it to an approval plugin:
+   * What a call is about to change, before anything is written; give it to the choices plugin:
    *
-   *     approval({ previews: [fileTools.preview] })
+   *     choices({ answer, approve: [fileTools.preview] })
    *
    * undefined for a call that changes no file (read, other plugins' tools). The tool's own failure for a change it
    * would refuse, so nobody is asked about it. Otherwise the change, with `call` writing exactly the text shown, or
