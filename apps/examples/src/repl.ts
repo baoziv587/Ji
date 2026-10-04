@@ -5,12 +5,13 @@
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=high turns thinking on (default off); /think <level> switches it mid-chat, thinking shows in gray
 //   The model can read and edit the files under the directory the command was run from, and nothing outside it
-//   Every change to a file is shown as a diff and waits for a yes; /approve turns the question off and on
+//   Every read of a file, and every change shown as a diff, waits for a yes; Shift+Tab switches to auto-approve and back
 //
 // Everything comes from @ji.dev/llm: the model, its thinking levels and the events need nothing from pi-ai.
 import type { Agent, Run, ThinkingLevel, ToolCall, ToolResultMessage, UsageTotals } from '@ji.dev/llm'
-import type { Question } from '@ji.dev/plugin-approval'
+import type { ChoiceQuestion, Preview } from '@ji.dev/plugin-approval'
 import process from 'node:process'
+import { emitKeypressEvents } from 'node:readline'
 import { styleText } from 'node:util'
 import { cancel, intro, isCancel, log, outro, S_BAR, select, text } from '@clack/prompts'
 import {
@@ -22,7 +23,7 @@ import {
   UnknownModelError,
   UnsupportedThinkingError,
 } from '@ji.dev/llm'
-import { approval } from '@ji.dev/plugin-approval'
+import { answerer, approval } from '@ji.dev/plugin-approval'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
 
 const calc = tool({
@@ -102,48 +103,68 @@ class Status {
 /** One for the whole REPL: the approval question has to hide it too. */
 const status = new Status()
 
-/** /approve toggles it; "yes, and stop asking" turns it off. */
-let approving = true
+type Mode = 'ask' | 'auto'
+
+const MODES: Record<Mode, string> = {
+  ask: 'ask before file reads and changes',
+  auto: 'auto-approve',
+}
+
+/** Shift+Tab switches it, at the prompt or at a question. */
+let mode: Mode = 'ask'
+
+/** Set while a question is on screen: switching the mode answers it again under the new mode. */
+let onModeSwitch: (() => void) | undefined
 
 /** The question on screen, if any; settled otherwise. */
 let question: Promise<unknown> = Promise.resolve()
 
-/**
- * Asks before a call runs. The approval plugin knows nothing about files: fileTools.preview tells it what a call would
- * change, so only changes to files are asked about. Leaving the plugin out is how approval is switched off for good.
- */
-const approvals = approval({ ask, previews: [fileTools.preview] })
+/** The files plugin's preview covers only changes; reads are asked about too. */
+const reading: Preview = call => (call.name === 'read' ? { title: `Read ${String(call.arguments.path)}` } : undefined)
 
-function ask({ title, detail }: Question): Promise<boolean | string> {
-  if (!approving) {
-    return Promise.resolve(true)
+/**
+ * approval asks before a call by yielding a question; answerer replies to it from outside the tools (RFC-0007 §5).
+ * Neither knows about files or about the terminal: the previews say what a call does, `answer` asks the person.
+ */
+const approvals = [approval({ previews: [fileTools.preview, reading] }), answerer({ answer })]
+
+function answer(q: ChoiceQuestion, signal: AbortSignal): Promise<string | undefined> {
+  if (mode === 'auto' && q.choices.some(c => c.value === 'yes')) {
+    return Promise.resolve('yes')
   }
 
-  const answer = (async () => {
-    status.hide()
-    if (detail !== undefined) {
-      log.message(paintDiff(detail), { symbol: styleText('yellow', '±') })
-    }
+  const choice = choose(q, signal)
+  question = choice.catch(() => {})
+  return choice
+}
+
+async function choose(q: ChoiceQuestion, signal: AbortSignal): Promise<string | undefined> {
+  status.hide()
+  if (q.detail !== undefined) {
+    log.message(paintDiff(q.detail), { symbol: styleText('yellow', '±') })
+  }
+
+  const switched = new AbortController()
+  onModeSwitch = () => switched.abort()
+  try {
     const choice = await select({
-      message: `${title}?`,
-      options: [
-        { value: 'yes', label: 'Yes' },
-        { value: 'always', label: 'Yes, and stop asking', hint: '/approve turns it back on' },
-        { value: 'no', label: 'No' },
-      ],
+      message: `${q.title}? ${dim('Shift+Tab: auto-approve')}`,
+      options: q.choices.map(({ value, label, hint }) => ({ value, label, hint })),
+      signal: AbortSignal.any([signal, switched.signal]),
     })
+    if (!isCancel(choice)) {
+      return choice
+    }
+    if (switched.signal.aborted && !signal.aborted) {
+      return await answer(q, signal)
+    }
+
     // Ctrl+C at the question stops the whole reply, like Ctrl+C anywhere else in it
-    if (isCancel(choice)) {
-      current?.abort(STOPPED)
-      return false
-    }
-    if (choice === 'always') {
-      approving = false
-    }
-    return choice === 'no' ? 'The user rejected this change. Ask what they want instead.' : true
-  })()
-  question = answer.catch(() => {})
-  return answer
+    current?.abort(STOPPED)
+    return undefined
+  } finally {
+    onModeSwitch = undefined
+  }
 }
 
 /** Resolves once no question is on screen, so nothing is drawn over one. */
@@ -152,6 +173,11 @@ async function answered(): Promise<void> {
     seen = question
     await seen
   }
+}
+
+function switchMode(): void {
+  mode = mode === 'ask' ? 'auto' : 'ask'
+  onModeSwitch?.()
 }
 
 function paintDiff(patch: string): string {
@@ -342,7 +368,7 @@ function startAgent(): Agent {
       thinking: (process.env.DEEPSEEK_THINKING ?? 'off') as ThinkingLevel,
       system: `You are a concise assistant running in a terminal. Use tools when they help. File paths are relative to ${ROOT}.`,
       tools: [calc, now],
-      plugins: [fileTools, approvals],
+      plugins: [fileTools, ...approvals],
     })
   } catch (error) {
     if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
@@ -364,10 +390,19 @@ const MISSING_KEY =
 // clack handles Ctrl+C at the prompt (returning a cancel), so SIGINT only arrives here mid-reply
 process.on('SIGINT', () => (current ? current.abort(STOPPED) : process.exit(130)))
 
+// Keys arrive only while a prompt or a question has stdin in raw mode. This listener is added before any prompt's, so
+// the prompt redraws after the switch and shows the new mode.
+emitKeypressEvents(process.stdin)
+process.stdin.on('keypress', (_, key: { name?: string; shift?: boolean } | undefined) => {
+  if (key?.name === 'tab' && key.shift === true) {
+    switchMode()
+  }
+})
+
 intro(`ji · ${agent.model.provider}/${agent.model.id}`)
 log.message(
   dim(
-    `thinking: ${agent.thinking} · tools: ${TOOL_NAMES} · files: ${ROOT}\n/think <${levels}> · /approve · Ctrl+C stops a reply · /exit quits`,
+    `thinking: ${agent.thinking} · tools: ${TOOL_NAMES} · files: ${ROOT}\n/think <${levels}> · Shift+Tab switches approval · Ctrl+C stops a reply · /exit quits`,
   ),
   { spacing: 0 },
 )
@@ -380,7 +415,14 @@ if (!agent.model.hasEnvKey) {
 let retry = ''
 
 for (;;) {
-  const input = await text({ message: 'You', placeholder: 'Ask anything', initialValue: retry })
+  const input = await text({
+    // Read on every redraw, so Shift+Tab shows at once
+    get message() {
+      return `You ${dim(`· ${MODES[mode]}`)}`
+    },
+    placeholder: 'Ask anything',
+    initialValue: retry,
+  })
   retry = ''
   if (isCancel(input)) {
     break
@@ -391,11 +433,6 @@ for (;;) {
     break
   }
   if (message === '') {
-    continue
-  }
-  if (message === '/approve') {
-    approving = !approving
-    log.success(`Approval before file changes: ${approving ? 'on' : 'off'}`)
     continue
   }
   if (message === '/think' || message.startsWith('/think ')) {
