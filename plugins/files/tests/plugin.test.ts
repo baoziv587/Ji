@@ -1,16 +1,17 @@
 // The files plugin against pi-ai's faux provider: the scenarios of RFC §2, as the model sees them
-import type { AgentState, Api, Model, ToolResultMessage } from '@ji.dev/llm'
-import type { Answer, ChoiceQuestion } from '@ji.dev/plugin-approval'
+import type { AgentState, Api, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
 import type { FauxResponseStep } from '@mariozechner/pi-ai'
-import type { FilesOptions, MemWorkspace } from '../src/index.ts'
+import type { ChangePreview, FilesOptions, FilesPlugin, MemWorkspace } from '../src/index.ts'
 import { posix } from 'node:path'
-import { createAgent, createSession, Type } from '@ji.dev/llm'
-import { answerer, approval } from '@ji.dev/plugin-approval'
+import { createAgent, createSession, definePlugin, toolError, Type } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
 import { editTool, files, fileTool, memWorkspace, ok } from '../src/index.ts'
 
 const CONFIG = 'const timeout = 1000;\nconst retries = 2;\n'
+
+/** What the approver below returns for a call the person refuses. */
+const REFUSED = 'Refused.'
 
 describe('files', () => {
   it('should let the model read a file, then change two places in one call (scenario 2.2)', async () => {
@@ -241,26 +242,26 @@ describe('fileTool', () => {
   })
 })
 
-describe('preview, with the approval plugin', () => {
+describe('preview, with a plugin that asks before a change', () => {
   const editOne = ['edit', { path: 'a.ts', edits: [{ old_text: 'one', new_text: 'two' }] }] as const
 
   it('should show the change before anything is written, and leave the file alone when it is refused (scenario 2.10)', async () => {
     // Arrange
     const workspace = rooted({ '/w/a.ts': 'one\n' })
     const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
-    const asked: Pick<ChoiceQuestion, 'title' | 'detail'>[] = []
+    const asked: Shown[] = []
 
     // Act
     const results = await approving(workspace, model, ({ title, detail }) => {
       asked.push({ title, detail })
-      return 'no'
+      return false
     })
 
     // Assert
     expect(asked).toEqual([{ title: 'Edit a.ts (+1 -1)', detail: '@@ -1,1 +1,1 @@\n-one\n+two' }])
     expect(results[1]).toMatchObject({
       isError: true,
-      content: [{ text: 'The user rejected this call. Ask what they want instead.' }],
+      content: [{ text: REFUSED }],
     })
     expect(workspace.get('/w/a.ts')).toBe('one\n')
   })
@@ -278,7 +279,7 @@ describe('preview, with the approval plugin', () => {
     // Act
     const results = await approving(workspace, model, ({ title }) => {
       titles.push(title)
-      return 'yes'
+      return true
     })
 
     // Assert
@@ -303,7 +304,7 @@ describe('preview, with the approval plugin', () => {
     // Act
     const results = await approving(workspace, model, () => {
       asked++
-      return 'yes'
+      return true
     })
 
     // Assert
@@ -334,7 +335,7 @@ describe('preview, with the approval plugin', () => {
       model,
       ({ detail }) => {
         shown.push(detail)
-        return 'yes'
+        return true
       },
       { tools: [stamp] },
     )
@@ -352,7 +353,7 @@ describe('preview, with the approval plugin', () => {
     // Act
     const results = await approving(workspace, model, () => {
       workspace.set('/w/a.ts', 'one, edited by hand\n')
-      return 'yes'
+      return true
     })
 
     // Assert
@@ -366,16 +367,13 @@ describe('preview, with the approval plugin', () => {
     const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
     const fileTools = files(workspace)
     const titles: string[] = []
-    const asking = approval({ previews: [fileTools.preview] })
-    const answering = answerer({
-      answer: ({ title }) => {
-        titles.push(title)
-        return 'yes'
-      },
+    const asking = approver(fileTools, ({ title }) => {
+      titles.push(title)
+      return true
     })
 
     // Act
-    await createSession(createAgent({ model, plugins: [asking, answering, fileTools] })).send('go').state
+    await createSession(createAgent({ model, plugins: [asking, fileTools] })).send('go').state
 
     // Assert
     expect(titles).toEqual(['Edit a.ts (+1 -1)'])
@@ -419,15 +417,38 @@ async function resultsOf(
   return toolResults(state)
 }
 
-/** The files plugin, the approval plugin asking about what its preview shows, and an answerer. */
+/** What a person deciding is shown. */
+type Shown = Pick<ChangePreview, 'title' | 'detail'>
+
+/**
+ * Asks the way an approval plugin would, without one: `decide` sees the preview, and a yes runs the call it fixed.
+ * Calls the preview knows nothing about run unasked.
+ */
+function approver(fileTools: FilesPlugin, decide: (shown: Shown) => boolean): Plugin {
+  return definePlugin({
+    name: 'approver',
+    async *toolCall(call, next, { signal }) {
+      const preview = await fileTools.preview(call, signal)
+      if (preview === undefined) {
+        return yield* next(call)
+      }
+      if ('role' in preview) {
+        return preview
+      }
+      return decide(preview) ? yield* next(preview.call) : toolError(call, REFUSED)
+    },
+  })
+}
+
+/** The files plugin, and the approver asking about what its preview shows. */
 async function approving(
   workspace: MemWorkspace,
   model: Model<Api>,
-  answer: Answer,
+  decide: (shown: Shown) => boolean,
   options?: FilesOptions,
 ): Promise<ToolResultMessage[]> {
   const fileTools = files(workspace, options)
-  const plugins = [fileTools, approval({ previews: [fileTools.preview] }), answerer({ answer })]
+  const plugins = [fileTools, approver(fileTools, decide)]
   const state = await createSession(createAgent({ model, plugins })).send('go').state
   return toolResults(state)
 }

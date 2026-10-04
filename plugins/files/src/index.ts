@@ -7,7 +7,7 @@
 //   Transform   the file's new text from its current text: editTransform, writeTransform, chain, or your own
 //   commit      publish ∘ transform ∘ read; prepare is commit without the publish
 //   fileTool    a tool as a schema and a Transform; files is the plugin: read + file tools + the ledger
-//   approval    another plugin: approval({ previews: [fileTools.preview] }) of @ji.dev/plugin-approval
+//   approval    another plugin: choices({ answer, approve: [fileTools.preview] }) of @ji.dev/plugin-choices
 
 export { type Applied, commit, prepare, type Prepared } from './commit.ts'
 export type { Edit } from './core/plan.ts'

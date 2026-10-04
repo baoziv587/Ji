@@ -18,7 +18,6 @@
   },
   "devDependencies": {
     "@ji.dev/llm": "workspace:*",
-    "@ji.dev/plugin-approval": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }
 }

@@ -13,9 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
     "@ji.dev/llm": "workspace:*",
-    "@ji.dev/plugin-approval": "workspace:*",
+    "@ji.dev/plugin-choices": "workspace:*",
     "@ji.dev/plugin-files": "workspace:*",
     "@mariozechner/pi-ai": "^0.73.1"
   }
