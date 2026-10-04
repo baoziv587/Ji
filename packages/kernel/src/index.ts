@@ -5,11 +5,13 @@
 //   δ : S × A × O → S        update   state transition (synchronous, pure, streams nothing)
 //
 //   Everything with side effects is a stream of the same D; everything pure is a plain function (RFC-0005).
+//   A yield can get a reply: the value of `yield d` is what the consumer passed to next(); it travels back along the
+//   path d came out by (RFC-0007, I15). A stream that ignores replies is the same stream as before.
 //
 //   unfold = unroll (π, ε, δ) repeatedly until π lands in R
 //   extend = wrap π, ε, δ with middleware (RFC-0003)
 
-export type Stream<D, T> = AsyncGenerator<D, T, undefined>
+export type Stream<D, T> = AsyncGenerator<D, T, unknown>
 
 export type Step<A, R> = { tag: 'act'; action: A } | { tag: 'done'; result: R }
 
@@ -110,16 +112,18 @@ export function mapState<S, A, O, R, D>(agent: Agent<S, A, O, R, D>, f: (s: S) =
   return extend(agent, { update: (s, a, o, next) => f(next(s, a, o)) })
 }
 
-/** Like yield* with a map over each yielded value; keeps the return value and forwards cancellation upstream. */
+/**
+ * Like yield* with a map over each yielded value: the reply to f(d) goes back as the reply to d, the return value is
+ * kept and cancellation is forwarded upstream.
+ */
 export async function* mapYield<D, E, T>(it: Stream<D, T>, f: (d: D) => E): Stream<E, T> {
   try {
-    for (;;) {
-      const r = await it.next()
-      if (r.done) {
-        return r.value
-      }
-      yield f(r.value)
+    let r = await it.next()
+    while (!r.done) {
+      const reply = yield f(r.value)
+      r = await it.next(reply)
     }
+    return r.value
   } finally {
     await it.return(undefined as never)
   }
@@ -133,9 +137,12 @@ export async function* mapYield<D, E, T>(it: Stream<D, T>, f: (d: D) => E): Stre
  *               b: ── b1 ── return rb
  *     merged       a1 ── b1 ── a2 ── return [ra, rb]
  *
- * Every source is pulled as soon as its previous delta arrives, so a slow source never holds back a fast one.
- * Cancelling the merged stream (return()) closes every source that has not finished. If a source throws, the
- * others are closed first and then the error is rethrown.
+ * A source is pulled again once its previous delta has been consumed and replied to, carrying that reply back to it;
+ * a slow source never holds back a fast one. While the consumer holds a delta, nothing else comes out, and a source
+ * waiting at its yield does not move on.
+ *
+ * Cancelling the merged stream (return()) closes every source that has not finished. If a source throws, the others
+ * are closed first and then the error is rethrown.
  */
 export async function* merge<D, T>(sources: ReadonlyArray<Stream<D, T>>): Stream<D, T[]> {
   const results: T[] = Array.from({ length: sources.length })
@@ -144,9 +151,9 @@ export async function* merge<D, T>(sources: ReadonlyArray<Stream<D, T>>): Stream
   let wake = Promise.withResolvers<void>()
 
   // Each source has at most one next() in flight; its outcome is queued, never raced, so nothing piles up.
-  const pull = (i: number): void => {
+  const pull = (i: number, reply?: unknown): void => {
     sources[i]
-      .next()
+      .next(reply)
       .then(
         next => arrived.push({ i, next }),
         (error: unknown) => arrived.push({ i, error }),
@@ -155,7 +162,7 @@ export async function* merge<D, T>(sources: ReadonlyArray<Stream<D, T>>): Stream
   }
 
   try {
-    open.forEach(pull)
+    open.forEach(i => pull(i))
     while (open.size > 0) {
       const item = arrived.shift()
       if (item === undefined) {
@@ -173,8 +180,7 @@ export async function* merge<D, T>(sources: ReadonlyArray<Stream<D, T>>): Stream
         results[item.i] = item.next.value
         continue
       }
-      pull(item.i)
-      yield item.next.value
+      pull(item.i, yield item.next.value)
     }
     return results
   } finally {

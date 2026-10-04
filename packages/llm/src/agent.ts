@@ -365,23 +365,24 @@ function payloadOf(e: AssistantMessageEvent): Payload | undefined {
 /**
  * What a plugin's ctx.complete lets through: its model events and any plugin events, not its thinking, text or tool
  * calls, so r.text stays the main model's answer (RFC-0006 §5.2). The result is kept; cancelling closes the call.
+ * A forwarded event's reply goes back to the call; a dropped one gets none (I15).
  */
 async function* withoutContent<T>(stream: Stream<Payload, T>): Stream<Payload, T> {
   try {
-    for (;;) {
-      const next = await stream.next()
-      if (next.done) {
-        return next.value
-      }
-
+    let next = await stream.next()
+    while (!next.done) {
       const e = next.value
-      if (e.type !== 'thinking' && e.type !== 'text' && e.type !== 'tool_call') {
-        yield e
-      }
+      const reply = isContent(e) ? undefined : yield e
+      next = await stream.next(reply)
     }
+    return next.value
   } finally {
     await stream.return(undefined as never)
   }
+}
+
+function isContent(e: Payload): boolean {
+  return e.type === 'thinking' || e.type === 'text' || e.type === 'tool_call'
 }
 
 /** The calls of one model turn run at once; their events interleave, their results keep the call order. */
