@@ -52,6 +52,7 @@ export type {
   RunSummary,
   StreamOptions,
   ThinkingLevel,
+  ToolOutput,
   ToolRunner,
   Turn,
   TurnEvent,

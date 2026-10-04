@@ -62,6 +62,16 @@ export default antfu(
     },
   },
   {
+    // The edit core is pure and import-free, like the kernel (rfcs/tools/edit-tool-algebra.md §4)
+    files: ['plugins/files/src/core/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ regex: '^(?!\\./)', message: 'The edit core imports only its own modules.' }] },
+      ],
+    },
+  },
+  {
     // RFC-0005 promise 9: the REPL needs nothing from pi-ai directly
     files: ['apps/examples/src/repl.ts'],
     rules: {

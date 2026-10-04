@@ -30,19 +30,22 @@ export function toolRunner(tools: AgentTool[], signal: AbortSignal): ToolRunner 
   return async function* (call) {
     const args = validateToolCall(tools, call)
     const output = byName.get(call.name)!.run(args, signal)
-    const text = isAsyncIterable(output)
+    const done = isAsyncIterable(output)
       ? yield* mapYield(output, data => ({ type: 'tool_update', call, data }) as const)
       : await output
-    return toolResult(call, String(text))
+    return typeof done === 'object' && done !== null
+      ? resultOf(call, done.text, done.isError ?? false, done.details)
+      : toolResult(call, String(done))
   }
 }
 
-function resultOf(call: ToolCall, text: string, isError: boolean): ToolResultMessage {
+function resultOf(call: ToolCall, text: string, isError: boolean, details?: unknown): ToolResultMessage {
   return {
     role: 'toolResult',
     toolCallId: call.id,
     toolName: call.name,
     content: [{ type: 'text', text }],
+    ...(details === undefined ? {} : { details }),
     isError,
     timestamp: Date.now(),
   }

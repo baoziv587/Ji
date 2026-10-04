@@ -1,7 +1,7 @@
 // toolRunner: a plain run returns its text; a generator run streams tool_update events and returns its result.
 import type { Stream } from '@ji.dev/kernel'
 import type { ToolCall } from '@mariozechner/pi-ai'
-import type { AgentTool, Payload } from '../src/types.ts'
+import type { AgentTool, Payload, ToolOutput } from '../src/types.ts'
 import { Type } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
@@ -45,6 +45,34 @@ describe('toolRunner', () => {
       { type: 'tool_update', call, data: 'two' },
     ])
     expect(result).toMatchObject({ isError: false, content: [{ text: 'counted' }] })
+  })
+
+  it('should keep the details a tool returns with its text, and leave them out when there are none', async () => {
+    // Arrange
+    const withDetails = toolRunner([counting(async () => ({ text: 'three', details: { n: 3 } }))], signal)
+    const plain = toolRunner([counting(async () => 'three')], signal)
+
+    // Act
+    const { result } = await drain(withDetails(call))
+    const { result: bare } = await drain(plain(call))
+
+    // Assert
+    expect(result).toMatchObject({ isError: false, content: [{ text: 'three' }], details: { n: 3 } })
+    expect(bare).not.toHaveProperty('details')
+  })
+
+  it('should turn a returned isError output into an error result instead of throwing', async () => {
+    // Arrange
+    const run = toolRunner(
+      [counting(async () => ({ text: 'no match', details: { code: 'X' }, isError: true }))],
+      signal,
+    )
+
+    // Act
+    const { result } = await drain(run(call))
+
+    // Assert
+    expect(result).toMatchObject({ isError: true, content: [{ text: 'no match' }], details: { code: 'X' } })
   })
 
   it('should rethrow what the tool throws, so outer middleware can retry or report it', async () => {
@@ -119,7 +147,7 @@ describe('toolRunner', () => {
 
 // Helpers
 
-function counting(run: () => string | Promise<string> | Stream<unknown, string>): AgentTool {
+function counting(run: () => ToolOutput | Promise<ToolOutput> | Stream<unknown, ToolOutput>): AgentTool {
   return tool({ name: 'count', description: 'counts', parameters: Type.Object({}), run })
 }
 
