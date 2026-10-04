@@ -79,13 +79,19 @@ export type ModelCall = (req: ModelRequest) => Stream<Payload, AssistantMessage>
 export type LLMAgent = KernelAgent<AgentState, AgentAction, ToolResultMessage[], AssistantMessage, Payload>
 
 /**
+ * What a tool returns: its text for the model, or the text plus `details` for plugins and programs (the model never
+ * sees them). `isError: true` reports an expected failure as a result, like toolError: a retry never sees it.
+ */
+export type ToolOutput = string | { text: string; details?: unknown; isError?: boolean }
+
+/**
  * A pi-ai Tool (TypeBox schema) plus `run`. `run` may be an async generator: every value it yields becomes a
  * tool_update event, and what it returns is the result.
  */
 export type AgentTool<T extends TSchema = TSchema> = Tool<T> & {
   /** Method syntax on purpose: its parameters are bivariant, so AgentTool<SpecificSchema> fits in AgentTool[]. */
   // eslint-disable-next-line ts/method-signature-style
-  run(args: Static<T>, signal: AbortSignal): string | Promise<string> | Stream<unknown, string>
+  run(args: Static<T>, signal: AbortSignal): ToolOutput | Promise<ToolOutput> | Stream<unknown, ToolOutput>
 }
 
 /** Runs one tool call. The agent turns anything thrown into an isError result for the model (I8). */

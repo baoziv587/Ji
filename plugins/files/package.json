@@ -1,0 +1,23 @@
+{
+  "name": "@ji.dev/plugin-files",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Read and edit tools with strict matching, version checks and atomic writes (rfcs/tools/edit-tool-algebra.md)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@ji.dev/llm": "workspace:*"
+  },
+  "dependencies": {
+    "diff": "^9.0.0"
+  },
+  "devDependencies": {
+    "@ji.dev/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}
