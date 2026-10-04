@@ -1,11 +1,11 @@
 // The files plugin against pi-ai's faux provider: the scenarios of RFC §2, as the model sees them
 import type { AgentState, Api, Model, ToolResultMessage } from '@ji.dev/llm'
-import type { Ask, Question } from '@ji.dev/plugin-approval'
+import type { Answer, ChoiceQuestion } from '@ji.dev/plugin-approval'
 import type { FauxResponseStep } from '@mariozechner/pi-ai'
 import type { FilesOptions, MemWorkspace } from '../src/index.ts'
 import { posix } from 'node:path'
 import { createAgent, createSession, Type } from '@ji.dev/llm'
-import { approval } from '@ji.dev/plugin-approval'
+import { answerer, approval } from '@ji.dev/plugin-approval'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
 import { editTool, files, fileTool, memWorkspace, ok } from '../src/index.ts'
@@ -248,17 +248,20 @@ describe('preview, with the approval plugin', () => {
     // Arrange
     const workspace = rooted({ '/w/a.ts': 'one\n' })
     const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
-    const asked: Pick<Question, 'title' | 'detail'>[] = []
+    const asked: Pick<ChoiceQuestion, 'title' | 'detail'>[] = []
 
     // Act
     const results = await approving(workspace, model, ({ title, detail }) => {
       asked.push({ title, detail })
-      return 'The user rejected this change.'
+      return 'no'
     })
 
     // Assert
     expect(asked).toEqual([{ title: 'Edit a.ts (+1 -1)', detail: '@@ -1,1 +1,1 @@\n-one\n+two' }])
-    expect(results[1]).toMatchObject({ isError: true, content: [{ text: 'The user rejected this change.' }] })
+    expect(results[1]).toMatchObject({
+      isError: true,
+      content: [{ text: 'The user rejected this call. Ask what they want instead.' }],
+    })
     expect(workspace.get('/w/a.ts')).toBe('one\n')
   })
 
@@ -275,7 +278,7 @@ describe('preview, with the approval plugin', () => {
     // Act
     const results = await approving(workspace, model, ({ title }) => {
       titles.push(title)
-      return true
+      return 'yes'
     })
 
     // Assert
@@ -300,7 +303,7 @@ describe('preview, with the approval plugin', () => {
     // Act
     const results = await approving(workspace, model, () => {
       asked++
-      return true
+      return 'yes'
     })
 
     // Assert
@@ -331,7 +334,7 @@ describe('preview, with the approval plugin', () => {
       model,
       ({ detail }) => {
         shown.push(detail)
-        return true
+        return 'yes'
       },
       { tools: [stamp] },
     )
@@ -349,7 +352,7 @@ describe('preview, with the approval plugin', () => {
     // Act
     const results = await approving(workspace, model, () => {
       workspace.set('/w/a.ts', 'one, edited by hand\n')
-      return true
+      return 'yes'
     })
 
     // Assert
@@ -363,16 +366,16 @@ describe('preview, with the approval plugin', () => {
     const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
     const fileTools = files(workspace)
     const titles: string[] = []
-    const asking = approval({
-      ask: ({ title }) => {
+    const asking = approval({ previews: [fileTools.preview] })
+    const answering = answerer({
+      answer: ({ title }) => {
         titles.push(title)
-        return true
+        return 'yes'
       },
-      previews: [fileTools.preview],
     })
 
     // Act
-    await createSession(createAgent({ model, plugins: [asking, fileTools] })).send('go').state
+    await createSession(createAgent({ model, plugins: [asking, answering, fileTools] })).send('go').state
 
     // Assert
     expect(titles).toEqual(['Edit a.ts (+1 -1)'])
@@ -416,15 +419,15 @@ async function resultsOf(
   return toolResults(state)
 }
 
-/** The files plugin, and the approval plugin asking about what its preview shows. */
+/** The files plugin, the approval plugin asking about what its preview shows, and an answerer. */
 async function approving(
   workspace: MemWorkspace,
   model: Model<Api>,
-  ask: Ask,
+  answer: Answer,
   options?: FilesOptions,
 ): Promise<ToolResultMessage[]> {
   const fileTools = files(workspace, options)
-  const plugins = [fileTools, approval({ ask, previews: [fileTools.preview] })]
+  const plugins = [fileTools, approval({ previews: [fileTools.preview] }), answerer({ answer })]
   const state = await createSession(createAgent({ model, plugins })).send('go').state
   return toolResults(state)
 }
