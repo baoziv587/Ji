@@ -92,66 +92,76 @@ describe('routing (Q2)', () => {
 })
 
 describe('pause (Q3)', () => {
-  it('should not move any source on while the consumer holds a question', async () => {
-    // Arrange: a source that would yield forever, and one that asks once
-    const progress = { ticks: 0, replies: [] as unknown[] }
-    async function* busy(): Stream<string, void> {
-      for (;;) {
-        yield 'tick'
-        progress.ticks++
-      }
-    }
-    async function* asker(): Stream<string, void> {
-      progress.replies.push(yield 'ask')
-    }
-    const merged = merge([busy(), asker()])
+  it('should always keep every source where it is while the consumer holds a question, whatever the timing', async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.scheduler(), fc.nat({ max: 3 }), fc.array(fc.array(fc.nat())), async (s, before, plans) => {
+        // Arrange: an asker after `before` plain deltas, beside sources that keep yielding
+        const life = newLife()
+        const replies: unknown[] = []
+        const merged = merge([asker(s, before, life, replies), ...plans.map(plan => source(s, plan, life))])
 
-    // Act: pull until the question comes out, then hold it
-    for (let r = await merged.next(); r.value !== 'ask'; r = await merged.next()) {
-      // ticks need no reply
-    }
-    const held = progress.ticks
-    await settle()
-    const ticksWhileHeld = progress.ticks - held
-    const repliesWhileHeld = progress.replies.length
-    await merged.next('yes')
+        // Act: pull up to the question, hold it while everything scheduled runs, then reply
+        await s.waitFor(pullUntilQuestion(merged))
+        const resumedBefore = life.resumed
+        await s.waitAll()
+        const held = { resumed: life.resumed - resumedBefore, replies: replies.length }
+        await s.waitFor(merged.next('yes'))
+        await s.waitFor(merged.return(undefined as never))
 
-    // Assert
-    expect(ticksWhileHeld).toBe(0)
-    expect(repliesWhileHeld).toBe(0)
-    expect(progress.replies).toEqual(['yes'])
-    await merged.return(undefined as never)
+        // Assert: a running source may reach its next yield, but none gets past one
+        expect(held).toEqual({ resumed: 0, replies: 0 })
+        expect(replies).toEqual(['yes'])
+      }),
+    )
   })
 })
 
 describe('cancel (Q4)', () => {
-  it('should always run the asker finally and nothing after its yield when cancelled while waiting', async () => {
+  it('should always run the asker finally and nothing after its yield when mapYield is cancelled there', async () => {
     await fc.assert(
-      fc.asyncProperty(fc.nat({ max: 5 }), fc.boolean(), async (before, merged) => {
-        // Arrange: `before` plain deltas, then the question
-        const life = { closed: 0, answered: 0 }
-        async function* asker(): Stream<string, void> {
-          try {
-            for (let i = 0; i < before; i++) {
-              yield 'progress'
-            }
-            yield 'ask'
-            life.answered++
-          } finally {
-            life.closed++
-          }
-        }
-        const stream = merged ? merge([asker()]) : mapYield(asker(), d => d)
+      fc.asyncProperty(fc.scheduler(), fc.nat({ max: 5 }), async (s, before) => {
+        // Arrange
+        const life = newLife()
+        const replies: unknown[] = []
+        const mapped = mapYield(asker(s, before, life, replies), d => d)
 
         // Act: pull up to the question, then cancel instead of replying
-        for (let r = await stream.next(); !r.done && r.value !== 'ask'; r = await stream.next()) {
-          // keep pulling
-        }
-        await stream.return(undefined as never)
+        await s.waitFor(pullUntilQuestion(mapped))
+        await s.waitFor(mapped.return(undefined as never))
 
         // Assert
-        expect(life).toEqual({ closed: 1, answered: 0 })
+        expect(replies).toEqual([])
+        expect(life).toMatchObject({ started: 1, closed: 1 })
       }),
+    )
+  })
+
+  it('should always close every source, and run nothing after the asker yield, when merge is cancelled while others still run', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.scheduler(),
+        fc.nat({ max: 3 }),
+        fc.array(fc.array(fc.nat()), { minLength: 1 }),
+        async (s, before, plans) => {
+          // Arrange: the asker beside sources that are still working when the question comes out
+          const askerLife = newLife()
+          const othersLife = newLife()
+          const replies: unknown[] = []
+          const merged = merge([
+            asker(s, before, askerLife, replies),
+            ...plans.map(plan => source(s, plan, othersLife)),
+          ])
+
+          // Act: pull up to the question, then cancel instead of replying
+          await s.waitFor(pullUntilQuestion(merged))
+          await s.waitFor(merged.return(undefined as never))
+
+          // Assert: a source that never started holds nothing; every started one has run its finally
+          expect(replies).toEqual([])
+          expect(askerLife).toMatchObject({ started: 1, closed: 1 })
+          expect(othersLife.closed).toBe(othersLife.started)
+        },
+      ),
     )
   })
 })
@@ -177,9 +187,56 @@ async function* askingSource(s: fc.Scheduler, source: number, plan: number[], go
   return source
 }
 
-/** Lets every pending callback, including timers queued by them, run. */
-async function settle(): Promise<void> {
-  for (let i = 0; i < 5; i++) {
-    await new Promise(resolve => setTimeout(resolve, 0))
+const QUESTION = 'question'
+
+type Delta = number | typeof QUESTION
+
+/** How many generators started, ran their finally, and went on past a yield. */
+interface Life {
+  started: number
+  closed: number
+  resumed: number
+}
+
+function newLife(): Life {
+  return { started: 0, closed: 0, resumed: 0 }
+}
+
+/** Yields `before` plain deltas, then the question; records the reply it gets. Every step waits on the scheduler. */
+async function* asker(s: fc.Scheduler, before: number, life: Life, replies: unknown[]): Stream<Delta, void> {
+  life.started++
+  try {
+    for (let i = 0; i < before; i++) {
+      await s.schedule(Promise.resolve())
+      yield i
+      life.resumed++
+    }
+
+    await s.schedule(Promise.resolve())
+    replies.push(yield QUESTION)
+    life.resumed++
+  } finally {
+    life.closed++
+  }
+}
+
+/** Yields its plan, every step waiting on the scheduler. */
+async function* source(s: fc.Scheduler, plan: number[], life: Life): Stream<Delta, void> {
+  life.started++
+  try {
+    for (const value of plan) {
+      await s.schedule(Promise.resolve())
+      yield value
+      life.resumed++
+    }
+  } finally {
+    life.closed++
+  }
+}
+
+/** Pulls without replying until the question comes out, and leaves it unanswered. */
+async function pullUntilQuestion(stream: Stream<Delta, unknown>): Promise<void> {
+  for (let r = await stream.next(); !r.done && r.value !== QUESTION; r = await stream.next()) {
+    // plain deltas need no reply
   }
 }

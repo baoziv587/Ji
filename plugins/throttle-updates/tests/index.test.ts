@@ -1,5 +1,5 @@
 import type { AgentTool, Api, HookContext, Model, Payload, PluginList, RunEvent, ToolCall } from '@ji.dev/llm'
-import { answerAll, recorder } from '@ji.dev/kernel/testing'
+import { answerAll, expectedReplies, recorder } from '@ji.dev/kernel/testing'
 import { createAgent, createSession, tool, toolResult, Type } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
@@ -56,23 +56,34 @@ describe('throttleUpdates', () => {
     )
   })
 
-  it('should hand replies back to the events it lets through, and none to the updates it drops (I15)', async () => {
-    // Arrange: updates at 0, 40, 120 ms around a plugin event
-    const call: ToolCall = { type: 'toolCall', id: 'c', name: 'updating', arguments: {} }
-    const update = (data: number): Payload => ({ type: 'tool_update', call, data })
-    const deltas: Payload[] = [update(0), update(1), { type: 'tool_start', call }, update(2)]
-    const inner = recorder(deltas, toolResult(call, 'done'))
-    const toolCall = throttleUpdates({ ms: 100, now: scriptedClock([0, 40, 120]) }).toolCall!
+  it('should always hand replies back to the events it lets through, and none to the updates it drops (I15)', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.array(fc.record({ update: fc.boolean(), gap: fc.nat({ max: 200 }) })),
+        fc.nat({ max: 200 }),
+        async (steps, ms) => {
+          // Arrange: updates and other events interleaved; the clock moves by `gap` before each update
+          const call: ToolCall = { type: 'toolCall', id: 'c', name: 'updating', arguments: {} }
+          const deltas = steps.map((step, i): Payload =>
+            step.update ? { type: 'tool_update', call, data: i } : { type: 'tool_start', call },
+          )
+          const gaps = steps.filter(step => step.update).map(step => step.gap)
+          const times = gaps.map((_, i) => gaps.slice(0, i + 1).reduce((a, b) => a + b, 0))
+          const inner = recorder(deltas, toolResult(call, 'done'))
+          const toolCall = throttleUpdates({ ms, now: scriptedClock(times) }).toolCall!
 
-    // Act
-    const { sent } = await answerAll(
-      toolCall(call, () => inner.stream, {} as HookContext),
-      (_, i) => `reply ${i}`,
+          // Act
+          const { sent } = await answerAll(
+            toolCall(call, () => inner.stream, {} as HookContext),
+            (_, i) => `reply ${i}`,
+          )
+
+          // Assert
+          expect(inner.got.map(x => x.reply)).toEqual(expectedReplies(inner.got, sent))
+          expect(expectedReplies(inner.got, sent).filter(r => r !== undefined)).toHaveLength(sent.length)
+        },
+      ),
     )
-
-    // Assert
-    expect(sent).toHaveLength(3)
-    expect(inner.got.map(x => x.reply)).toEqual(['reply 0', undefined, 'reply 1', 'reply 2'])
   })
 })
 

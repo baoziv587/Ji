@@ -4,7 +4,8 @@
 //   const { sent } = await answerAll(layer(inner.stream), (_, i) => i)
 //   expect(inner.got.map(x => x.reply)).toEqual(sent.map(x => x.reply))
 //
-//   A layer that drops a delta passes no reply for it: that delta's yield gets undefined.
+//   A layer that drops a delta passes no reply for it: that delta's yield gets undefined; expectedReplies says
+//   which reply each yield should have got.
 
 import type { Stream } from './index.ts'
 
@@ -50,4 +51,13 @@ export async function answerAll<D, T>(
   }
 
   return { sent, result: r.value }
+}
+
+/**
+ * Behind a layer that drops some deltas and passes the rest on unchanged, what each inner yield should have got: the
+ * reply to the same delta (by identity) where it came out, undefined where it was dropped.
+ */
+export function expectedReplies<D>(got: Array<Exchange<D>>, sent: Array<Exchange<D>>): unknown[] {
+  let j = 0
+  return got.map(({ delta }) => (sent[j]?.delta === delta ? sent[j++].reply : undefined))
 }
