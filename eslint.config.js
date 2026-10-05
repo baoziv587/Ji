@@ -42,7 +42,8 @@ export default antfu(
   },
   {
     files: ['plugins/**'],
-    ignores: ['plugins/*/tests/**'],
+    // A README's code is an app using the plugins, which may import them all
+    ignores: ['plugins/*/tests/**', 'plugins/**/*.md/**'],
     rules: {
       'no-restricted-imports': [
         'error',
