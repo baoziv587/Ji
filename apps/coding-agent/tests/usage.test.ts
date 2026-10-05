@@ -1,8 +1,8 @@
 // What the line above the status says the session has spent
 import type { Usage } from '@ji.dev/llm'
+import { formatCount } from '@ji.dev/tui'
 import { describe, expect, it } from 'vitest'
-import { count } from '../src/ui/paint/text.ts'
-import { Meter } from '../src/ui/screen/usage.ts'
+import { Meter } from '../src/ui/usage.ts'
 
 function usage(input: number, output: number, cacheRead: number, cost: number): Usage {
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: cost }
@@ -55,7 +55,7 @@ describe('summary', () => {
     expect(summary).toBe('No model calls')
   })
 
-  it('should count every token for the exit, with the calls and the cost', () => {
+  it('should formatCount every token for the exit, with the calls and the cost', () => {
     // Arrange
     const meter = new Meter()
 
@@ -71,7 +71,7 @@ describe('summary', () => {
 describe('count', () => {
   it('should shorten thousands and millions, with one decimal below 100', () => {
     // Act
-    const shown = [950, 1000, 1234, 48_200, 312_400, 1_500_000].map(count)
+    const shown = [950, 1000, 1234, 48_200, 312_400, 1_500_000].map(formatCount)
 
     // Assert
     expect(shown).toEqual(['950', '1k', '1.2k', '48.2k', '312k', '1.5M'])

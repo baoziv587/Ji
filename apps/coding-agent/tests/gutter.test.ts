@@ -2,8 +2,8 @@
 import process from 'node:process'
 import { Writable } from 'node:stream'
 import { stripVTControlCharacters } from 'node:util'
+import { displayWidth } from '@ji.dev/tui'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { widthOf } from '../src/ui/paint/text.ts'
 import { Gutter } from '../src/ui/reply/gutter.ts'
 
 const COLUMNS = 40
@@ -36,7 +36,7 @@ describe('gutter', () => {
 
     // Assert
     expect(rows.length).toBeGreaterThan(2)
-    expect(rows.every(row => row.startsWith(RAIL) && widthOf(row) < COLUMNS)).toBe(true)
+    expect(rows.every(row => row.startsWith(RAIL) && displayWidth(row) < COLUMNS)).toBe(true)
     // A space where a row breaks is left out, or left at the end of the row
     expect(rows.map(row => row.slice(RAIL.length).trimEnd()).join(' ')).toBe(line)
   })
@@ -51,7 +51,7 @@ describe('gutter', () => {
 
     // Assert
     expect(rows.length).toBeGreaterThan(1)
-    expect(rows.every(row => row.startsWith(RAIL) && widthOf(row) < COLUMNS)).toBe(true)
+    expect(rows.every(row => row.startsWith(RAIL) && displayWidth(row) < COLUMNS)).toBe(true)
     expect(rows.some(row => /^│ {2}[，。：、]/.test(row))).toBe(false)
     expect(
       rows
@@ -73,7 +73,7 @@ describe('gutter', () => {
     expect(rows.at(-1)).toBe(`${RAIL}\`\`\``)
     const body = rows.slice(1, -1)
     expect(body.length).toBeGreaterThan(1)
-    expect(body.every(row => row.startsWith(RAIL) && widthOf(row) < COLUMNS)).toBe(true)
+    expect(body.every(row => row.startsWith(RAIL) && displayWidth(row) < COLUMNS)).toBe(true)
     expect(body.map(row => row.slice(RAIL.length)).join('')).toBe(code)
   })
 

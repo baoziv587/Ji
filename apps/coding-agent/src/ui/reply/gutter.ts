@@ -1,13 +1,19 @@
 // A reply's streamed text, written to the right of clack's rail, lined up with the prompts above and below.
 
+import type { Format } from '@ji.dev/tui'
 import type { Writable } from 'node:stream'
-import type { Rows } from '../markdown/flow.ts'
-import type { Format } from '../markdown/inline.ts'
 import process from 'node:process'
 import { styleText } from 'node:util'
-import { Flow } from '../markdown/flow.ts'
-import { Markdown } from '../markdown/markdown.ts'
-import { bar, count, dim, room, tail } from '../paint/text.ts'
+import {
+  createRailRows,
+  dimText,
+  formatCount,
+  Markdown,
+  paintRail,
+  PlainText,
+  tailToWidth,
+  widthBesideRail,
+} from '@ji.dev/tui'
 
 export type BlockKind = 'thinking' | 'text'
 
@@ -35,9 +41,8 @@ const RECENT = 200
 const THINKING: Format[] = ['dim', 'italic']
 
 /**
- * Thinking and answer text each get their own block: the answer is Markdown, the thinking dim text as it comes. The
- * rail is written lazily, when a row gets its first text or a line turns out to be blank, so a chunk ending in '\n'
- * leaves no dangling rail.
+ * Thinking and answer text each get their own block: the answer is Markdown, the thinking dim text as it comes, each
+ * row after its block's rail.
  *
  * A line too long for the terminal goes on in rows of its own, each after the rail, instead of being wrapped by the
  * terminal back to its first column.
@@ -46,7 +51,6 @@ export class Gutter {
   private readonly views: Views
   private readonly blocks: Record<BlockKind, Block>
   private open: { kind: BlockKind; writer: Writer } | undefined
-  private atLineStart = true
   /** The thinking block in progress: how long and how much, and its last words for the status. */
   private thought: { since: number; chars: number; recent: string } | undefined
   /** The answer block in progress, to ask what it holds back. */
@@ -62,15 +66,17 @@ export class Gutter {
         rail: styleText('gray', '┊'),
         output: views.full,
       },
-      text: { rail: bar(), output: both },
+      text: { rail: paintRail(), output: both },
     }
   }
 
   async write(chunk: string, kind: BlockKind): Promise<void> {
     if (this.open?.kind !== kind) {
       this.end()
+
       const block = this.blocks[kind]
-      block.output.write(`${bar()}\n${block.title === undefined ? '' : `${block.title}\n`}`)
+      const title = block.title === undefined ? '' : `${block.title}\n`
+      block.output.write(`${paintRail()}\n${title}`)
       this.open = { kind, writer: this.writerOf(kind) }
     }
 
@@ -90,7 +96,7 @@ export class Gutter {
     }
 
     const words = this.thought.recent.replaceAll(/\s+/g, ' ').trim()
-    return dim(`${count(this.thought.chars)} chars · …${tail(words, 48)}`)
+    return dimText(`${formatCount(this.thought.chars)} chars · …${tailToWidth(words, 48)}`)
   }
 
   /** What the answer holds back until it ends: `table · 14 rows`; empty while it goes on as it comes. */
@@ -103,50 +109,25 @@ export class Gutter {
     this.open?.writer.end()
     this.open = undefined
     this.markdown = undefined
-    this.atLineStart = true
 
     if (this.thought !== undefined) {
       const seconds = Math.max(1, Math.round((performance.now() - this.thought.since) / 1000))
       const title = styleText(THINKING, `Thought for ${seconds}s`)
-      const length = dim(`· ${count(this.thought.chars)} chars`)
-      this.views.brief.write(`${bar()}\n${styleText('gray', '◌')}  ${title} ${length}\n`)
+      const length = dimText(`· ${formatCount(this.thought.chars)} chars`)
+      this.views.brief.write(`${paintRail()}\n${styleText('gray', '◌')}  ${title} ${length}\n`)
       this.thought = undefined
     }
   }
 
   private writerOf(kind: BlockKind): Writer {
     const block = this.blocks[kind]
-    const rows: Rows = {
-      write: text => {
-        if (this.atLineStart) {
-          block.output.write(`${block.rail}  `)
-          this.atLineStart = false
-        }
-        block.output.write(text)
-      },
-      // Blank lines get a rail too, so paragraphs stay connected
-      newline: () => {
-        block.output.write(this.atLineStart ? `${block.rail}\n` : '\n')
-        this.atLineStart = true
-      },
-    }
+    const rows = createRailRows(block.output, block.rail)
 
     if (kind === 'text') {
-      this.markdown = new Markdown(rows, room)
+      this.markdown = new Markdown(rows, widthBesideRail)
       return this.markdown
     }
 
-    const flow = new Flow(rows, room)
-    return {
-      write: async chunk => {
-        for (const [i, part] of chunk.split('\n').entries()) {
-          if (i > 0) {
-            flow.endLine()
-          }
-          flow.add(part, THINKING)
-        }
-      },
-      end: () => flow.end(),
-    }
+    return new PlainText(rows, widthBesideRail, THINKING)
   }
 }

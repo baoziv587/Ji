@@ -1,13 +1,11 @@
 // A reply as it streams in: the run's events as lines in the two views, and as the status in the bar.
 
 import type { Message, Run, ToolCall } from '@ji.dev/llm'
-import type { LiveRows } from '../screen/live.ts'
-import type { Screen } from '../screen/screen.ts'
-import type { Status } from '../screen/status.ts'
-import type { Meter } from '../screen/usage.ts'
+import type { LiveRows, Screen, Status } from '@ji.dev/tui'
+import type { Meter } from '../usage.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
-import { bar, dim } from '../paint/text.ts'
+import { dimText, OutputTail, paintRail } from '@ji.dev/tui'
 import {
   describeArguments,
   describeDone,
@@ -15,7 +13,6 @@ import {
   describeResult,
   describeRunning,
   describeWriting,
-  Output,
 } from './calls.ts'
 import { Gutter } from './gutter.ts'
 
@@ -33,7 +30,7 @@ interface Writing {
 interface Running {
   call: ToolCall
   since: number
-  output: Output
+  output: OutputTail
 }
 
 /** Where a reply shows, and what it counts toward. */
@@ -94,7 +91,7 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
     const icon = styleText('magenta', spinner)
     const held = out.held()
     if (held !== '') {
-      return [`${bar()}  ${icon} ${dim(held)}`]
+      return [`${paintRail()}  ${icon} ${dimText(held)}`]
     }
 
     const now = performance.now()
@@ -107,14 +104,14 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
     }
 
     // Where the first done row of the turn will go, after its blank line
-    const rows = afterDone ? [] : [bar()]
+    const rows = afterDone ? [] : [paintRail()]
     for (const { call, chars } of shownWriting) {
       rows.push(`${icon}  ${describeWriting(call, chars)}`)
     }
     for (const { call, since, output } of shownRunning) {
       rows.push(`${icon}  ${describeRunning(call, Math.floor((now - since) / 1000), output)}`)
       if (call.id === latest) {
-        rows.push(...describeRecent(output).map(line => `${bar()}  ${line}`))
+        rows.push(...describeRecent(output).map(line => `${paintRail()}  ${line}`))
       }
     }
     return rows
@@ -130,7 +127,7 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           if (e.turn.kind === 'input') {
             out.end()
             // A message sent while the agent was busy steered it; one sent while idle simply started its turn
-            const steer = e.turn.idle ? '' : dim('  · steer')
+            const steer = e.turn.idle ? '' : dimText('  · steer')
             for (const m of e.turn.messages) {
               log.message(`${styleText('bold', contentOf(m))}${steer}`, { symbol: styleText('cyan', '●') })
             }
@@ -184,7 +181,7 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           afterCall = true
           break
         case 'tool_start':
-          running.set(e.call.id, { call: e.call, since: performance.now(), output: new Output() })
+          running.set(e.call.id, { call: e.call, since: performance.now(), output: new OutputTail() })
           status.show(runningLabel())
           break
         case 'tool_update': {
