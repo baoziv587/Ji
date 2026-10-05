@@ -158,12 +158,12 @@ for await (const event of checking.send('Check https://example.com')) {
 
 ### 更多能力，按需组合
 
-| 能力       | 示例                                                                                                                                                           |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 管理上下文 | [自动压缩](apps/examples/src/plugins/compaction.ts)、[截断工具结果](apps/examples/src/plugins/truncate-tool-results.ts)                                        |
-| 推进任务   | [自动继续](apps/examples/src/plugins/keep-going.ts)、[检索与备用模型](apps/examples/src/hooks.ts)                                                              |
-| 控制工具   | [串行执行](apps/examples/src/plugins/sequential-tools.ts)、[进度节流](plugins/throttle-updates/src/index.ts)、[提问与调用前审批](plugins/choices/src/index.ts) |
-| 导出事件   | [OpenTelemetry](plugins/otel/src/index.ts)、[JSONL](plugins/jsonl/src/index.ts)                                                                                |
+| 能力       | 示例                                                                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 管理上下文 | [自动压缩](apps/examples/src/plugins/compaction.ts)、[截断工具结果](apps/examples/src/plugins/truncate-tool-results.ts)                                           |
+| 推进任务   | [自动继续](apps/examples/src/plugins/keep-going.ts)、[检索与备用模型](apps/examples/src/hooks.ts)                                                                 |
+| 控制工具   | [串行执行](apps/examples/src/plugins/sequential-tools.ts)、[进度节流](plugins/throttle-updates/src/index.ts)、[提问与调用前审批](plugins/choices/README.zh-CN.md) |
+| 导出事件   | [OpenTelemetry](plugins/otel/src/index.ts)、[JSONL](plugins/jsonl/src/index.ts)                                                                                   |
 
 <br>
 
