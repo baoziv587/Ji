@@ -72,6 +72,16 @@ export default antfu(
     },
   },
   {
+    // The shell core is pure and import-free too: it never starts a process (rfcs/tools/bash-grep-algebra.md §4, X1)
+    files: ['plugins/shell/src/core/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ regex: '^(?!\\./)', message: 'The shell core imports only its own modules.' }] },
+      ],
+    },
+  },
+  {
     // RFC-0005 promise 9: the REPL needs nothing from pi-ai directly
     files: ['apps/repl/src/**'],
     rules: {

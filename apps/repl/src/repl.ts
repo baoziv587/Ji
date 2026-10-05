@@ -11,6 +11,8 @@
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=off turns thinking off (default high); /think <level> switches it mid-chat, thinking shows in gray
 //   The model can read and edit files: every read, and every change shown as a diff, waits for a yes
+//   It can run commands with bash and search with grep, both in the directory the command was run from; every command
+//   waits for a yes, in either mode, since what it touches is not known
 //   Shift+Tab switches to auto-approve and back; auto-approve covers only the directory the command was run from, and
 //   a call reaching outside it is still asked about, with No under the cursor
 //   The model can ask questions of its own, with options it writes; Esc dismisses any question
@@ -37,6 +39,7 @@ import {
 import { choices, DISMISSED } from '@ji.dev/plugin-choices'
 import { terminal } from '@ji.dev/plugin-choices/terminal'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
+import { createLocalHost, createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
 import truncatedWidth from 'fast-string-truncated-width'
 import { edit, EMPTY, textOf } from './editing.ts'
 import { Screen } from './screen.ts'
@@ -75,6 +78,11 @@ const rooted = localWorkspace(ROOT)
 
 const FILE_TOOLS = new Set(fileTools.tools?.map(t => t.name))
 
+/** bash and grep, run in ROOT. Before the files plugin: a command runs after the edits the model wrote before it. */
+const host = createLocalHost({ cwd: ROOT })
+const shellTools = createShellPlugin(host)
+const searchTools = createSearchPlugin(host)
+
 /** Shift+Tab switches it, at the prompt or at a question. */
 let mode: 'ask' | 'auto' = 'ask'
 
@@ -84,9 +92,9 @@ let askReads = true
 /** Starts with the mode's name, the word the help line uses for it. */
 function describeMode(): string {
   if (mode === 'auto') {
-    return 'auto: approves inside the workspace, asks outside it'
+    return 'auto: approves file calls inside the workspace, asks about the rest'
   }
-  return `ask: before every file ${askReads ? 'read and change' : 'change'}`
+  return `ask: before every command and file ${askReads ? 'read and change' : 'change'}`
 }
 
 /** The files plugin's preview covers only changes; reads are asked about too. */
@@ -122,10 +130,10 @@ async function outsideRoot(call: ToolCall): Promise<boolean> {
 }
 
 /**
- * The model asks with ask_user, and fileCalls says which calls wait for a yes (RFC-0007 §5). Neither knows about the
- * terminal: `answer` puts every question to the person.
+ * The model asks with ask_user; fileCalls says which file calls wait for a yes, and every command does (RFC-0007 §5).
+ * None of them knows about the terminal: `answer` puts every question to the person.
  */
-const asking = choices({ answer, approve: [fileCalls] })
+const asking = choices({ answer, approve: [fileCalls, shellTools.preview] })
 
 // The terminal: the bars, the reply in progress and its status, shared by the question and the reply
 
@@ -623,7 +631,7 @@ function startAgent(): Agent {
       thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
       system: `You are a concise assistant running in a terminal. Use tools when they help. File paths are relative to ${ROOT}.`,
       tools: [calc, now],
-      plugins: [fileTools, asking],
+      plugins: [shellTools, searchTools, fileTools, asking],
     })
   } catch (error) {
     if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
@@ -640,7 +648,9 @@ let agent = startAgent()
 let chat = createSession(agent)
 
 const levels = agent.model.thinkingLevels.join('|')
-const TOOL_NAMES = [calc, now, ...(fileTools.tools ?? []), ...(asking.tools ?? [])].map(t => t.name).join(', ')
+const TOOL_NAMES = [calc, now, ...[shellTools, searchTools, fileTools, asking].flatMap(p => p.tools ?? [])]
+  .map(t => t.name)
+  .join(', ')
 const MISSING_KEY =
   'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
 

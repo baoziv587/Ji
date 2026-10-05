@@ -238,6 +238,9 @@ importers:
       '@ji.dev/plugin-files':
         specifier: workspace:*
         version: link:../../plugins/files
+      '@ji.dev/plugin-shell':
+        specifier: workspace:*
+        version: link:../../plugins/shell
       '@xterm/headless':
         specifier: ^6.0.0
         version: 6.0.0
@@ -328,6 +331,21 @@ importers:
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@mariozechner/pi-ai':
+        specifier: ^0.73.1
+        version: 0.73.1(ws@8.21.3)(zod@4.6.5)
+
+  plugins/shell:
+    devDependencies:
+      '@ji.dev/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+      '@ji.dev/plugin-choices':
+        specifier: workspace:*
+        version: link:../choices
+      '@ji.dev/plugin-files':
+        specifier: workspace:*
+        version: link:../files
       '@mariozechner/pi-ai':
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.3)(zod@4.6.5)
