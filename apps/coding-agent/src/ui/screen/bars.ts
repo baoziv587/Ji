@@ -14,6 +14,7 @@ export interface Bars {
   /** `deepseek/deepseek-v4-flash` */
   model: string
   thinking: string
+  /** `~/projects/app`: the home folder as `~`. */
   root: string
   editing: Editing
   /** A reply is being written. */
@@ -43,16 +44,50 @@ export function frameOf(columns: number, bars: Bars): Frame {
   const inner = width - 2
   const rule = dim('─'.repeat(width))
 
-  const title = `${styleText('bold', 'ji')} ${dim('·')} ${bars.model}`
-  const settings = dim(` · thinking ${bars.thinking} · ${bars.root}`)
   const input = inputLine(inner, bars)
 
   return {
-    top: ['', ` ${fit(title + settings, inner)}`, rule],
+    top: ['', ` ${titleLine(inner, bars)}`, rule],
     bottom: [usageRule(width, bars.usage), ` ${fit(statusLine(bars), inner)}`, ` ${input.line}`, ''],
     // Hidden while a question is open: the keys are its own
     cursor: bars.asking ? undefined : { row: 2, column: input.column + 1 },
   }
+}
+
+/**
+ * The model and its thinking level always; then the workspace, its first folders left out until it fits, or none of it.
+ * The provider goes last, before the model's own name is cut.
+ */
+function titleLine(width: number, bars: Bars): string {
+  const full = title(bars.model, bars.thinking)
+  for (const root of shortenedRoots(bars.root)) {
+    const line = full + dim(` · ${root}`)
+    if (widthOf(line) <= width) {
+      return line
+    }
+  }
+
+  if (widthOf(full) <= width) {
+    return full
+  }
+
+  const withoutProvider = bars.model.slice(bars.model.indexOf('/') + 1)
+  return fit(title(withoutProvider, bars.thinking), width)
+}
+
+/** `ji · deepseek/deepseek-v4-flash · high` */
+function title(model: string, thinking: string): string {
+  return `${styleText('bold', 'ji')} ${dim('·')} ${model}${dim(` · ${thinking}`)}`
+}
+
+/** `~/a/b/c`, then `…/b/c`, then `…/c`. */
+function shortenedRoots(root: string): string[] {
+  const folders = root.split('/')
+  const shortened = [root]
+  for (let start = 1; start < folders.length; start++) {
+    shortened.push(`…/${folders.slice(start).join('/')}`)
+  }
+  return shortened
 }
 
 /** A rule with the session's usage at its right end, as much of it as fits; a plain one before any model call. */

@@ -35,6 +35,7 @@ pnpm coding-agent
 | Shift+Tab       | 切换 ask / auto                              |
 | Ctrl+O          | 详细视图：完整的思考、调用的参数和结果       |
 | `/think <档位>` | `off` / `high` / `xhigh`                     |
+| `/help`         | 列出按键、命令和工具                         |
 | `/exit`         | 退出                                         |
 
 `DEEPSEEK_MODEL`（默认 `deepseek-v4-flash`）和 `DEEPSEEK_THINKING`（默认 `high`）设置模型和思考档位。鼠标滚轮用来滚动，选字要按住 Option；退出后整段对话会打印回终端。

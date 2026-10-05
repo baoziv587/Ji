@@ -35,6 +35,7 @@ Needs Node 24+. **It works in the directory you start it from.** To use it on an
 | Shift+Tab        | Switches ask / auto                                                 |
 | Ctrl+O           | Shows the details: full thinking, every call's arguments and result |
 | `/think <level>` | `off` / `high` / `xhigh`                                            |
+| `/help`          | Lists the keys, the commands and the tools                          |
 | `/exit`          | Quits                                                               |
 
 `DEEPSEEK_MODEL` (default `deepseek-v4-flash`) and `DEEPSEEK_THINKING` (default `high`) set the model and thinking level. The mouse wheel scrolls, so hold Option to select text. On exit the conversation is printed back to the terminal.

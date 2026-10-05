@@ -1,14 +1,15 @@
 // A coding agent to chat with in the terminal: DEEPSEEK_API_KEY=sk-... pnpm coding-agent
 //
-//   It fills the terminal: a bar on top (model, thinking, workspace) and one at the bottom (the status, and the line
-//   you type in) stay put, and only the conversation between them scrolls, with the wheel or PgUp/PgDn. On exit the
-//   conversation is printed to the terminal, where it stays
+//   It fills the terminal: a bar on top (model, thinking, workspace; the workspace gives way first on a narrow one) and
+//   one at the bottom (the status, and the line you type in) stay put, and only the conversation between them scrolls,
+//   with the wheel or PgUp/PgDn. On exit the conversation is printed to the terminal, where it stays
 //   Enter sends; replies stream in, with one line per tool call as it finishes. Thinking shows as one line with its
 //   length; Ctrl+O shows it in full, and every call's arguments and result, and back
 //   The line above the status adds up the session: tokens in and out, cache hits, speed, cost. On exit the session's
 //   id and its usage in full are printed below the conversation
 //   Enter during a reply steers it: the message reaches the model after the step in progress, and shows above then
 //   Ctrl+C during a reply stops only that reply; Ctrl+C on an empty line or /exit quits
+//   /help lists the keys, the commands and the tools
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=off turns thinking off (default high); /think <level> switches it mid-chat, thinking shows in gray
 //   The model can read and edit files: every read, and every change shown as a diff, waits for a yes
@@ -33,17 +34,21 @@
 // agent/ and plugins/ know nothing of the terminal.
 
 import type { Agent, Run } from '@ji.dev/llm'
+import type { Hint } from './ui/paint/text.ts'
 import type { Editing, Keypress } from './ui/screen/editing.ts'
 import type { Frame } from './ui/screen/screen.ts'
+import { homedir } from 'node:os'
 import process from 'node:process'
 import { emitKeypressEvents } from 'node:readline'
+import { styleText } from 'node:util'
 import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
 import { choices } from '@ji.dev/plugin-choices'
+import { wrapAnsi } from 'fast-wrap-ansi'
 import { createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
 import { Permissions } from './plugins/permissions.ts'
-import { dim, hints } from './ui/paint/text.ts'
+import { dim, hint, room } from './ui/paint/text.ts'
 import { Answering } from './ui/questions/answering.ts'
 import { render } from './ui/reply/render.ts'
 import { frameOf } from './ui/screen/bars.ts'
@@ -56,6 +61,9 @@ import { Meter } from './ui/screen/usage.ts'
 
 /** Where the command was run from: pnpm --filter starts the script in the package's own directory. */
 const ROOT = process.env.INIT_CWD ?? process.cwd()
+
+/** The root as the top bar shows it. */
+const WORKSPACE = withHomeAsTilde(ROOT)
 
 const plugins = createPlugins(ROOT)
 
@@ -90,6 +98,36 @@ const stage = {
 }
 
 const levels = conversation.agent.model.thinkingLevels.join('|')
+
+const TOOLS = toolNamesOf(plugins, asking)
+
+/** What /help lists: the commands, then the keys by when they work. */
+const HELP: [title: string, keys: Hint[]][] = [
+  [
+    'Commands',
+    [
+      [`/think <${levels}>`, 'sets thinking'],
+      ['/help', 'lists this'],
+      ['/exit', 'quits'],
+    ],
+  ],
+  [
+    'While replying',
+    [
+      ['Enter', 'steers a reply'],
+      ['Ctrl+C', 'stops a reply'],
+      ['Esc', 'dismisses a question'],
+    ],
+  ],
+  [
+    'Anytime',
+    [
+      ['Shift+Tab', 'switches ask/auto'],
+      ['Ctrl+O', 'shows details'],
+      ['Wheel, PgUp/PgDn', 'scroll'],
+    ],
+  ],
+]
 
 const MISSING_KEY =
   'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
@@ -157,6 +195,10 @@ function submit(): void {
     quit()
     return
   }
+  if (message === '/help') {
+    help()
+    return
+  }
   if (message === '/think' || message.startsWith('/think ')) {
     think(message.slice('/think'.length).trim())
     return
@@ -180,6 +222,26 @@ function think(arg: string): void {
 
   conversation.think(level)
   log.success(`Thinking: ${conversation.agent.thinking}`)
+}
+
+/** The keys in a column, each group under its title, then the tools, as many to a row as fit. */
+function help(): void {
+  const lines: string[] = []
+
+  const keyWidth = Math.max(...HELP.flatMap(([, keys]) => keys.map(([key]) => key.length)))
+  for (const [title, keys] of HELP) {
+    lines.push(title)
+    for (const [key, action] of keys) {
+      lines.push(`  ${styleText('bold', key.padEnd(keyWidth))}  ${dim(action)}`)
+    }
+  }
+
+  lines.push(`Tools (${TOOLS.length})`)
+  for (const row of wrapAnsi(TOOLS.join(', '), room() - 2).split('\n')) {
+    lines.push(`  ${dim(row)}`)
+  }
+
+  log.message(lines.join('\n'), { spacing: 0 })
 }
 
 /** Shows a reply to its end. One that does not finish puts what it was sent back in the input, ahead of what is typed. */
@@ -219,12 +281,21 @@ function interrupt(): void {
 
 // The bars
 
+/** `~/projects/app` for a folder under the home folder; any other stays as it is. */
+function withHomeAsTilde(path: string): string {
+  const home = homedir()
+  if (path !== home && !path.startsWith(`${home}/`)) {
+    return path
+  }
+  return `~${path.slice(home.length)}`
+}
+
 function drawFrame(columns: number): Frame {
   const { model, thinking } = conversation.agent
   return frameOf(columns, {
     model: `${model.provider}/${model.id}`,
     thinking,
-    root: ROOT,
+    root: WORKSPACE,
     editing,
     replying: conversation.replying,
     asking: answering.open,
@@ -276,17 +347,8 @@ screen.keys.on('keypress', onKey)
 
 screen.start()
 
-const help = hints([
-  [`/think <${levels}>`, 'sets thinking'],
-  ['Enter', 'steers a reply'],
-  ['Shift+Tab', 'switches ask/auto'],
-  ['Esc', 'dismisses a question'],
-  ['Ctrl+C', 'stops a reply'],
-  ['Ctrl+O', 'shows details'],
-  ['Wheel, PgUp/PgDn', 'scroll'],
-  ['/exit', 'quits'],
-])
-log.message(`${dim(`tools: ${toolNamesOf(plugins, asking).join(', ')}`)}\n${help}`, { spacing: 0 })
+const tools = TOOLS.length === 1 ? '1 tool' : `${TOOLS.length} tools`
+log.message(`${dim(`${tools} ·`)} ${hint('/help', 'lists keys, commands and tools')}`, { spacing: 0 })
 
 // The key is only needed to send, so its absence is pointed out without blocking anything else
 if (!conversation.agent.model.hasEnvKey) {
