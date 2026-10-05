@@ -12,23 +12,92 @@
 //
 // Widths as pi-tui's renderTable gives them: https://github.com/earendil-works/pi (packages/tui/src/components/markdown.ts)
 
-import type { Token, Tokens } from 'marked'
-import { styleText } from 'node:util'
+import type { Tokens } from 'marked'
+import type { Flow } from './flow.ts'
+import type { Piece } from './inline.ts'
 import { Lexer } from 'marked'
-import { dim, widthOf, wordsOf, wrapRows } from './text.ts'
-
-type Format = Extract<Parameters<typeof styleText>[0], readonly unknown[]>[number]
-
-/** Text in the styles around it: a cell is a run of these. */
-interface Piece {
-  text: string
-  formats: Format[]
-}
+import { dim, widthOf, wordsOf, wrapRows } from '../paint/text.ts'
+import { paint, piecesOf, textOf } from './inline.ts'
 
 type Align = Tokens.TableCell['align']
 
 /** A column narrowed to fit is kept at least as wide as its longest word, up to this. */
 const LONGEST_WORD = 30
+
+/** A table's first line, its header, if a delimiter row follows it. */
+const HEADER = /^ {0,3}\|/
+
+/** The line under a table's header: `|---|:--:|`. */
+const DELIMITER = /^[\s|:]*-[\s|:-]*$/
+
+/**
+ * A table as it streams in: held back until a line that is not one of its rows ends it, since its widths depend on all
+ * of it. One that turns out not to be a table, or that cannot fit, goes back as text, a line at a time.
+ */
+export class Table {
+  private readonly flow: Flow
+  private readonly width: () => number
+  private readonly text: (line: string) => void
+  private lines: string[] | undefined
+
+  constructor(flow: Flow, width: () => number, text: (line: string) => void) {
+    this.flow = flow
+    this.width = width
+    this.text = text
+  }
+
+  get open(): boolean {
+    return this.lines !== undefined
+  }
+
+  /** Starts a table if `line` may be its header. */
+  start(line: string): boolean {
+    if (!HEADER.test(line)) {
+      return false
+    }
+    this.lines = [line]
+    return true
+  }
+
+  /** Takes `line` if it goes on with the table: the delimiter row under its header, then rows with a pipe. */
+  add(line: string): boolean {
+    if (this.lines === undefined) {
+      return false
+    }
+
+    let goesOn: boolean
+    if (this.lines.length === 1) {
+      goesOn = DELIMITER.test(line) && line.includes('|')
+    } else {
+      goesOn = line.includes('|') && line.trim() !== ''
+    }
+
+    if (goesOn) {
+      this.lines.push(line)
+    }
+    return goesOn
+  }
+
+  /** Draws the table, or gives its lines back as text. */
+  end(): void {
+    if (this.lines === undefined) {
+      return
+    }
+
+    const lines = this.lines
+    this.lines = undefined
+    const drawn = lines.length > 1 ? drawTable(lines.join('\n'), this.width()) : undefined
+    if (drawn === undefined) {
+      for (const line of lines) {
+        this.text(line)
+      }
+      return
+    }
+    for (const line of drawn) {
+      this.flow.row(line)
+    }
+  }
+}
 
 /**
  * The lines of the table in `markdown`, at most `width` columns wide; undefined when it is not a table, or when the
@@ -142,10 +211,9 @@ function wrap(cell: Piece[], width: number): string[] {
   let space = ''
 
   for (const { text, formats } of cell) {
-    const paint = (s: string): string => (formats.length === 0 ? s : styleText(formats, s))
     for (const word of wordsOf(text)) {
       if (word.trim() === '') {
-        space = used === 0 ? '' : paint(word)
+        space = used === 0 ? '' : paint({ text: word, formats })
         continue
       }
 
@@ -159,7 +227,7 @@ function wrap(cell: Piece[], width: number): string[] {
       }
       space = ''
 
-      const rows = wrapRows(paint(word), width, width - used)
+      const rows = wrapRows(paint({ text: word, formats }), width, width - used)
       for (const [i, row] of rows.entries()) {
         if (i > 0) {
           lines.push(line)
@@ -187,41 +255,6 @@ function pad(text: string, width: number, align: Align): string {
     default:
       return text + ' '.repeat(gap)
   }
-}
-
-/** A cell's inline Markdown as styled pieces: bold, italic, struck out, code, and a link's text with its address. */
-function piecesOf(tokens: Token[], formats: Format[]): Piece[] {
-  return tokens.flatMap((token): Piece[] => {
-    switch (token.type) {
-      case 'strong':
-        return piecesOf(token.tokens ?? [], [...formats, 'bold'])
-      case 'em':
-        return piecesOf(token.tokens ?? [], [...formats, 'italic'])
-      case 'del':
-        return piecesOf(token.tokens ?? [], [...formats, 'strikethrough'])
-      case 'codespan':
-        return [{ text: token.text, formats: [...formats, 'cyan'] }]
-      case 'link': {
-        const text = piecesOf(token.tokens ?? [], [...formats, 'underline'])
-        return textOf(text) === token.href
-          ? text
-          : [...text, { text: ` (${token.href})`, formats: [...formats, 'dim'] }]
-      }
-      case 'br':
-        return [{ text: ' ', formats }]
-      case 'text':
-      case 'escape':
-      case 'html':
-        return [{ text: token.text, formats }]
-      default:
-        return [{ text: token.raw, formats }]
-    }
-  })
-}
-
-/** The text of `pieces`, without their styles. */
-function textOf(pieces: Piece[]): string {
-  return pieces.map(p => p.text).join('')
 }
 
 function sum(numbers: number[]): number {

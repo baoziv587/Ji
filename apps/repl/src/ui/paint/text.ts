@@ -89,16 +89,30 @@ export function wrapRows(text: string, width: number, first = width): string[] {
   return rows
 }
 
-/** The words of `text`, and the spaces between them; punctuation stays with the word before it, to end a row. */
+/**
+ * The words of `text`, and the spaces between them. Punctuation after a word stays with it, to end a row; punctuation
+ * after a space, or at the start, goes with the word after it, to start one: `docs (https`, `**bold`.
+ */
 export function wordsOf(text: string): string[] {
   const words: string[] = []
+  // Punctuation waiting for the word after it
+  let before = ''
   for (const { segment, isWordLike } of WORDS.segment(text)) {
     const last = words.at(-1)
-    if (isWordLike !== true && segment.trim() !== '' && last !== undefined && last.trim() !== '') {
+    if (segment.trim() === '') {
+      words.push(...(before === '' ? [segment] : [before, segment]))
+      before = ''
+    } else if (isWordLike === true) {
+      words.push(before + segment)
+      before = ''
+    } else if (before === '' && last !== undefined && last.trim() !== '') {
       words[words.length - 1] = last + segment
     } else {
-      words.push(segment)
+      before += segment
     }
+  }
+  if (before !== '') {
+    words.push(before)
   }
   return words
 }
