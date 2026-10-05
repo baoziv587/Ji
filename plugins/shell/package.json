@@ -1,0 +1,22 @@
+{
+  "name": "@ji.dev/plugin-shell",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "bash and grep tools as bounded folds over a process stream (rfcs/tools/bash-grep-algebra.md)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@ji.dev/llm": "workspace:*"
+  },
+  "devDependencies": {
+    "@ji.dev/llm": "workspace:*",
+    "@ji.dev/plugin-choices": "workspace:*",
+    "@ji.dev/plugin-files": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}

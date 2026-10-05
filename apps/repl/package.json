@@ -3,7 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "description": "A full-screen chat REPL on @ji.dev/llm: DeepSeek, file tools with approval, and steering while a reply runs",
+  "description": "A full-screen chat REPL on @ji.dev/llm: DeepSeek, file, shell and search tools with approval, and steering while a reply runs",
   "scripts": {
     "repl": "node src/repl.ts",
     "typecheck": "tsc --noEmit"
@@ -14,6 +14,7 @@
     "@ji.dev/llm": "workspace:*",
     "@ji.dev/plugin-choices": "workspace:*",
     "@ji.dev/plugin-files": "workspace:*",
+    "@ji.dev/plugin-shell": "workspace:*",
     "@xterm/headless": "^6.0.0",
     "fast-string-truncated-width": "^3.0.3"
   }
