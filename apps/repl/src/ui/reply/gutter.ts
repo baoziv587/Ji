@@ -83,19 +83,19 @@ export class Gutter {
     await this.open.writer.write(chunk)
   }
 
-  /**
-   * What the block in progress is at, for the status: how much the thinking has thought and its last words
-   * (`1.2k chars · …so I'll call calc`), or what the answer holds back (`table · 14 rows`); empty when nothing is.
-   */
-  describe(): string {
-    let detail: string
+  /** `1.2k chars · …so I'll call calc`: how much it has thought, and its last words; empty while not thinking. */
+  describeThought(): string {
     if (this.thought === undefined) {
-      detail = this.markdown?.describe() ?? ''
-    } else {
-      const words = this.thought.recent.replaceAll(/\s+/g, ' ').trim()
-      detail = `${count(this.thought.chars)} chars · …${tail(words, 48)}`
+      return ''
     }
-    return detail === '' ? '' : dim(detail)
+
+    const words = this.thought.recent.replaceAll(/\s+/g, ' ').trim()
+    return dim(`${count(this.thought.chars)} chars · …${tail(words, 48)}`)
+  }
+
+  /** What the answer holds back until it ends: `table · 14 rows`; empty while it goes on as it comes. */
+  held(): string {
+    return this.markdown?.describe() ?? ''
   }
 
   /** Closes the current block so the next output starts on a fresh line; a thinking one gets its line in brief. */

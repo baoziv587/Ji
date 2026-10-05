@@ -9,20 +9,21 @@ import { clip, count, dim, fit, room, widthOf } from '../paint/text.ts'
 /** The rows of a result the full view shows; the rest are counted. */
 const RESULT_ROWS = 30
 
-/** The columns the status gives a running call's last line, as many as the thinking's last words. */
-const LAST_LINE = 48
+/** The rows of a call's output shown while it runs, and kept under it if it fails. */
+const RECENT_ROWS = 5
 
 /** The most kept of a line still being written: a progress bar can go on for long without one. */
 const PARTIAL = 1000
 
 /**
- * What a running call has written so far, from its tool_updates, for the status: `340 lines · ✓ 212 tests passed`.
- * An update is text, or a command's chunk (`{ fd, text }`); anything else, a question say, is not output.
+ * What a running call has written so far, from its tool_updates: how many lines, and the last ones with text. An
+ * update is text, or a command's chunk (`{ fd, text }`); anything else, a question say, is not output.
  */
 export class Output {
-  private lines = 0
-  /** The last line with text in it. */
-  private last = ''
+  /** The lines ended so far. */
+  private ended = 0
+  /** The last of them with text, as shown. */
+  private last: string[] = []
   /** The line still being written. */
   private partial = ''
 
@@ -34,23 +35,27 @@ export class Output {
 
     const lines = (this.partial + text).split('\n')
     this.partial = lines.pop()!.slice(-PARTIAL)
-    this.lines += lines.length
-    const last = lines.findLast(line => shown(line) !== '')
-    if (last !== undefined) {
-      this.last = shown(last)
+    this.ended += lines.length
+
+    // Only the end of a chunk can be among the last rows
+    const fresh: string[] = []
+    for (let i = lines.length - 1; i >= 0 && fresh.length < RECENT_ROWS; i--) {
+      const line = shown(lines[i])
+      if (line !== '') {
+        fresh.unshift(line)
+      }
     }
+    this.last = [...this.last, ...fresh].slice(-RECENT_ROWS)
   }
 
-  /** Empty until it has written something. */
-  describe(): string {
-    const lines = this.lines + (this.partial === '' ? 0 : 1)
-    if (lines === 0) {
-      return ''
-    }
+  get lines(): number {
+    return this.ended + (this.partial === '' ? 0 : 1)
+  }
 
-    const last = shown(this.partial) || this.last
-    const size = `${count(lines)} ${lines === 1 ? 'line' : 'lines'}`
-    return dim(last === '' ? size : `${size} · ${fit(last, LAST_LINE)}`)
+  /** The last rows with text, the one still being written too: what a progress bar drew last. */
+  recent(): string[] {
+    const partial = shown(this.partial)
+    return (partial === '' ? this.last : [...this.last, partial]).slice(-RECENT_ROWS)
   }
 }
 
@@ -113,7 +118,7 @@ export function describeDone(call: ToolCall, result: ToolResultMessage): string 
       return describeCall(call)
     }
 
-    const size = dim(`${count(lines)} lines`)
+    const size = dim(linesOf(lines))
     return `${describeCall(call, width - widthOf(size) - 2)}  ${size}`
   }
 
@@ -121,6 +126,18 @@ export function describeDone(call: ToolCall, result: ToolResultMessage): string 
   const error = clip(resultText(result), Number.POSITIVE_INFINITY)
   const head = describeCall(call, Math.max(width - widthOf(error) - 2, Math.floor(width / 2)))
   return `${head}  ${styleText('red', clip(error, width - widthOf(head) - 2))}`
+}
+
+/** The row of a call still running: the call, how long it has run, and how many lines it has written. */
+export function describeRunning(call: ToolCall, seconds: number, output: Output): string {
+  const lines = output.lines
+  const size = dim(lines === 0 ? `${seconds}s` : `${seconds}s · ${linesOf(lines)}`)
+  return `${describeCall(call, room() - widthOf(size) - 2)}  ${size}`
+}
+
+/** A running call's last rows of output, dim, each cut to fit. */
+export function describeRecent(output: Output): string[] {
+  return output.recent().map(line => dim(fit(line, room())))
 }
 
 /** A tool_update's text: itself, or a chunk's `text`. */
@@ -132,10 +149,20 @@ function textOf(data: unknown): string | undefined {
   return typeof text === 'string' ? text : undefined
 }
 
-/** A line as the status shows it: no colors, only what a progress bar drew last, and its spaces collapsed. */
+/** A line of output as a row shows it: no colors or other control codes, and only what a progress bar drew last. */
 function shown(line: string): string {
   const plain = stripVTControlCharacters(line).replace(/\r$/, '')
-  return clip(plain.slice(plain.lastIndexOf('\r') + 1), Number.POSITIVE_INFINITY)
+  // eslint-disable-next-line no-control-regex -- the codes left after the colors
+  return plain
+    .slice(plain.lastIndexOf('\r') + 1)
+    .replaceAll('\t', '  ')
+    .replaceAll(/[\x00-\x1F\x7F]/g, '')
+    .trimEnd()
+}
+
+/** `1 line`, `340 lines`, `1.2k lines`. */
+function linesOf(n: number): string {
+  return `${count(n)} ${n === 1 ? 'line' : 'lines'}`
 }
 
 function resultText(result: ToolResultMessage): string {

@@ -32,14 +32,19 @@ export class Answering {
     this.permissions = permissions
   }
 
-  /** For choices: Esc dismisses a question, and Ctrl+C stops the reply through the keypress listener. */
+  /**
+   * For choices: Esc dismisses a question, and Ctrl+C stops the reply through the keypress listener. The live rows wait
+   * while it is open: a question draws itself again by moving up over its own rows.
+   */
   readonly answer = (q: Questions, signal: AbortSignal): Promise<Reply> => {
+    this.screen.live.pause()
     const reply = this.choose(q, signal)
     this.showing = true
     this.question = reply
       .catch(() => {})
       .finally(() => {
         this.showing = false
+        this.screen.live.resume()
         this.screen.draw()
       })
     return reply

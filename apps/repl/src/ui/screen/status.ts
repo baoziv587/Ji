@@ -2,9 +2,9 @@
 
 import { styleText } from 'node:util'
 import { dim } from '../paint/text.ts'
+import { SPINNER } from './live.ts'
 
 export class Status {
-  private static readonly frames = ['◒', '◐', '◓', '◑']
   /** Draws the bar again, to spin the icon and count the seconds. */
   private readonly draw: () => void
   private timer: NodeJS.Timeout | undefined
@@ -17,7 +17,7 @@ export class Status {
     this.draw = draw
   }
 
-  /** A different label starts its own count; the detail, a tool's progress say, does not. */
+  /** A different label starts its own count; the detail, the thinking's last words say, does not. */
   show(label: string, detail = ''): void {
     if (label !== this.label) {
       this.label = label
@@ -44,7 +44,7 @@ export class Status {
       return ''
     }
 
-    const icon = styleText('magenta', Status.frames[this.frame % Status.frames.length])
+    const icon = styleText('magenta', SPINNER[this.frame % SPINNER.length])
     const seconds = Math.floor((performance.now() - this.since) / 1000)
     const detail = this.detail === '' ? '' : ` · ${this.detail}`
     return `${icon} ${this.label} ${dim(`${seconds}s`)}${detail}`
