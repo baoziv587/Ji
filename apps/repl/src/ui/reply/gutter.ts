@@ -5,7 +5,8 @@ import type { PaintLine } from '../paint/highlight.ts'
 import process from 'node:process'
 import { styleText } from 'node:util'
 import { languageOf, loadLanguage } from '../paint/highlight.ts'
-import { bar, count, dim, room, tail, widthOf, wrapRows } from '../paint/text.ts'
+import { drawTable } from '../paint/table.ts'
+import { bar, count, dim, room, tail, widthOf, wordsOf, wrapRows } from '../paint/text.ts'
 
 export type BlockKind = 'thinking' | 'text'
 
@@ -25,13 +26,17 @@ interface Block {
 /** Enough of the thinking's end to fill the status. */
 const RECENT = 200
 
-/** A line that may still turn out to be a fence: up to three spaces, then backticks. */
-const MAY_FENCE = /^ {0,3}(?:`{0,3}$|```)/
+/** A line that may still turn out to be a fence or a table's first: up to three spaces, then backticks or a pipe. */
+const MAY_OPEN = /^ {0,3}(?:`{0,3}$|```|\|)/
+
+/** A table's first line, its header, if a delimiter row follows it. */
+const TABLE_START = /^ {0,3}\|/
+
+/** The line under a table's header: `|---|:--:|`. */
+const DELIMITER = /^[\s|:]*-[\s|:-]*$/
 
 /** A fence: its backticks, and the language after them. */
 const FENCE = /^ {0,3}(`{3,})\s*([^`\s]*)/
-
-const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' })
 
 /**
  * Thinking and answer text each get their own block. The rail is written lazily, when a line gets its first text or
@@ -42,7 +47,8 @@ const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' })
  * terminal back to its first column. Prose breaks between words, so a streamed line's last word waits for its end.
  *
  * A code block in the answer is painted a line at a time, since a line's colors depend on all of it: every line in
- * one is held back until it ends, and so is a line that may still turn out to open or close one.
+ * one is held back until it ends, and so is a line that may still turn out to open or close one. A table is held back
+ * the same way, and drawn as a whole once a line that is not one of its rows ends it.
  */
 export class Gutter {
   private readonly views: Views
@@ -61,6 +67,8 @@ export class Gutter {
   private held = ''
   /** The code block the answer is in: the backticks that close it, and what paints its lines. */
   private code: { fence: string; paint: PaintLine } | undefined
+  /** The table the answer is in, held back until it ends: its widths depend on all of it. Its header alone may not be one. */
+  private table: string[] | undefined
 
   /** `both` is what the two views show alike: stdout, unless a test says otherwise. */
   constructor(views: Views, both: Writable = process.stdout) {
@@ -113,14 +121,19 @@ export class Gutter {
   end(): void {
     if (this.open !== undefined) {
       const block = this.blocks[this.open]
-      if (this.code === undefined) {
-        this.flow(this.held, block, true)
-      } else {
+      if (this.code !== undefined) {
         this.putRows(this.code.paint(this.held), block)
+      } else if (this.table !== undefined && continuesTable(this.table, this.held)) {
+        this.table.push(this.held)
+        this.endTable(block)
+      } else {
+        this.endTable(block)
+        this.flow(this.held, block, true)
       }
     }
     this.held = ''
     this.code = undefined
+    this.table = undefined
     this.broken = false
 
     if (this.open && !this.atLineStart) {
@@ -142,7 +155,7 @@ export class Gutter {
   /** Text for the line in progress: written at once, unless the answer's line is held back. */
   private add(part: string, block: Block): void {
     const line = this.held + part
-    if (block === this.blocks.text && (this.code !== undefined || MAY_FENCE.test(line))) {
+    if (block === this.blocks.text && (this.code !== undefined || this.table !== undefined || MAY_OPEN.test(line))) {
       this.held = line
       return
     }
@@ -151,10 +164,18 @@ export class Gutter {
     this.flow(line, block, false)
   }
 
-  /** Ends the line in progress: one held back turns out a fence, a line of code, or plain text after all. */
+  /** Ends the line in progress: one held back turns out a fence, a line of code, a table's, or plain text after all. */
   private async endLine(block: Block): Promise<void> {
     const line = this.held
     this.held = ''
+    if (this.table !== undefined) {
+      if (continuesTable(this.table, line)) {
+        this.table.push(line)
+        return
+      }
+      this.endTable(block)
+    }
+
     const fence = FENCE.exec(line)
 
     if (this.code !== undefined) {
@@ -167,10 +188,35 @@ export class Gutter {
       const start = await loadLanguage(languageOf(fence[2]))
       this.code = { fence: fence[1], paint: start() }
       this.putRows(dim(line), block)
+    } else if (TABLE_START.test(line)) {
+      this.table = [line]
+      return
     } else {
       this.flow(line, block, true)
     }
+    this.endRow(block)
+  }
 
+  /** Draws the table held back, or writes its lines as they are when it turns out not to be one or cannot fit. */
+  private endTable(block: Block): void {
+    if (this.table === undefined) {
+      return
+    }
+
+    const lines = this.table
+    this.table = undefined
+    const drawn = lines.length > 1 ? drawTable(lines.join('\n'), room()) : undefined
+    for (const line of drawn ?? lines) {
+      if (drawn === undefined) {
+        this.flow(line, block, true)
+      } else {
+        this.put(line, block)
+      }
+      this.endRow(block)
+    }
+  }
+
+  private endRow(block: Block): void {
     // Blank lines get a rail too, so paragraphs stay connected
     block.output.write(this.atLineStart ? `${block.rail}\n` : '\n')
     this.atLineStart = true
@@ -235,16 +281,10 @@ export class Gutter {
   }
 }
 
-/** The words of `text`, and the spaces between them; punctuation stays with the word before it, to end a row. */
-function wordsOf(text: string): string[] {
-  const words: string[] = []
-  for (const { segment, isWordLike } of WORDS.segment(text)) {
-    const last = words.at(-1)
-    if (isWordLike !== true && segment.trim() !== '' && last !== undefined && last.trim() !== '') {
-      words[words.length - 1] = last + segment
-    } else {
-      words.push(segment)
-    }
+/** Whether `line` goes on with the table so far: the delimiter row under its header, then rows with a pipe. */
+function continuesTable(table: string[], line: string): boolean {
+  if (table.length === 1) {
+    return DELIMITER.test(line) && line.includes('|')
   }
-  return words
+  return line.includes('|') && line.trim() !== ''
 }
