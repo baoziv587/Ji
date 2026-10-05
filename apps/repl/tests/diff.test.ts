@@ -1,8 +1,8 @@
 // A diff in color: the same text, with what a line changed on a stronger background
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { paintDiff } from '../src/diff.ts'
-import { DIFF, loadLanguage } from '../src/highlight.ts'
+import { DIFF, loadLanguage } from '../src/ui/paint/highlight.ts'
+import { paintDiff } from '../src/ui/questions/diff.ts'
 
 describe('paintDiff', () => {
   it('should keep every line of every hunk as it is, only in color', async () => {

@@ -3,8 +3,8 @@
 
 import type { ToolCall, ToolResultMessage } from '@ji.dev/llm'
 import { styleText } from 'node:util'
-import { highlight, languageOf } from './highlight.ts'
-import { clip, dim, fit, room, widthOf } from './text.ts'
+import { highlight, languageOf } from '../paint/highlight.ts'
+import { clip, dim, fit, room, widthOf } from '../paint/text.ts'
 
 /** The rows of a file read the full view shows; the rest are counted. */
 const READ_ROWS = 30

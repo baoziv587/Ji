@@ -250,6 +250,10 @@ importers:
       shiki:
         specifier: ^4.5.0
         version: 4.5.0
+    devDependencies:
+      '@mariozechner/pi-ai':
+        specifier: ^0.73.1
+        version: 0.73.1(ws@8.21.3)(zod@4.6.5)
 
   apps/replay:
     dependencies:

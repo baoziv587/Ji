@@ -1,8 +1,8 @@
 // What keys do to the input line, without a terminal
-import type { Editing, Keypress } from '../src/editing.ts'
+import type { Editing, Keypress } from '../src/ui/screen/editing.ts'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { edit, EMPTY, textOf } from '../src/editing.ts'
+import { edit, EMPTY, textOf } from '../src/ui/screen/editing.ts'
 
 const MOVES: Keypress[] = [
   { name: 'left' },

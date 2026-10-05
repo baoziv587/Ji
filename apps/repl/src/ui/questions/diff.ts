@@ -1,9 +1,9 @@
 // A diff in color: the files plugin's hunks, without context lines, in the colors of the file they change.
 
-import type { Background, PaintLine } from './highlight.ts'
+import type { Background, PaintLine } from '../paint/highlight.ts'
 import { styleText } from 'node:util'
-import { DIFF } from './highlight.ts'
-import { dim } from './text.ts'
+import { DIFF } from '../paint/highlight.ts'
+import { dim } from '../paint/text.ts'
 
 /** Every hunk in its own colors; `start` starts a block in the file's language. */
 export function paintDiff(patch: string, start: () => PaintLine): string {

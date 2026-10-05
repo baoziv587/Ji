@@ -1,7 +1,8 @@
 // What the line above the status says the session has spent
 import type { Usage } from '@ji.dev/llm'
 import { describe, expect, it } from 'vitest'
-import { count, Meter } from '../src/usage.ts'
+import { count } from '../src/ui/paint/text.ts'
+import { Meter } from '../src/ui/screen/usage.ts'
 
 function usage(input: number, output: number, cacheRead: number, cost: number): Usage {
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: cost }

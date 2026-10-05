@@ -1,7 +1,7 @@
 // What the reply is doing and for how long, spun in the bottom bar while a reply runs.
 
 import { styleText } from 'node:util'
-import { dim } from './text.ts'
+import { dim } from '../paint/text.ts'
 
 export class Status {
   private static readonly frames = ['◒', '◐', '◓', '◑']
