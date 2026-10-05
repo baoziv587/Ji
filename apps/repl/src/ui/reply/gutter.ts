@@ -49,6 +49,8 @@ export class Gutter {
   private atLineStart = true
   /** The thinking block in progress: how long and how much, and its last words for the status. */
   private thought: { since: number; chars: number; recent: string } | undefined
+  /** The answer block in progress, to ask what it holds back. */
+  private markdown: Markdown | undefined
 
   /** `both` is what the two views show alike: stdout, unless a test says otherwise. */
   constructor(views: Views, both: Writable = process.stdout) {
@@ -81,20 +83,26 @@ export class Gutter {
     await this.open.writer.write(chunk)
   }
 
-  /** `1.2k chars · …so I'll call calc`: how much it has thought, and its last words; empty while not thinking. */
-  describeThought(): string {
+  /**
+   * What the block in progress is at, for the status: how much the thinking has thought and its last words
+   * (`1.2k chars · …so I'll call calc`), or what the answer holds back (`table · 14 rows`); empty when nothing is.
+   */
+  describe(): string {
+    let detail: string
     if (this.thought === undefined) {
-      return ''
+      detail = this.markdown?.describe() ?? ''
+    } else {
+      const words = this.thought.recent.replaceAll(/\s+/g, ' ').trim()
+      detail = `${count(this.thought.chars)} chars · …${tail(words, 48)}`
     }
-
-    const words = this.thought.recent.replaceAll(/\s+/g, ' ').trim()
-    return dim(`${count(this.thought.chars)} chars · …${tail(words, 48)}`)
+    return detail === '' ? '' : dim(detail)
   }
 
   /** Closes the current block so the next output starts on a fresh line; a thinking one gets its line in brief. */
   end(): void {
     this.open?.writer.end()
     this.open = undefined
+    this.markdown = undefined
     this.atLineStart = true
 
     if (this.thought !== undefined) {
@@ -124,7 +132,8 @@ export class Gutter {
     }
 
     if (kind === 'text') {
-      return new Markdown(rows, room)
+      this.markdown = new Markdown(rows, room)
+      return this.markdown
     }
 
     const flow = new Flow(rows, room)

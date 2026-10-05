@@ -78,6 +78,16 @@ export class Table {
     return goesOn
   }
 
+  /** `table · 14 rows` once a delimiter row shows it is one, so a wait for it reads as one; empty otherwise. */
+  describe(): string {
+    if (this.lines === undefined || this.lines.length < 2) {
+      return ''
+    }
+
+    const rows = this.lines.length - 2
+    return `table · ${rows} ${rows === 1 ? 'row' : 'rows'}`
+  }
+
   /** Draws the table, or gives its lines back as text. */
   end(): void {
     if (this.lines === undefined) {
