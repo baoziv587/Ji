@@ -1,33 +1,44 @@
-// The local machine behind the Host port, and a file behind Log. The only file in the package that starts processes.
+// The local machine behind CommandExecutor, and a file behind Log. The only file in the package that starts processes.
 //
 //   Each process leads its own process group, and the whole group is killed: on the signal, on an early close, and
-//   when the process exits, so a background child cannot hold the pipes open. POSIX only.
+//   when the process exits, so a background child cannot hold the pipes open. Unread chunks past 64 pause the pipes,
+//   so memory does not grow with the output. POSIX only.
 //   Guarantee: a descendant that starts a session of its own (setsid, a double-forked daemon) leaves the group and is
-//   not killed; that takes a cgroup, a container or a sandbox, behind a Host of its own.
+//   not killed; that takes a cgroup, a container or a sandbox, behind an executor of its own.
 
-import type { Chunk } from './core/fold.ts'
-import type { Exit, Host, Log, Spec, Stream } from './host.ts'
+import type { Chunk, Exit } from './core/fold.ts'
+import type { CommandExecutor, Log } from './executor.ts'
+import type { Stream } from './stream.ts'
 import { spawn as spawnChild } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { createWriteStream, mkdirSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
-import { CommandNotFoundError } from './host.ts'
+import { CommandNotFoundError, runWithClocks } from './executor.ts'
 
-export interface LocalHostOptions {
-  /** Where a process starts when its spec gives no cwd. Default: this process's. */
+export interface LocalExecutorOptions {
+  /** Where every process starts. Default: this process's directory. */
   cwd?: string
-  /** The environment every process starts from. Default: this process's. */
+  /** The environment of every process. Default: this process's. */
   env?: Readonly<Record<string, string | undefined>>
+  /** The one place a command line is given to a shell. Default: a non-login bash, which reads no profile. */
+  shell?: (command: string) => readonly string[]
+  /** A layer before every process, such as a sandbox: gets the argv about to start, returns the one to start. */
+  wrapArgv?: (argv: readonly string[]) => readonly string[]
 }
 
 /** Chunks waiting for the consumer before the pipes are paused. */
 const HIGH_WATER = 64
 
-export function createLocalHost({ cwd = process.cwd(), env = process.env }: LocalHostOptions = {}): Host {
+export function createLocalExecutor(options: LocalExecutorOptions = {}): CommandExecutor {
+  const { cwd, env, shell = command => ['/bin/bash', '-c', command], wrapArgv = argv => argv } = options
+
   return {
-    spawn: (spec, signal) => spawnLocal(spec, signal, cwd, env),
+    execute(command, executeOptions) {
+      const argv = wrapArgv(typeof command === 'string' ? shell(command) : command)
+      return runWithClocks(signal => spawnLocal(argv, { cwd, env }, signal), executeOptions)
+    },
   }
 }
 
@@ -62,19 +73,14 @@ export function createFileLog(dir: string): () => Log {
   }
 }
 
+/** Runs argv until it exits or the signal fires, then kills its group: what runWithClocks needs of a process. */
 async function* spawnLocal(
-  spec: Spec,
+  argv: readonly string[],
+  { cwd, env }: Pick<LocalExecutorOptions, 'cwd' | 'env'>,
   signal: AbortSignal,
-  cwd: string,
-  env: LocalHostOptions['env'],
 ): Stream<Chunk, Exit> {
-  const [file, ...args] = spec.argv
-  const child = spawnChild(file, args, {
-    cwd: spec.cwd ?? cwd,
-    env: { ...env, ...spec.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: true,
-  })
+  const [file, ...args] = argv
+  const child = spawnChild(file, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
 
   const queue: Chunk[] = []
   let failed: Error | undefined

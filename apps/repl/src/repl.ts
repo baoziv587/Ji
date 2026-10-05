@@ -39,7 +39,7 @@ import {
 import { choices, DISMISSED } from '@ji.dev/plugin-choices'
 import { terminal } from '@ji.dev/plugin-choices/terminal'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
-import { createLocalHost, createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
+import { createLocalExecutor, createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
 import truncatedWidth from 'fast-string-truncated-width'
 import { edit, EMPTY, textOf } from './editing.ts'
 import { Screen } from './screen.ts'
@@ -79,9 +79,9 @@ const rooted = localWorkspace(ROOT)
 const FILE_TOOLS = new Set(fileTools.tools?.map(t => t.name))
 
 /** bash and grep, run in ROOT. Before the files plugin: a command runs after the edits the model wrote before it. */
-const host = createLocalHost({ cwd: ROOT })
-const shellTools = createShellPlugin(host)
-const searchTools = createSearchPlugin(host)
+const executor = createLocalExecutor({ cwd: ROOT })
+const shellTools = createShellPlugin(executor)
+const searchTools = createSearchPlugin(executor)
 
 /** Shift+Tab switches it, at the prompt or at a question. */
 let mode: 'ask' | 'auto' = 'ask'

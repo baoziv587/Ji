@@ -1,10 +1,10 @@
 // What the model reads (RFC §6): the output, then one line that says how it ended. The omission marker and that line
 // are never cut. Machine-readable fields go in details, which the model never sees.
 
-import type { Found } from './core/ripgrep.ts'
-import type { Clip } from './core/window.ts'
-import type { Outcome } from './exec.ts'
-import { omittedLines } from './core/window.ts'
+import type { Outcome } from './fold.ts'
+import type { Found } from './ripgrep.ts'
+import type { Clip } from './window.ts'
+import { omittedLines } from './window.ts'
 
 export interface Rendered {
   text: string

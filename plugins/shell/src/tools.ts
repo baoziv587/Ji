@@ -1,26 +1,27 @@
-// bash and grep: each is a schema, a pure function to a Spec, and a Fold; clocks, killing and bounded memory are
-// shared (RFC §5.4). Neither tool decides what may be run or searched: asking is the approval plugin's, and limiting
-// what a process can touch is the Host's (X13).
+// bash and grep: each is a schema, a command and a Fold; clocks and stopping are the executor's, bounded memory is
+// foldStream's (RFC §5.4). Both are plain objects: to change a field, spread one and override it. Neither tool decides
+// what may be run or searched: asking is the approval plugin's, and limiting what a command can touch is the
+// executor's (X13).
 
 import type { AgentTool } from '@ji.dev/llm'
+import type { Outcome } from './core/fold.ts'
 import type { Budget } from './core/output.ts'
 import type { Clip } from './core/window.ts'
-import type { Clocks, Outcome } from './exec.ts'
-import type { Host, Log } from './host.ts'
+import type { CommandExecutor, Log } from './executor.ts'
 import { tool, Type } from '@ji.dev/llm'
 import { createOutputFold } from './core/output.ts'
+import { failure, renderFound, renderOutput } from './core/render.ts'
 import { createHitsFold, ripgrepArgs } from './core/ripgrep.ts'
 import { omittedLines } from './core/window.ts'
-import { foldStream, runProcess, streamResult, tapStream } from './exec.ts'
-import { CommandNotFoundError } from './host.ts'
-import { failure, renderFound, renderOutput } from './render.ts'
+import { CommandNotFoundError } from './executor.ts'
+import { foldStream, streamResult, tapStream } from './stream.ts'
 
 export const BASH = 'bash'
 const GREP = 'grep'
 
 export interface BashOptions {
-  /** The one place a string becomes a shell command. Default: a non-login bash. */
-  toShellArgv?: (command: string) => string[]
+  /** What the model is told about the tool. The default is true of createLocalExecutor. */
+  description?: string
   /** Total time one command may take when the model gives none, and the most it may ask for. Default 120 and 600. */
   timeoutSeconds?: { default: number; max: number }
   /** Stop a command that writes nothing for this long. Default: off. */
@@ -32,7 +33,9 @@ export interface BashOptions {
 }
 
 export interface GrepOptions {
-  /** The ripgrep to run. Default 'rg', found on the host's PATH. */
+  /** What the model is told about the tool. */
+  description?: string
+  /** The ripgrep to run. Default 'rg', found on the executor's PATH. */
   rg?: readonly string[]
   /** Matching lines returned when the model gives no limit. Default 100. */
   limit?: number
@@ -45,6 +48,17 @@ export interface GrepOptions {
 const DEFAULT_BUDGET: Budget = { headLines: 40, tailLines: 160, lineChars: 400 }
 
 const MAX_CONTEXT = 10
+
+const BASH_DESCRIPTION = [
+  'Run a shell command and get its output and exit code.',
+  'Every call starts a new shell: cd and variables do not carry over, and nothing keeps running after it.',
+  'Long output keeps its first and last lines. Use grep to search file contents, not this.',
+].join(' ')
+
+const GREP_DESCRIPTION = [
+  'Search file contents with ripgrep. Returns matching lines as path:line: text.',
+  'Hidden files are searched; files ignored by .gitignore are not.',
+].join(' ')
 
 /** Not in the tool description: it is sent with every request, and only true on some machines (RFC §5.4). */
 const NO_RIPGREP = [
@@ -72,9 +86,9 @@ const grepParameters = Type.Object({
 })
 
 /** Every chunk is yielded as it arrives, so the run shows it as a tool_update. */
-export function createBashTool(host: Host, options: BashOptions = {}): AgentTool<typeof bashParameters> {
+export function createBashTool(executor: CommandExecutor, options: BashOptions = {}): AgentTool<typeof bashParameters> {
   const {
-    toShellArgv = command => ['/bin/bash', '-c', command],
+    description = BASH_DESCRIPTION,
     timeoutSeconds = { default: 120, max: 600 },
     idleMs,
     budget = DEFAULT_BUDGET,
@@ -83,14 +97,10 @@ export function createBashTool(host: Host, options: BashOptions = {}): AgentTool
 
   return tool({
     name: BASH,
-    description: [
-      'Run a shell command and get its output and exit code.',
-      'Every call starts a new shell: cd and variables do not carry over, and nothing keeps running after it.',
-      'Long output keeps its first and last lines. Use grep to search file contents, not this.',
-    ].join(' '),
+    description,
     parameters: bashParameters,
     async *run({ command, timeout_seconds = timeoutSeconds.default }, signal) {
-      const clocks: Clocks = { totalMs: Math.min(timeout_seconds, timeoutSeconds.max) * 1000, idleMs }
+      const timeoutMs = Math.min(timeout_seconds, timeoutSeconds.max) * 1000
       const fold = createOutputFold(budget)
       const log = openLog?.()
       const started = performance.now()
@@ -98,9 +108,9 @@ export function createBashTool(host: Host, options: BashOptions = {}): AgentTool
       let ended: [Clip, Outcome] | undefined
       let logFile: string | undefined
       try {
-        const process = runProcess(host, { argv: toShellArgv(command) }, clocks, signal)
+        const output = executor.execute(command, { signal, timeoutMs, idleMs })
         const [out, outcome] = yield* foldStream(
-          tapStream(process, chunk => log?.write(chunk.text)),
+          tapStream(output, chunk => log?.write(chunk.text)),
           fold,
         )
         ended = [fold.close(out), outcome!]
@@ -116,22 +126,23 @@ export function createBashTool(host: Host, options: BashOptions = {}): AgentTool
 }
 
 /** ripgrep's exit code is read here, so the model never has to know it: 1 is no matches, 2 is a failure. */
-export function createGrepTool(host: Host, options: GrepOptions = {}): AgentTool<typeof grepParameters> {
-  const { rg = ['rg'], limit: defaultLimit = 100, timeoutMs = 30_000, lineChars = 300 } = options
+export function createGrepTool(executor: CommandExecutor, options: GrepOptions = {}): AgentTool<typeof grepParameters> {
+  const {
+    description = GREP_DESCRIPTION,
+    rg = ['rg'],
+    limit: defaultLimit = 100,
+    timeoutMs = 30_000,
+    lineChars = 300,
+  } = options
 
   return tool({
     name: GREP,
-    description: [
-      'Search file contents with ripgrep. Returns matching lines as path:line: text.',
-      'Hidden files are searched; files ignored by .gitignore are not.',
-    ].join(' '),
+    description,
     parameters: grepParameters,
     async run({ pattern, path = '.', glob, literal, ignore_case, context, limit = defaultLimit }, signal) {
       const argv = [...rg, ...ripgrepArgs({ pattern, path, glob, literal, ignoreCase: ignore_case, context })]
-      const search = foldStream(
-        runProcess(host, { argv }, { totalMs: timeoutMs }, signal),
-        createHitsFold(limit, lineChars),
-      )
+      // An array, so no shell reads what the model wrote (X1)
+      const search = foldStream(executor.execute(argv, { signal, timeoutMs }), createHitsFold(limit, lineChars))
 
       const searched = await streamResult(search).catch(whenNotFound)
       if (searched === undefined) {

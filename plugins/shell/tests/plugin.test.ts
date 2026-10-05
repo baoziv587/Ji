@@ -8,8 +8,7 @@ import { files, memWorkspace } from '@ji.dev/plugin-files'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createMemoryHost, createSearchPlugin, createShellPlugin } from '../src/index.ts'
-import { splitAtBarriers } from '../src/plugin.ts'
+import { createMemoryExecutor, createSearchPlugin, createShellPlugin, splitAtBarriers } from '../src/index.ts'
 
 describe('splitAtBarriers (L7)', () => {
   it('should cut the items so every barrier is alone, keep their order, and join all the rest that sit together', () => {
@@ -34,7 +33,7 @@ describe('createShellPlugin', () => {
     // Arrange: the command sees what is on disk when it starts
     const workspace = memWorkspace()
     const seen: (string | undefined)[] = []
-    const host = createMemoryHost(() => {
+    const executor = createMemoryExecutor(() => {
       seen.push(workspace.get('src/config.ts'), workspace.get('src/retry.ts'))
       return {}
     })
@@ -50,8 +49,8 @@ describe('createShellPlugin', () => {
     ])
 
     // Act
-    const search = createSearchPlugin(createMemoryHost(() => ({ exit: { kind: 'exit', code: 1 } })))
-    const results = await resultsOf(model, [createShellPlugin(host), search, files(workspace)])
+    const search = createSearchPlugin(createMemoryExecutor(() => ({ exit: { kind: 'exit', code: 1 } })))
+    const results = await resultsOf(model, [createShellPlugin(executor), search, files(workspace)])
 
     // Assert
     expect(seen).toEqual(['timeout = 2\n', 'retries = 3\n'])
@@ -63,8 +62,8 @@ describe('createShellPlugin', () => {
     await fc.assert(
       fc.asyncProperty(fc.string(), fc.boolean(), async (command, yes) => {
         // Arrange
-        const host = createMemoryHost(() => ({}))
-        const shellPlugin = createShellPlugin(host)
+        const executor = createMemoryExecutor(() => ({}))
+        const shellPlugin = createShellPlugin(executor)
         const asked: (string | undefined)[] = []
         const answer: Answer = ({ questions: [{ title, detail }] }) => {
           asked.push(`${title}: ${detail}`)
@@ -75,15 +74,13 @@ describe('createShellPlugin', () => {
         // Act
         const results = await resultsOf(model, [
           shellPlugin,
-          createSearchPlugin(host),
+          createSearchPlugin(executor),
           choices({ answer, approve: [shellPlugin.preview] }),
         ])
 
         // Assert
         expect(asked).toEqual([`Run command: ${command}`])
-        expect(host.specs.filter(s => s.argv[0] === '/bin/bash')).toEqual(
-          yes ? [{ argv: ['/bin/bash', '-c', command] }] : [],
-        )
+        expect(executor.commands.filter(c => typeof c === 'string')).toEqual(yes ? [command] : [])
         expect(results.find(r => r.toolName === 'bash')?.isError).toBe(!yes)
       }),
       { numRuns: 20 },
@@ -92,8 +89,8 @@ describe('createShellPlugin', () => {
 
   it('should neither ask about nor run a command that is not a string (X11)', async () => {
     // Arrange
-    const host = createMemoryHost(() => ({}))
-    const shellPlugin = createShellPlugin(host)
+    const executor = createMemoryExecutor(() => ({}))
+    const shellPlugin = createShellPlugin(executor)
     let asked = 0
     const answer: Answer = () => {
       asked++
@@ -106,7 +103,7 @@ describe('createShellPlugin', () => {
 
     // Assert
     expect(asked).toBe(0)
-    expect(host.specs).toEqual([])
+    expect(executor.commands).toEqual([])
     expect(result).toMatchObject({ isError: true, content: [{ text: 'command must be a string.' }] })
   })
 })
