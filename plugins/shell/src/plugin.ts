@@ -9,7 +9,7 @@
 //   the two never import each other (RFC-0005 §8.3).
 
 import type { Plugin, ToolCall, ToolResultMessage } from '@ji.dev/llm'
-import type { Host } from './host.ts'
+import type { CommandExecutor } from './executor.ts'
 import type { BashOptions, GrepOptions } from './tools.ts'
 import { callsOf, definePlugin, toolError } from '@ji.dev/llm'
 import { BASH, createBashTool, createGrepTool } from './tools.ts'
@@ -32,10 +32,10 @@ export interface CommandPreview {
   detail: string
 }
 
-export function createShellPlugin(host: Host, options?: BashOptions): ShellPlugin {
+export function createShellPlugin(executor: CommandExecutor, options?: BashOptions): ShellPlugin {
   const plugin = definePlugin({
     name: 'shell',
-    tools: [createBashTool(host, options)],
+    tools: [createBashTool(executor, options)],
     async *toolCalls(message, next) {
       const results: ToolResultMessage[] = []
       for (const part of splitAtBarriers(callsOf(message), call => call.name === BASH)) {
@@ -61,13 +61,13 @@ export function createShellPlugin(host: Host, options?: BashOptions): ShellPlugi
   }
 }
 
-export function createSearchPlugin(host: Host, options?: GrepOptions): Plugin {
-  return definePlugin({ name: 'search', tools: [createGrepTool(host, options)] })
+export function createSearchPlugin(executor: CommandExecutor, options?: GrepOptions): Plugin {
+  return definePlugin({ name: 'search', tools: [createGrepTool(executor, options)] })
 }
 
 /**
  * The items in order, cut into parts so every item `alone` picks is a part by itself: [a, b, X, c] gives [a, b], [X],
- * [c]. No part is empty, and the parts joined are the items.
+ * [c]. No part is empty, and the parts joined are the items. For a plugin of your own whose calls must run alone.
  */
 export function splitAtBarriers<T>(items: readonly T[], alone: (item: T) => boolean): T[][] {
   const parts: T[][] = []

@@ -1,5 +1,5 @@
-// bash and grep on createMemoryHost: the scenarios of RFC §2.2–§2.6, as the model reads them, and L9
-import type { BashOptions, Chunk, GrepOptions, Host, MemoryProcess } from '../src/index.ts'
+// bash and grep on createMemoryExecutor: the scenarios of RFC §2.2–§2.6, as the model reads them, and L9
+import type { BashOptions, Chunk, CommandExecutor, GrepOptions, MemoryExecutor, MemoryProcess } from '../src/index.ts'
 import { readFileSync } from 'node:fs'
 import { mkdtemp, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -10,7 +10,7 @@ import {
   createBashTool,
   createFileLog,
   createGrepTool,
-  createMemoryHost,
+  createMemoryExecutor,
   streamResult,
 } from '../src/index.ts'
 
@@ -23,38 +23,38 @@ interface Result {
 describe('bash', () => {
   it('should end with the exit code even when stderr is empty (scenario 2.2, probe E3)', async () => {
     // Arrange
-    const host = createMemoryHost(() => ({
+    const executor = createMemoryExecutor(() => ({
       chunks: [out(' FAIL  tests/config.test.ts > timeout defaults to 2s\n')],
       exit: { kind: 'exit', code: 1 },
     }))
 
     // Act
-    const result = await bash(host, { command: 'pnpm test' })
+    const result = await bash(executor, { command: 'pnpm test' })
 
     // Assert
     expect(result.text).toMatch(/^ FAIL {2}tests\/config\.test\.ts > timeout defaults to 2s\n\[exit 1 · \d+\.\ds\]$/)
     expect(result).toMatchObject({ isError: true, details: { outcome: { kind: 'exit', code: 1 } } })
   })
 
-  it('should run the command as bash -c, and say when there was no output', async () => {
+  it('should give the executor the command line as the model wrote it, and say when there was no output', async () => {
     // Arrange
-    const host = createMemoryHost(() => ({}))
+    const executor = createMemoryExecutor(() => ({}))
 
     // Act
-    const result = await bash(host, { command: 'true' })
+    const result = await bash(executor, { command: 'true' })
 
     // Assert
-    expect(host.specs).toEqual([{ argv: ['/bin/bash', '-c', 'true'] }])
+    expect(executor.commands).toEqual(['true'])
     expect(result.text).toMatch(/^\(no output\)\n\[exit 0 · /)
     expect(result.isError).toBe(false)
   })
 
   it('should keep the first and last lines and count exactly the lines left out (scenario 2.3)', async () => {
     // Arrange
-    const host = createMemoryHost(() => ({ chunks: [out(numbered(5000))] }))
+    const executor = createMemoryExecutor(() => ({ chunks: [out(numbered(5000))] }))
 
     // Act
-    const result = await bash(host, { command: 'pnpm build' })
+    const result = await bash(executor, { command: 'pnpm build' })
 
     // Assert
     const lines = result.text.split('\n')
@@ -69,12 +69,12 @@ describe('bash', () => {
     // Arrange
     const dir = await mkdtemp(join(tmpdir(), 'ji-shell-'))
     const text = numbered(300)
-    const host = createMemoryHost(spec => ({ chunks: [out(spec.argv.at(-1) === 'long' ? text : 'short\n')] }))
+    const executor = createMemoryExecutor(command => ({ chunks: [out(command === 'long' ? text : 'short\n')] }))
     const options: BashOptions = { log: createFileLog(dir) }
 
     // Act
-    const long = await bash(host, { command: 'long' }, options)
-    const short = await bash(host, { command: 'short' }, options)
+    const long = await bash(executor, { command: 'long' }, options)
+    const short = await bash(executor, { command: 'short' }, options)
 
     // Assert
     const log = long.details.log as string
@@ -86,12 +86,12 @@ describe('bash', () => {
 
   it('should say which clock stopped the command, and keep what it wrote before (scenario 2.4)', async () => {
     // Arrange
-    const host = createMemoryHost(() => ({ chunks: [out('Username: ')], hangs: true }))
+    const executor = createMemoryExecutor(() => ({ chunks: [out('Username: ')], hangs: true }))
 
     // Act
-    const idle = await bash(host, { command: 'npm login' }, { idleMs: 20 })
+    const idle = await bash(executor, { command: 'npm login' }, { idleMs: 20 })
     const total = await bash(
-      host,
+      executor,
       { command: 'npm login', timeout_seconds: 600 },
       { timeoutSeconds: { default: 1, max: 0.02 } },
     )
@@ -101,14 +101,14 @@ describe('bash', () => {
     expect(idle.details.outcome).toEqual({ kind: 'timeout', clock: 'idle', ms: 20 })
     expect(total.text).toMatch(/\[timed out after 0\.02s and was killed; the output above is partial · /)
     expect(total.isError).toBe(true)
-    expect(host.running).toBe(0)
+    expect(executor.running).toBe(0)
   })
 
   it('should yield each chunk as it arrives (scenario 2.11)', async () => {
     // Arrange
     const chunks = [out('a\n'), { fd: 2, text: 'b\n' } satisfies Chunk]
-    const host = createMemoryHost(() => ({ chunks }))
-    const run = createBashTool(host).run({ command: 'x' }, never()) as AsyncGenerator<unknown, Result>
+    const executor = createMemoryExecutor(() => ({ chunks }))
+    const run = createBashTool(executor).run({ command: 'x' }, never()) as AsyncGenerator<unknown, Result>
 
     // Act
     const yielded: unknown[] = []
@@ -127,13 +127,15 @@ describe('bash', () => {
 describe('grep', () => {
   it('should pass the pattern to ripgrep as one argument and show hits as path:line: text (scenario 2.5)', async () => {
     // Arrange
-    const host = ripgrep({ chunks: [out(rgEvent('match', './scripts/probe.sh', 3, 'echo "$(printf PROBE_MARKER)"'))] })
+    const executor = ripgrep({
+      chunks: [out(rgEvent('match', './scripts/probe.sh', 3, 'echo "$(printf PROBE_MARKER)"'))],
+    })
 
     // Act
-    const result = await grep(host, { pattern: '$(printf PROBE_MARKER)', literal: true })
+    const result = await grep(executor, { pattern: '$(printf PROBE_MARKER)', literal: true })
 
     // Assert
-    expect(host.specs[0].argv).toEqual([
+    expect(executor.commands[0]).toEqual([
       'rg',
       '--json',
       '--no-config',
@@ -160,11 +162,11 @@ describe('grep', () => {
       rgEvent('match', 'b.ts', 9, 'TODO three'),
     ]
     // The search never ends on its own: the third match is what proves more, and closes it
-    const host = ripgrep({ chunks: [out(events.join(''))], hangs: true })
+    const executor = ripgrep({ chunks: [out(events.join(''))], hangs: true })
     const done = ripgrep({ chunks: [out(events.join(''))] })
 
     // Act
-    const cut = await grep(host, { pattern: 'TODO', limit: 2, context: 1 })
+    const cut = await grep(executor, { pattern: 'TODO', limit: 2, context: 1 })
     const exact = await grep(done, { pattern: 'TODO', limit: 3, context: 1 })
 
     // Assert
@@ -173,7 +175,7 @@ describe('grep', () => {
         '[first 2 matching lines; there are more. Narrow the pattern, path or glob.]',
     )
     expect(cut.details).toEqual({ matches: 2, more: true })
-    expect(host.specs[0].argv).toContain('--context=1')
+    expect(executor.commands[0]).toContain('--context=1')
     expect(exact.text.split('\n').at(-1)).toBe('[3 matching lines]')
     expect(exact.details).toEqual({ matches: 3, more: false })
   })
@@ -198,10 +200,10 @@ describe('grep', () => {
 
   it('should tell the model to search with bash when ripgrep is missing, and rethrow anything else (L9)', async () => {
     // Arrange
-    const missing = createMemoryHost(() => {
+    const missing = createMemoryExecutor(() => {
       throw new CommandNotFoundError('rg')
     })
-    const broken = createMemoryHost(() => {
+    const broken = createMemoryExecutor(() => {
       throw new Error('EACCES')
     })
 
@@ -212,6 +214,20 @@ describe('grep', () => {
     expect(result).toMatchObject({ isError: true, details: { errors: [{ code: 'NO_RIPGREP' }] } })
     expect(result.text).toContain('Search with bash instead')
     await expect(grep(broken, { pattern: 'x' })).rejects.toThrow('EACCES')
+  })
+})
+
+describe('description', () => {
+  it('should tell the model what it was given, for an executor that is not this machine (scenario 2.14)', () => {
+    // Arrange
+    const executor = createMemoryExecutor(() => ({}))
+    const description = 'Run a command in a Linux sandbox, as a login bash of user `user`.'
+
+    // Act
+    const tools = [createBashTool(executor, { description }), createGrepTool(executor, { description })]
+
+    // Assert
+    expect(tools.map(t => t.description)).toEqual([description, description])
   })
 })
 
@@ -230,24 +246,24 @@ function never(): AbortSignal {
 }
 
 async function bash(
-  host: Host,
+  executor: CommandExecutor,
   args: { command: string; timeout_seconds?: number },
   options?: BashOptions,
 ): Promise<Result> {
-  return streamResult(createBashTool(host, options).run(args, never()) as AsyncGenerator<unknown, Result>)
+  return streamResult(createBashTool(executor, options).run(args, never()) as AsyncGenerator<unknown, Result>)
 }
 
 async function grep(
-  host: Host,
+  executor: CommandExecutor,
   args: { pattern: string } & Record<string, unknown>,
   options?: GrepOptions,
 ): Promise<Result> {
-  return (await createGrepTool(host, { timeoutMs: 50, ...options }).run(args, never())) as Result
+  return (await createGrepTool(executor, { timeoutMs: 50, ...options }).run(args, never())) as Result
 }
 
 /** A ripgrep that answers every search the same way. */
-function ripgrep(process: MemoryProcess): ReturnType<typeof createMemoryHost> {
-  return createMemoryHost(() => process)
+function ripgrep(process: MemoryProcess): MemoryExecutor {
+  return createMemoryExecutor(() => process)
 }
 
 /** One line of `rg --json`. */
