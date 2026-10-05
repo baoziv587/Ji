@@ -1,0 +1,52 @@
+// What is going on and for how long, spun in a bar while something runs.
+
+import { styleText } from 'node:util'
+import { SPINNER_FRAMES } from './screen/live.ts'
+import { dimText } from './text.ts'
+
+export class Status {
+  /** Draws the bar again, to spin the icon and count the seconds. */
+  private readonly draw: () => void
+  private timer: NodeJS.Timeout | undefined
+  private label = ''
+  private detail = ''
+  private since = 0
+  private frame = 0
+
+  constructor(draw: () => void) {
+    this.draw = draw
+  }
+
+  /** A different label starts its own count; the detail, the thinking's last words say, does not. */
+  show(label: string, detail = ''): void {
+    if (label !== this.label) {
+      this.label = label
+      this.since = performance.now()
+    }
+    this.detail = detail
+    this.timer ??= setInterval(() => {
+      this.frame++
+      this.draw()
+    }, 80)
+    this.draw()
+  }
+
+  hide(): void {
+    clearInterval(this.timer)
+    this.timer = undefined
+    this.label = ''
+    this.draw()
+  }
+
+  /** `◐ Running calc 2s`, or empty while hidden. */
+  describe(): string {
+    if (this.timer === undefined) {
+      return ''
+    }
+
+    const icon = styleText('magenta', SPINNER_FRAMES[this.frame % SPINNER_FRAMES.length])
+    const seconds = Math.floor((performance.now() - this.since) / 1000)
+    const detail = this.detail === '' ? '' : ` · ${this.detail}`
+    return `${icon} ${this.label} ${dimText(`${seconds}s`)}${detail}`
+  }
+}

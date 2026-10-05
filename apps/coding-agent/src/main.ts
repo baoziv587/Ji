@@ -34,28 +34,30 @@
 // agent/ and plugins/ know nothing of the terminal.
 
 import type { Agent, Run } from '@ji.dev/llm'
-import type { Hint } from './ui/paint/text.ts'
-import type { Editing, Keypress } from './ui/screen/editing.ts'
-import type { Frame } from './ui/screen/screen.ts'
-import { homedir } from 'node:os'
+import type { Editing, Frame, HelpSection, Keypress } from '@ji.dev/tui'
 import process from 'node:process'
-import { emitKeypressEvents } from 'node:readline'
-import { styleText } from 'node:util'
 import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
 import { choices } from '@ji.dev/plugin-choices'
-import { wrapAnsi } from 'fast-wrap-ansi'
+import {
+  abbreviateHomePath,
+  applyKey,
+  dimText,
+  editingText,
+  EMPTY_EDITING,
+  formatHelpSections,
+  formatKeyHint,
+  Screen,
+  Status,
+  widthBesideRail,
+} from '@ji.dev/tui'
 import { createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
 import { Permissions } from './plugins/permissions.ts'
-import { dim, hint, room } from './ui/paint/text.ts'
-import { Answering } from './ui/questions/answering.ts'
+import { Answering } from './ui/answering.ts'
+import { frameOf } from './ui/bars.ts'
 import { render } from './ui/reply/render.ts'
-import { frameOf } from './ui/screen/bars.ts'
-import { edit, EMPTY, textOf } from './ui/screen/editing.ts'
-import { Screen } from './ui/screen/screen.ts'
-import { Status } from './ui/screen/status.ts'
-import { Meter } from './ui/screen/usage.ts'
+import { Meter } from './ui/usage.ts'
 
 // The parts
 
@@ -63,7 +65,7 @@ import { Meter } from './ui/screen/usage.ts'
 const ROOT = process.env.INIT_CWD ?? process.cwd()
 
 /** The root as the top bar shows it. */
-const WORKSPACE = withHomeAsTilde(ROOT)
+const WORKSPACE = abbreviateHomePath(ROOT)
 
 const plugins = createPlugins(ROOT)
 
@@ -101,32 +103,33 @@ const levels = conversation.agent.model.thinkingLevels.join('|')
 
 const TOOLS = toolNamesOf(plugins, asking)
 
-/** What /help lists: the commands, then the keys by when they work. */
-const HELP: [title: string, keys: Hint[]][] = [
-  [
-    'Commands',
-    [
+/** What /help lists: the commands, the keys by when they work, and the tools. */
+const HELP: HelpSection[] = [
+  {
+    title: 'Commands',
+    rows: [
       [`/think <${levels}>`, 'sets thinking'],
       ['/help', 'lists this'],
       ['/exit', 'quits'],
     ],
-  ],
-  [
-    'While replying',
-    [
+  },
+  {
+    title: 'While replying',
+    rows: [
       ['Enter', 'steers a reply'],
       ['Ctrl+C', 'stops a reply'],
       ['Esc', 'dismisses a question'],
     ],
-  ],
-  [
-    'Anytime',
-    [
+  },
+  {
+    title: 'Anytime',
+    rows: [
       ['Shift+Tab', 'switches ask/auto'],
       ['Ctrl+O', 'shows details'],
       ['Wheel, PgUp/PgDn', 'scroll'],
     ],
-  ],
+  },
+  { title: `Tools (${TOOLS.length})`, rows: TOOLS.join(', ') },
 ]
 
 const MISSING_KEY =
@@ -135,7 +138,7 @@ const MISSING_KEY =
 // The state
 
 /** The input line. */
-let editing: Editing = EMPTY
+let editing: Editing = EMPTY_EDITING
 
 /** The reply in progress, settled once it has written its last line. */
 let replying: Promise<void> = Promise.resolve()
@@ -145,14 +148,10 @@ const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
 // The keys
 
 /**
- * Scrolling, the mode, the view and Ctrl+C work everywhere; while a question is open, the other keys are its own.
- * Pastes come between markers, so a pasted line break does not send.
+ * The mode, the view and Ctrl+C work everywhere, as scrolling does in the screen; while a question is open, the other
+ * keys are its own. Pastes come between markers, so a pasted line break does not send.
  */
 function onKey(char: string | undefined, key: (Keypress & { shift?: boolean }) | undefined): void {
-  if (key?.name === 'pageup' || key?.name === 'pagedown') {
-    screen.page(key.name === 'pageup' ? -1 : 1)
-    return
-  }
   if (key?.name === 'tab' && key.shift === true) {
     answering.switchMode()
     return
@@ -173,20 +172,20 @@ function onKey(char: string | undefined, key: (Keypress & { shift?: boolean }) |
     return
   }
 
-  editing = edit(editing, { ...key, char })
+  editing = applyKey(editing, { ...key, char })
   screen.draw()
 }
 
 /** Enter: a command, a new reply, or a steer for the one in progress. */
 function submit(): void {
-  const message = textOf(editing).trim()
+  const message = editingText(editing).trim()
   if (message !== '' && !message.startsWith('/') && !conversation.agent.model.hasEnvKey) {
     // The message stays in the input, to send once the key is set
     log.warn(MISSING_KEY)
     return
   }
 
-  editing = EMPTY
+  editing = EMPTY_EDITING
   screen.follow()
   if (message === '') {
     return
@@ -196,7 +195,7 @@ function submit(): void {
     return
   }
   if (message === '/help') {
-    help()
+    log.message(formatHelpSections(HELP, widthBesideRail()), { spacing: 0 })
     return
   }
   if (message === '/think' || message.startsWith('/think ')) {
@@ -224,26 +223,6 @@ function think(arg: string): void {
   log.success(`Thinking: ${conversation.agent.thinking}`)
 }
 
-/** The keys in a column, each group under its title, then the tools, as many to a row as fit. */
-function help(): void {
-  const lines: string[] = []
-
-  const keyWidth = Math.max(...HELP.flatMap(([, keys]) => keys.map(([key]) => key.length)))
-  for (const [title, keys] of HELP) {
-    lines.push(title)
-    for (const [key, action] of keys) {
-      lines.push(`  ${styleText('bold', key.padEnd(keyWidth))}  ${dim(action)}`)
-    }
-  }
-
-  lines.push(`Tools (${TOOLS.length})`)
-  for (const row of wrapAnsi(TOOLS.join(', '), room() - 2).split('\n')) {
-    lines.push(`  ${dim(row)}`)
-  }
-
-  log.message(lines.join('\n'), { spacing: 0 })
-}
-
 /** Shows a reply to its end. One that does not finish puts what it was sent back in the input, ahead of what is typed. */
 async function converse(run: Run): Promise<void> {
   const changed = new Set<string>()
@@ -251,7 +230,7 @@ async function converse(run: Run): Promise<void> {
 
   if (unfinished !== undefined) {
     const { sent, stopped, error } = unfinished
-    editing = { ...EMPTY, before: [...sent, textOf(editing)].filter(t => t !== '').join(' ') }
+    editing = { ...EMPTY_EDITING, before: [...sent, editingText(editing)].filter(t => t !== '').join(' ') }
 
     const back = sent.length === 1 ? 'Your message is back in the input.' : 'Your messages are back in the input.'
     // The history goes back, the files do not: a resend should not take them for untouched
@@ -271,8 +250,8 @@ async function converse(run: Run): Promise<void> {
 function interrupt(): void {
   if (conversation.replying) {
     conversation.stop()
-  } else if (textOf(editing) !== '') {
-    editing = EMPTY
+  } else if (editingText(editing) !== '') {
+    editing = EMPTY_EDITING
     screen.draw()
   } else {
     quit()
@@ -280,15 +259,6 @@ function interrupt(): void {
 }
 
 // The bars
-
-/** `~/projects/app` for a folder under the home folder; any other stays as it is. */
-function withHomeAsTilde(path: string): string {
-  const home = homedir()
-  if (path !== home && !path.startsWith(`${home}/`)) {
-    return path
-  }
-  return `~${path.slice(home.length)}`
-}
 
 function drawFrame(columns: number): Frame {
   const { model, thinking } = conversation.agent
@@ -325,13 +295,10 @@ function startAgentOrQuit(): Agent {
   }
 }
 
-if (!process.stdin.isTTY || !process.stdout.isTTY) {
+if (!Screen.isSupported()) {
   cancel('The coding agent draws a bar at the bottom of a terminal: run it in one.')
   process.exit(1)
 }
-
-// Whatever ends the process, the terminal is given back
-process.on('exit', () => screen.stop())
 
 // Ctrl+C reaches the keypress listener as a key; the SIGINT comes from a question's prompt, which passes it on
 process.on('SIGINT', () => {
@@ -342,13 +309,13 @@ process.on('SIGINT', () => {
 })
 
 // Added before any question's listener, so the question redraws after a mode switch and shows the new mode
-emitKeypressEvents(screen.keys)
 screen.keys.on('keypress', onKey)
 
 screen.start()
 
-const tools = TOOLS.length === 1 ? '1 tool' : `${TOOLS.length} tools`
-log.message(`${dim(`${tools} ·`)} ${hint('/help', 'lists keys, commands and tools')}`, { spacing: 0 })
+const toolCount = TOOLS.length === 1 ? '1 tool' : `${TOOLS.length} tools`
+const welcome = `${dimText(`${toolCount} ·`)} ${formatKeyHint('/help', 'lists keys, commands and tools')}`
+log.message(welcome, { spacing: 0 })
 
 // The key is only needed to send, so its absence is pointed out without blocking anything else
 if (!conversation.agent.model.hasEnvKey) {

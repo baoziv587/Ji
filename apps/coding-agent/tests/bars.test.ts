@@ -1,10 +1,9 @@
 // The bars: a title that gives up the workspace first, the keys that matter now, the usage as far as it fits, and an input line that keeps the cursor in view
-import type { Bars } from '../src/ui/screen/bars.ts'
+import type { Bars } from '../src/ui/bars.ts'
 import { stripVTControlCharacters } from 'node:util'
+import { displayWidth, EMPTY_EDITING } from '@ji.dev/tui'
 import { describe, expect, it } from 'vitest'
-import { widthOf } from '../src/ui/paint/text.ts'
-import { frameOf } from '../src/ui/screen/bars.ts'
-import { EMPTY } from '../src/ui/screen/editing.ts'
+import { frameOf } from '../src/ui/bars.ts'
 
 const COLUMNS = 80
 
@@ -57,12 +56,12 @@ describe('frameOf', () => {
     // Assert
     expect(rule).toContain('in 1.2k · out 300 · cache 50% ─')
     expect(rule).not.toContain('tok/s')
-    expect(widthOf(rule)).toBe(COLUMNS - 1)
+    expect(displayWidth(rule)).toBe(COLUMNS - 1)
   })
 
   it('should scroll a long input sideways, keeping the cursor in view', () => {
     // Arrange
-    const editing = { ...EMPTY, before: `${'a'.repeat(200)}end` }
+    const editing = { ...EMPTY_EDITING, before: `${'a'.repeat(200)}end` }
 
     // Act
     const frame = frameOf(COLUMNS, bars({ editing }))
@@ -70,8 +69,8 @@ describe('frameOf', () => {
 
     // Assert
     expect(input).toMatch(/aend$/)
-    expect(widthOf(input)).toBeLessThan(COLUMNS)
-    expect(frame.cursor).toEqual({ row: 2, column: widthOf(input) })
+    expect(displayWidth(input)).toBeLessThan(COLUMNS)
+    expect(frame.cursor).toEqual({ row: 2, column: displayWidth(input) })
   })
 })
 
@@ -82,7 +81,7 @@ function bars(changes: Partial<Bars>): Bars {
     model: 'deepseek/deepseek-v4-flash',
     thinking: 'high',
     root: '/work',
-    editing: EMPTY,
+    editing: EMPTY_EDITING,
     replying: false,
     asking: false,
     queued: 0,

@@ -3,9 +3,9 @@ import type { ToolCall, ToolResultMessage } from '@ji.dev/llm'
 import process from 'node:process'
 import { stripVTControlCharacters } from 'node:util'
 import { toolError } from '@ji.dev/llm'
+import { displayWidth } from '@ji.dev/tui'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { widthOf } from '../src/ui/paint/text.ts'
-import { describeArguments, describeDone, describeResult, describeWriting, Output } from '../src/ui/reply/calls.ts'
+import { describeArguments, describeDone, describeResult, describeWriting } from '../src/ui/reply/calls.ts'
 
 const COLUMNS = 60
 
@@ -34,7 +34,7 @@ describe('describeDone', () => {
 
     // Assert
     expect(row).not.toContain('\n')
-    expect(widthOf(row)).toBeLessThanOrEqual(COLUMNS - 4)
+    expect(displayWidth(row)).toBeLessThanOrEqual(COLUMNS - 4)
   })
 
   it('should keep the error in the same row, with at least half of it', () => {
@@ -45,7 +45,7 @@ describe('describeDone', () => {
     const row = stripVTControlCharacters(describeDone(failing, result(failing, 'command not found', true)))
 
     // Assert
-    expect(widthOf(row)).toBeLessThanOrEqual(COLUMNS - 4)
+    expect(displayWidth(row)).toBeLessThanOrEqual(COLUMNS - 4)
     expect(row).toMatch(/…\) {2}command not found$/)
   })
 
@@ -73,48 +73,7 @@ describe('describeWriting', () => {
 
     // Assert
     expect(row).toMatch(/^write\(path: "a\.md", content: "很长的故事.*…\) {2}4\.4k chars$/)
-    expect(widthOf(row)).toBeLessThanOrEqual(COLUMNS - 4)
-  })
-})
-
-describe('output', () => {
-  it('should count the lines a command writes, and keep its last ones with text, across chunks', () => {
-    // Arrange
-    const output = new Output()
-
-    // Act
-    output.add({ fd: 1, text: 'one\n\x1B[32mtw' })
-    output.add({ fd: 2, text: 'o\tpassed\x1B[0m\r\n\n' })
-
-    // Assert
-    expect(output.lines).toBe(3)
-    expect(output.recent()).toEqual(['one', 'two  passed'])
-  })
-
-  it('should keep only the last five, and what a progress bar drew last', () => {
-    // Arrange
-    const output = new Output()
-
-    // Act
-    output.add(Array.from({ length: 8 }, (_, i) => `line ${i}`).join('\n'))
-    output.add('\n10%\r50%\r90%')
-
-    // Assert
-    expect(output.lines).toBe(9)
-    expect(output.recent()).toEqual(['line 4', 'line 5', 'line 6', 'line 7', '90%'])
-  })
-
-  it('should take nothing from an update that is not text', () => {
-    // Arrange
-    const output = new Output()
-
-    // Act
-    output.add({ questions: [] })
-    output.add(undefined)
-
-    // Assert
-    expect(output.lines).toBe(0)
-    expect(output.recent()).toEqual([])
+    expect(displayWidth(row)).toBeLessThanOrEqual(COLUMNS - 4)
   })
 })
 
@@ -129,7 +88,7 @@ describe('describeArguments', () => {
     const [name, path, content] = rows.split('\n')
     expect([name, path]).toEqual(['edit', 'path: "a.ts"'])
     expect(content).toMatch(/^content: "a\\nb\\n.*…$/)
-    expect(widthOf(content)).toBeLessThanOrEqual(COLUMNS - 4)
+    expect(displayWidth(content)).toBeLessThanOrEqual(COLUMNS - 4)
   })
 })
 
