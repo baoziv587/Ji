@@ -5,7 +5,7 @@ import { stripVTControlCharacters } from 'node:util'
 import { toolError } from '@ji.dev/llm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { widthOf } from '../src/ui/paint/text.ts'
-import { describeArguments, describeDone, describeResult, Output } from '../src/ui/reply/calls.ts'
+import { describeArguments, describeDone, describeResult, describeWriting, Output } from '../src/ui/reply/calls.ts'
 
 const COLUMNS = 60
 
@@ -60,6 +60,20 @@ describe('describeDone', () => {
     // Assert
     expect(many).toBe('grep(pattern: "x")  3 lines')
     expect(one).toBe('grep(pattern: "x")')
+  })
+})
+
+describe('describeWriting', () => {
+  it('should show a call being written on one row, with how much of it there is so far', () => {
+    // Arrange
+    const write = call('write', { path: 'a.md', content: '很长的故事'.repeat(500) })
+
+    // Act
+    const row = stripVTControlCharacters(describeWriting(write, 4400))
+
+    // Assert
+    expect(row).toMatch(/^write\(path: "a\.md", content: "很长的故事.*…\) {2}4\.4k chars$/)
+    expect(widthOf(row)).toBeLessThanOrEqual(COLUMNS - 4)
   })
 })
 

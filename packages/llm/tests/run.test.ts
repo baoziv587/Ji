@@ -14,7 +14,14 @@ import type {
   Session,
 } from '../src/index.ts'
 import process from 'node:process'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
+import {
+  createAssistantMessageEventStream,
+  fauxAssistantMessage,
+  fauxToolCall,
+  registerApiProvider,
+  registerFauxProvider,
+  unregisterApiProviders,
+} from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callsOf, createAgent, createSession, definePlugin, tool, toolError, Type } from '../src/index.ts'
@@ -87,7 +94,7 @@ describe('run events', () => {
     const { events } = await read(chat.send('go'))
 
     // Assert
-    expect(events.map(e => `${e.t}:${e.type}`)).toEqual([
+    expect(events.filter(e => e.type !== 'tool_call_delta').map(e => `${e.t}:${e.type}`)).toEqual([
       '0:step_start',
       '0:step_end',
       '1:step_start',
@@ -103,6 +110,48 @@ describe('run events', () => {
       '2:model_end',
       '2:step_end',
       '3:run_end',
+    ])
+  })
+
+  it("should stream a call's arguments before tool_call, with those written so far", async () => {
+    // Arrange
+    const chat = session([[{ updates: 0, fail: false }]])
+
+    // Act
+    const { events } = await read(chat.send('go'))
+
+    // Assert
+    const deltas = events.filter(e => e.type === 'tool_call_delta')
+    const called = events.findIndex(e => e.type === 'tool_call')
+    expect(deltas.map(e => e.delta).join('')).toBe(JSON.stringify({ updates: 0, fail: false }))
+    expect(deltas.at(-1)?.call).toMatchObject({ id: 'c0.0', name: 'work', arguments: { updates: 0, fail: false } })
+    expect(events.findLastIndex(e => e.type === 'tool_call_delta')).toBeLessThan(called)
+  })
+
+  it('should give every argument delta the id its tool_call has, when the provider sends the id late', async () => {
+    // Arrange
+    const chat = createSession(
+      createAgent({ model: lateId(['{"updates"', ':0,', '"fail":false}']), tools: [work(undefined)] }),
+    )
+
+    // Act
+    const { events } = await read(chat.send('go'))
+
+    // Assert
+    const written = events.flatMap(e => {
+      switch (e.type) {
+        case 'tool_call':
+          return [[e.type, e.call.id]]
+        case 'tool_call_delta':
+          return [[e.type, e.call.id, e.delta]]
+        default:
+          return []
+      }
+    })
+    expect(written).toEqual([
+      ['tool_call_delta', 'late', '{"updates":0,'],
+      ['tool_call_delta', 'late', '"fail":false}'],
+      ['tool_call', 'late'],
     ])
   })
 
@@ -368,7 +417,7 @@ describe('observe', () => {
     const { events } = await read(chat.send('go'))
 
     // Assert
-    expect(seen).toEqual(typesOf(events))
+    expect(seen).toEqual(events.map(e => e.type))
     expect(process.emitWarning).toHaveBeenCalledWith(expect.stringContaining('observer bug'), 'ObserveWarning')
   })
 
@@ -511,6 +560,52 @@ function faux(responses: FauxResponseStep[]): Model<Api> {
   return registration.getModel()
 }
 
+/** A model that calls `work` with `pieces` of arguments, its id coming with the second as some providers do; then answers. */
+function lateId(pieces: string[]): Model<Api> {
+  const api = 'late-id'
+  let calls = 0
+  registerApiProvider(
+    {
+      api,
+      stream: () => {
+        throw new Error('streamSimple only')
+      },
+      streamSimple: () => {
+        const stream = createAssistantMessageEventStream()
+        const first = calls++ === 0
+        queueMicrotask(async () => {
+          if (!first) {
+            const message = fauxAssistantMessage('done')
+            stream.push({ type: 'done', reason: 'stop', message })
+            stream.end(message)
+            return
+          }
+
+          const message = fauxAssistantMessage([fauxToolCall('work', {}, { id: '' })], { stopReason: 'toolUse' })
+          const [block] = callsOf(message)
+          stream.push({ type: 'toolcall_start', contentIndex: 0, partial: message })
+          for (const [i, delta] of pieces.entries()) {
+            if (i === 1) {
+              block.id = 'late'
+            }
+            stream.push({ type: 'toolcall_delta', contentIndex: 0, delta, partial: message })
+            // The stream hands on the same message: each piece is read before the next changes it, as over a network
+            await new Promise(resolve => setTimeout(resolve))
+          }
+          block.arguments = JSON.parse(pieces.join('')) as Record<string, unknown>
+          stream.push({ type: 'toolcall_end', contentIndex: 0, toolCall: block, partial: message })
+          stream.push({ type: 'done', reason: 'toolUse', message })
+          stream.end(message)
+        })
+        return stream
+      },
+    },
+    api,
+  )
+  registrations.push({ unregister: () => unregisterApiProviders(api) })
+  return { ...faux([]), api }
+}
+
 function callsTo(name: string): AssistantMessage {
   return fauxAssistantMessage([fauxToolCall(name, {}, { id: 'only' })], { stopReason: 'toolUse' })
 }
@@ -569,8 +664,9 @@ function isToolEvent(e: RunEvent): boolean {
   return e.type === 'tool_start' || e.type === 'tool_update' || e.type === 'tool_end'
 }
 
+/** Without the argument deltas: the faux model cuts the arguments at random. */
 function typesOf(events: RunEvent[]): string[] {
-  return events.map(e => e.type)
+  return events.filter(e => e.type !== 'tool_call_delta').map(e => e.type)
 }
 
 function idsOf(p: Plan): string[] {

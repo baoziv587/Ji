@@ -149,6 +149,11 @@ export interface Events {
   /** Main model only: a plugin's ctx.complete does not stream its content. */
   thinking: { delta: string }
   text: { delta: string }
+  /**
+   * The model is writing this call's arguments: `call` has those it has written so far, `delta` the next of their JSON.
+   * `call.id` is the id its tool_call will have.
+   */
+  tool_call_delta: { call: ToolCall; delta: string }
   /** The model finished writing this call's arguments; the tool has not started. */
   tool_call: { call: ToolCall }
   model_end: { message: AssistantMessage; ms: number; by?: string }

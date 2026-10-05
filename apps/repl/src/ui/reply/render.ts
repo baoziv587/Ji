@@ -8,11 +8,26 @@ import type { Meter } from '../screen/usage.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
 import { bar, dim } from '../paint/text.ts'
-import { describeArguments, describeDone, describeRecent, describeResult, describeRunning, Output } from './calls.ts'
+import {
+  describeArguments,
+  describeDone,
+  describeRecent,
+  describeResult,
+  describeRunning,
+  describeWriting,
+  Output,
+} from './calls.ts'
 import { Gutter } from './gutter.ts'
 
-/** A call shows at the end of the conversation once it has run this long, or written something. */
+/** A call shows at the end of the conversation once it has been written or run this long, or once it has output. */
 const SHOW_AFTER = 500
+
+/** A call the model is writing: since when, and how many characters of its arguments so far. */
+interface Writing {
+  call: ToolCall
+  since: number
+  chars: number
+}
 
 /** A call running: since when, and what it has written so far. */
 interface Running {
@@ -45,6 +60,7 @@ export interface Stage {
  *   |  Let me compute that.                    |  Let me compute that.    <- text: plain rail, normal text
  *   |  ```ts                                   |  ```ts                   <- a code block, in color a line at a time
  *   |                                          |                          <- blank line before a turn's first call
+ *   ~  calc(expr: "17*2")  9 chars             ~  calc(expr: …)  9 chars  <- live, while the model writes a call
  *                                              >  calc                    <- tool_call: the tool has not started yet,
  *                                              |  expr: "17*23"              an argument a line
  *   ~  bash(command: "pnpm test")  12s         ~  bash(command: …)  12s   <- live, while it runs: its last lines under
@@ -53,14 +69,15 @@ export interface Stage {
  *   +  use vitest  · steer                     +  use vitest  · steer     <- a message, once it reaches the model
  *
  * Every line of a call or a result is cut to one row, so a long one never wraps under the rail. What the conversation
- * waits on shows at its end, in the screen's live rows: a table held back until it ends, or a call that runs for a
- * while. A failed call keeps its last lines in brief. The status (Running calc 1s) is in the bar, timed from
- * tool_start, so it never counts time the model was writing. A file a call changed goes in `changed`: the
- * conversation can go back, the file cannot.
+ * waits on shows at its end, in the screen's live rows: a table held back until it ends, a call the model is still
+ * writing, or a call that runs for a while. A failed call keeps its last lines in brief. The status (Running calc 1s)
+ * is in the bar, timed from tool_start, so it never counts time the model was writing. A file a call changed goes in
+ * `changed`: the conversation can go back, the file cannot.
  */
 export async function render(r: Run, stage: Stage, changed: Set<string>): Promise<void> {
   const { screen, status, meter } = stage
   const out = new Gutter(screen)
+  const writing = new Map<string, Writing>()
   const running = new Map<string, Running>()
   // The call that wrote last: only its output shows
   let latest: string | undefined
@@ -81,14 +98,20 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
     }
 
     const now = performance.now()
-    const shown = [...running.values()].filter(({ since, output }) => output.lines > 0 || now - since >= SHOW_AFTER)
-    if (shown.length === 0) {
+    const shownWriting = [...writing.values()].filter(({ since }) => now - since >= SHOW_AFTER)
+    const shownRunning = [...running.values()].filter(
+      ({ since, output }) => output.lines > 0 || now - since >= SHOW_AFTER,
+    )
+    if (shownWriting.length === 0 && shownRunning.length === 0) {
       return []
     }
 
     // Where the first done row of the turn will go, after its blank line
     const rows = afterDone ? [] : [bar()]
-    for (const { call, since, output } of shown) {
+    for (const { call, chars } of shownWriting) {
+      rows.push(`${icon}  ${describeWriting(call, chars)}`)
+    }
+    for (const { call, since, output } of shownRunning) {
       rows.push(`${icon}  ${describeRunning(call, Math.floor((now - since) / 1000), output)}`)
       if (call.id === latest) {
         rows.push(...describeRecent(output).map(line => `${bar()}  ${line}`))
@@ -134,7 +157,23 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           await out.write(e.delta, 'text')
           status.show('Writing')
           break
+        case 'tool_call_delta': {
+          meter.streaming()
+          const before = writing.get(e.call.id)
+          if (before === undefined) {
+            // The text before it has ended
+            out.end()
+          }
+          writing.set(e.call.id, {
+            call: e.call,
+            since: before?.since ?? performance.now(),
+            chars: (before?.chars ?? 0) + e.delta.length,
+          })
+          status.show('Writing')
+          break
+        }
         case 'tool_call':
+          writing.delete(e.call.id)
           out.end()
           // Calls from the same turn stay together without blank lines
           log.message(describeArguments(e.call), {
@@ -179,12 +218,17 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
         }
         case 'model_end':
           meter.end(e.message.usage)
+          writing.clear()
+          // Its calls have not started yet: one may wait for a question
+          status.show('Waiting')
           break
         case 'model_error':
           meter.dropped(e.usage)
+          writing.clear()
           break
         case 'step_cancelled':
           meter.dropped()
+          writing.clear()
           running.clear()
           break
       }

@@ -320,9 +320,16 @@ async function* callModel(req: ModelRequest, { signal, by }: CallScope): Stream<
     signal: AbortSignal.any([signal, ctl.signal]),
   })
 
+  // Argument deltas of calls whose id has not come yet, by content index
+  const held = new Map<number, string>()
   let finished = false
   try {
     for await (const e of events) {
+      if (e.type === 'toolcall_delta' || e.type === 'toolcall_end') {
+        yield* callEventsOf(e, held)
+        continue
+      }
+
       const payload = payloadOf(e)
       if (payload !== undefined) {
         yield payload
@@ -348,18 +355,52 @@ async function* callModel(req: ModelRequest, { signal, by }: CallScope): Stream<
   return msg
 }
 
-/** The pi-ai events worth an event of their own; the rest (starts, ends, argument deltas) stay inside callModel. */
+/** The text and thinking: the rest of pi-ai's events (starts and ends) stay inside callModel. */
 function payloadOf(e: AssistantMessageEvent): Payload | undefined {
   switch (e.type) {
     case 'thinking_delta':
       return { type: 'thinking', delta: e.delta }
     case 'text_delta':
       return { type: 'text', delta: e.delta }
-    case 'toolcall_end':
-      return { type: 'tool_call', call: e.toolCall }
     default:
       return undefined
   }
+}
+
+/**
+ * A call's tool_call_deltas and its tool_call, all with the id its tool_call has. Some providers send the id after the
+ * first pieces: those wait for it.
+ */
+function callEventsOf(
+  e: Extract<AssistantMessageEvent, { type: 'toolcall_delta' | 'toolcall_end' }>,
+  held: Map<number, string>,
+): Payload[] {
+  const block = e.type === 'toolcall_end' ? e.toolCall : e.partial.content[e.contentIndex]
+  if (block?.type !== 'toolCall') {
+    return []
+  }
+
+  // At its end, a call gives what it still holds
+  let delta = held.get(e.contentIndex) ?? ''
+  if (e.type === 'toolcall_delta') {
+    delta += e.delta
+    if (block.id === '') {
+      held.set(e.contentIndex, delta)
+      return []
+    }
+  }
+  held.delete(e.contentIndex)
+
+  const payloads: Payload[] = []
+  if (delta !== '') {
+    // The block goes on changing: the call is a copy, with the arguments parsed so far
+    const call: ToolCall = { type: 'toolCall', id: block.id, name: block.name, arguments: block.arguments }
+    payloads.push({ type: 'tool_call_delta', call, delta })
+  }
+  if (e.type === 'toolcall_end') {
+    payloads.push({ type: 'tool_call', call: e.toolCall })
+  }
+  return payloads
 }
 
 /**
@@ -382,7 +423,15 @@ async function* withoutContent<T>(stream: Stream<Payload, T>): Stream<Payload, T
 }
 
 function isContent(e: Payload): boolean {
-  return e.type === 'thinking' || e.type === 'text' || e.type === 'tool_call'
+  switch (e.type) {
+    case 'thinking':
+    case 'text':
+    case 'tool_call_delta':
+    case 'tool_call':
+      return true
+    default:
+      return false
+  }
 }
 
 /** The calls of one model turn run at once; their events interleave, their results keep the call order. */

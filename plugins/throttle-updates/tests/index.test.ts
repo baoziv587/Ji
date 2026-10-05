@@ -27,11 +27,8 @@ describe('throttleUpdates', () => {
     const events = await run(updatingTool([0, 1, 2]), [plugin])
 
     // Assert
-    expect(events.filter(e => e.type.startsWith('tool_') && e.type !== 'tool_update').map(e => e.type)).toEqual([
-      'tool_call',
-      'tool_start',
-      'tool_end',
-    ])
+    const calls = new Set(['tool_call', 'tool_start', 'tool_end'])
+    expect(events.filter(e => calls.has(e.type)).map(e => e.type)).toEqual(['tool_call', 'tool_start', 'tool_end'])
     expect(events.find(e => e.type === 'tool_end')).toMatchObject({ result: { isError: false } })
   })
 

@@ -198,23 +198,24 @@ usageOf(chat.state) // whole conversation
 
 Reading `r` gives one flat stream; switch on `e.type`. Each event also has the step number `t`.
 
-| Event                     | When                                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------------------- |
-| `step_start` / `step_end` | A step begins / is recorded. `step_end` is the same record as `r.turns`.                       |
-| `step_cancelled`          | A step was interrupted or aborted before being recorded. `open` lists the calls still running. |
-| `model_start`             | A request is sent: the model and the thinking level actually used, and `by` (below)            |
-| `thinking` / `text`       | The main model's output, as `delta`                                                            |
-| `tool_call`               | The model finished writing a call's arguments. **The tool has not started.**                   |
-| `model_end`               | The call succeeded: the complete message, with usage and `ms`                                  |
-| `model_error`             | The call failed: `error`, the provider's `usage` if any, and `ms`. A request plugin may retry. |
-| `tool_start` / `tool_end` | A call really starts / has its result, with `ms`. Parallel calls end in completion order.      |
-| `tool_update`             | A value the tool yielded (below)                                                               |
-| `run_end`                 | The run is over: `outcome` is `'done'` with the result, or `'failed'` with the `RunError`      |
-| `<plugin>:<event>`        | Whatever a plugin yields ([Writing Plugins](plugins.md#events-from-plugins))                   |
+| Event                     | When                                                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `step_start` / `step_end` | A step begins / is recorded. `step_end` is the same record as `r.turns`.                                                            |
+| `step_cancelled`          | A step was interrupted or aborted before being recorded. `open` lists the calls still running.                                      |
+| `model_start`             | A request is sent: the model and the thinking level actually used, and `by` (below)                                                 |
+| `thinking` / `text`       | The main model's output, as `delta`                                                                                                 |
+| `tool_call_delta`         | The model is writing a call's arguments: `call` has those so far and the id its `tool_call` will have, `delta` the next of the JSON |
+| `tool_call`               | The model finished writing a call's arguments. **The tool has not started.**                                                        |
+| `model_end`               | The call succeeded: the complete message, with usage and `ms`                                                                       |
+| `model_error`             | The call failed: `error`, the provider's `usage` if any, and `ms`. A request plugin may retry.                                      |
+| `tool_start` / `tool_end` | A call really starts / has its result, with `ms`. Parallel calls end in completion order.                                           |
+| `tool_update`             | A value the tool yielded (below)                                                                                                    |
+| `run_end`                 | The run is over: `outcome` is `'done'` with the result, or `'failed'` with the `RunError`                                           |
+| `<plugin>:<event>`        | Whatever a plugin yields ([Writing Plugins](plugins.md#events-from-plugins))                                                        |
 
 Every `tool_start` is closed by its `tool_end` or by the step's `step_cancelled`, so a UI never keeps a spinner forever. Likewise every `model_start` is closed by exactly one `model_end`, `model_error` or `step_cancelled`, and at most one model call is open at a time, so they pair up in order.
 
-**`by`.** A plugin may call a model itself with [`ctx.complete`](plugins.md#calling-a-model-ctxcomplete), for a summary, say. Those calls' `model_start`, `model_end` and `model_error` carry `by: '<plugin name>'`; the main model's have no `by`. Their `thinking`, `text` and `tool_call` are not streamed, so `r.text` is only ever the main answer.
+**`by`.** A plugin may call a model itself with [`ctx.complete`](plugins.md#calling-a-model-ctxcomplete), for a summary, say. Those calls' `model_start`, `model_end` and `model_error` carry `by: '<plugin name>'`; the main model's have no `by`. Their `thinking`, `text`, `tool_call_delta` and `tool_call` are not streamed, so `r.text` is only ever the main answer.
 
 ```ts
 for await (const e of r) {

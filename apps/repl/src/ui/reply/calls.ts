@@ -111,28 +111,31 @@ export async function describeResult(call: ToolCall, result: ToolResultMessage):
  * on error what went wrong, since that matters.
  */
 export function describeDone(call: ToolCall, result: ToolResultMessage): string {
-  const width = room()
   if (!result.isError) {
     const lines = resultText(result).split('\n').length
     if (lines === 1) {
       return describeCall(call)
     }
 
-    const size = dim(linesOf(lines))
-    return `${describeCall(call, width - widthOf(size) - 2)}  ${size}`
+    return describeCallWithNote(call, linesOf(lines))
   }
 
   // The error keeps at least half the row, and gives what it does not need to the call
+  const width = room()
   const error = clip(resultText(result), Number.POSITIVE_INFINITY)
   const head = describeCall(call, Math.max(width - widthOf(error) - 2, Math.floor(width / 2)))
   return `${head}  ${styleText('red', clip(error, width - widthOf(head) - 2))}`
 }
 
+/** The row of a call the model is still writing: its arguments so far, and how many characters of them. */
+export function describeWriting(call: ToolCall, chars: number): string {
+  return describeCallWithNote(call, `${count(chars)} chars`)
+}
+
 /** The row of a call still running: the call, how long it has run, and how many lines it has written. */
 export function describeRunning(call: ToolCall, seconds: number, output: Output): string {
   const lines = output.lines
-  const size = dim(lines === 0 ? `${seconds}s` : `${seconds}s · ${linesOf(lines)}`)
-  return `${describeCall(call, room() - widthOf(size) - 2)}  ${size}`
+  return describeCallWithNote(call, lines === 0 ? `${seconds}s` : `${seconds}s · ${linesOf(lines)}`)
 }
 
 /** A running call's last rows of output, dim, each cut to fit. */
@@ -152,12 +155,14 @@ function textOf(data: unknown): string | undefined {
 /** A line of output as a row shows it: no colors or other control codes, and only what a progress bar drew last. */
 function shown(line: string): string {
   const plain = stripVTControlCharacters(line).replace(/\r$/, '')
-  // eslint-disable-next-line no-control-regex -- the codes left after the colors
-  return plain
-    .slice(plain.lastIndexOf('\r') + 1)
-    .replaceAll('\t', '  ')
-    .replaceAll(/[\x00-\x1F\x7F]/g, '')
-    .trimEnd()
+  return (
+    plain
+      .slice(plain.lastIndexOf('\r') + 1)
+      .replaceAll('\t', '  ')
+      // eslint-disable-next-line no-control-regex -- the codes left after the colors
+      .replaceAll(/[\x00-\x1F\x7F]/g, '')
+      .trimEnd()
+  )
 }
 
 /** `1 line`, `340 lines`, `1.2k lines`. */
@@ -176,4 +181,10 @@ function describeCall(call: ToolCall, width = room()): string {
     .join(', ')
   // The name and the two parentheses take columns of their own
   return `${styleText('bold', call.name)}${dim('(')}${clip(args, width - widthOf(call.name) - 2)}${dim(')')}`
+}
+
+/** A call on one row with a dim note after it: the call is cut to leave the note its columns. */
+function describeCallWithNote(call: ToolCall, note: string): string {
+  const size = dim(note)
+  return `${describeCall(call, room() - widthOf(size) - 2)}  ${size}`
 }
