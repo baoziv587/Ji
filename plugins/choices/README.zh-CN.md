@@ -14,6 +14,7 @@
 ## 让模型向你提问
 
 把 `choices` 加到 agent 的插件列表。`terminal()` 负责在终端显示问题。
+使用 `terminal()` 时，你的应用需要安装 `@clack/core`、`@clack/prompts` 和 `fast-wrap-ansi`。
 
 ```ts
 import process from 'node:process'
