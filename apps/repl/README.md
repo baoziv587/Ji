@@ -29,7 +29,7 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 
 ## 对话
 
-一个会话接一个 `send`，读 `Run` 本身（`for await (const e of r)`）：`text` 边生成边写出，`tool_call` 显示工具名和参数，`tool_end` 显示工具结果。
+一个会话接一个 `send`，读 `Run` 本身（`for await (const e of r)`）：`text` 边生成边写出，`tool_call` 显示工具名和参数，`tool_end` 显示工具结果。每次调用在简洁视图里只占一行，参数和错误按显示宽度截断；Ctrl+O 的详细视图里参数一个一行，读到的文件显示前 30 行并上色。
 
 - 回答进行中也能打字。按 Enter 就是插话：`chat.send(text, { when: 'step' })`，消息并进同一个 `Run`，等当前这一步（模型这一轮，或正在跑的工具）结束后送到模型。送达时（`step_end` 里的 `input` 轮）才显示在对话里，标着 `· steer`；还没送达的数量显示在状态行。
 - 回答中按 Ctrl+C 调用 `r.abort()`，只停止这一次回答；会话回到发送前的状态，这次回答里发过的消息（包括插话）填回输入框，可以改了再发。出错时也一样。
@@ -41,18 +41,27 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 - 装了 [`@ji.dev/plugin-files`](../../plugins/files/src/index.ts) 的 `read` 和 `edit`。回答被 Ctrl+C 停止时会话回滚，但已经写入磁盘的修改不会撤销，提示里会列出改过的文件；模型下次修改那个文件前会被要求重新读取。
 - 每次读文件前、每次改文件写入前（先显示 diff）都要等你确认。Shift+Tab 在“逐个确认”和“自动同意”之间切换，状态行和确认问题的标题都会显示当前模式；在确认问题上切换只影响之后的调用，这个问题仍要你来回答。确认问题里还有两个快捷选项：“Yes, and approve the rest inside the workspace”（同意并切到自动），以及读文件时的“Yes, and stop asking about reads inside the workspace”。
 - 启动目录之外的文件也能读写，但无论哪种模式都要先确认，问题标题末尾会用黄色标出 `(outside the workspace)`，光标默认停在 No。自动同意只覆盖启动目录。
+- 确认一次也可以不再问：bash 的确认里有“Yes, and allow every command from now on”，读启动目录外的文件时有“Yes, and allow reads in ~/某目录/ from now on”（这个目录和它的子目录）。放行了什么会用黄色写在状态行；Shift+Tab 切回逐个确认时全部收回。
 - 模型可以用 `ask_user` 工具自己提问、自己给选项：一个问题是单选或多选，几个问题就是 Tabs（←/→ 切换，最后一个 Tab 汇总提交），每个问题都能选 Other 自己输入。任何问题按 Esc 都只是关掉这一个（审批算 No），回复继续；Ctrl+C 停掉整个回复。问题打开时按键归问题，输入行变灰，打过的字留着。
-- 这些都来自一个插件：`choices({ answer, approve: [fileCalls] })`。它带上 `ask_user` 工具，在 `toolCall` 层对 `approve` 里的 preview 提出的调用 `yield` 一个 `ask:choices` 事件，并在 `toolCalls` 层用 `answer` 回答所有问题（RFC-0007 §5）；`@ji.dev/plugin-choices/terminal` 的 `terminal()` 就是一个在终端里画问题的 `answer`。模式决定的是“问不问”（`fileCalls` 在自动模式下对启动目录内的调用返回 `undefined`），不是“怎么答”。换成 `approve: [named('bash')]` 或 `[everyCall]`，就能审批任何工具。
+- 这些都来自一个插件：`choices({ answer, approve: permissions.approve })`。它带上 `ask_user` 工具，在 `toolCall` 层对 `approve` 里的 preview 提出的调用 `yield` 一个 `ask:choices` 事件，并在 `toolCalls` 层用 `answer` 回答所有问题（RFC-0007 §5）；`@ji.dev/plugin-choices/terminal` 的 `terminal()` 就是一个在终端里画问题的 `answer`。模式决定的是“问不问”（[`Permissions`](src/permissions.ts) 的 preview 在自动模式下对启动目录内的文件调用返回 `undefined`），不是“怎么答”。换成 `approve: [named('bash')]` 或 `[everyCall]`，就能审批任何工具。
 
 ## 代码
 
-| 文件                           | 做什么                                                                                                                                   |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| [`repl.ts`](src/repl.ts)       | 入口：agent、插件、按键、两条栏的内容                                                                                                    |
-| [`screen.ts`](src/screen.ts)   | 终端的三块布局。程序写到 stdout 的内容进一个 [`@xterm/headless`](https://github.com/xtermjs/xterm.js) 虚拟终端，再按滚动位置画出其中一屏 |
-| [`cells.ts`](src/cells.ts)     | 把虚拟终端的一行连同颜色、粗体等还原成 ANSI 文本                                                                                         |
-| [`usage.ts`](src/usage.ts)     | 会话用量的累计和显示                                                                                                                     |
-| [`editing.ts`](src/editing.ts) | 输入行的编辑状态，纯函数 `edit(state, key)`，和绘制分开                                                                                  |
+| 文件                                   | 做什么                                                                                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [`repl.ts`](src/repl.ts)               | 入口：agent、插件、提问流程、渲染循环、按键、两条栏的内容                                                                                |
+| [`permissions.ts`](src/permissions.ts) | 哪些调用要等确认：ask/auto 模式、确认里的快捷选项、一次批准后放行的命令和目录                                                            |
+| [`gutter.ts`](src/gutter.ts)           | 把流式回复写在 clack 的竖线右边；回答里的代码块逐行上色                                                                                  |
+| [`calls.ts`](src/calls.ts)             | 工具调用和结果在两个视图里的样子，每行按显示宽度截断                                                                                     |
+| [`diff.ts`](src/diff.ts)               | 确认里的 diff：按文件语言上色，改动的部分用更深的底色                                                                                    |
+| [`highlight.ts`](src/highlight.ts)     | 用 [shiki](https://shiki.style) 给代码上色，逐行带着语法状态，可以给一行的一部分加底色                                                   |
+| [`status.ts`](src/status.ts)           | 底栏里转着的状态：在做什么、做了多久                                                                                                     |
+| [`text.ts`](src/text.ts)               | 按显示宽度截断、取尾，和按键提示的写法                                                                                                   |
+| [`tools.ts`](src/tools.ts)             | REPL 自带的两个小工具 calc 和 now                                                                                                        |
+| [`screen.ts`](src/screen.ts)           | 终端的三块布局。程序写到 stdout 的内容进一个 [`@xterm/headless`](https://github.com/xtermjs/xterm.js) 虚拟终端，再按滚动位置画出其中一屏 |
+| [`cells.ts`](src/cells.ts)             | 把虚拟终端的一行连同颜色、粗体等还原成 ANSI 文本                                                                                         |
+| [`usage.ts`](src/usage.ts)             | 会话用量的累计和显示                                                                                                                     |
+| [`editing.ts`](src/editing.ts)         | 输入行的编辑状态，纯函数 `edit(state, key)`，和绘制分开                                                                                  |
 
 简洁和详细两个视图各是一个虚拟终端：stdout 同时写进两边，`screen.brief` 和 `screen.full` 只写进其中一边（clack `log` 的 `output` 选项），确认问题在两边一样地重画，所以切换视图不需要重放对话。
 
