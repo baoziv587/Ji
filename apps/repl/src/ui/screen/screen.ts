@@ -77,6 +77,12 @@ export class Screen {
   private top: number | undefined
   /** What the real terminal shows, row by row, so a frame writes only the rows that changed. */
   private shown: string[] = []
+  /**
+   * The content's rows as last read from the headless terminal: read again only after it changed, so the bars can
+   * redraw (a spinner's turn, a key) without going over every cell of the content.
+   */
+  private window: string[] = []
+  private stale = true
   /** The real terminal's size: stdout's own columns and rows are the content's while the screen is on. */
   private size = { columns: 80, rows: 24 }
   private scheduled = false
@@ -113,10 +119,10 @@ export class Screen {
     out.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
       const callback = rest.find(arg => typeof arg === 'function') as (() => void) | undefined
       const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk)
-      terms.brief.write(text, () => this.draw())
+      terms.brief.write(text, () => this.changed())
       terms.full.write(text, () => {
         callback?.()
-        this.draw()
+        this.changed()
       })
       return true
     }) as typeof out.write
@@ -140,7 +146,7 @@ export class Screen {
 
     this.running = { terms, cell: terms.brief.buffer.active.getNullCell(), write, restore }
     write(ENTER)
-    this.draw()
+    this.changed()
   }
 
   /** Resolves once everything written so far is in the content. */
@@ -185,7 +191,10 @@ export class Screen {
     this.follow()
   }
 
-  /** Redraws on the next turn of the event loop, once for everything that changed until then. */
+  /**
+   * Redraws on the next turn of the event loop, once for everything that changed until then. The content is drawn as
+   * it was, unless it changed itself: what changes the bars calls this.
+   */
   draw(): void {
     if (this.scheduled) {
       return
@@ -207,7 +216,7 @@ export class Screen {
     const end = this.running.terms[this.shownView].buffer.active.baseY
     const top = Math.min(Math.max((this.top ?? end) + lines, 0), end)
     this.top = top === end ? undefined : top
-    this.draw()
+    this.changed()
   }
 
   /** Scrolls by a page, keeping a line of the last one. */
@@ -218,7 +227,7 @@ export class Screen {
   /** Follows the end again. */
   follow(): void {
     this.top = undefined
-    this.draw()
+    this.changed()
   }
 
   /** How many lines are below the window, while scrolled back. */
@@ -236,7 +245,11 @@ export class Screen {
 
     const { columns, rows } = this.size
     const frame = this.frame(columns)
-    const lines = [...frame.top, ...this.content(this.running), ...frame.bottom].slice(0, rows)
+    if (this.stale) {
+      this.window = this.content(this.running)
+      this.stale = false
+    }
+    const lines = [...frame.top, ...this.window, ...frame.bottom].slice(0, rows)
 
     let out = ''
     for (const [i, line] of lines.entries()) {
@@ -264,6 +277,12 @@ export class Screen {
     return bar.map((piece, y) => lineOf(buffer.getLine(top + y), term.cols, cell) + piece)
   }
 
+  /** The content changed, or what of it is on screen: it is read again for the next frame. */
+  private changed(): void {
+    this.stale = true
+    this.draw()
+  }
+
   private contentRows(columns: number, rows: number): number {
     const frame = this.frame(columns)
     return Math.max(1, rows - frame.top.length - frame.bottom.length)
@@ -273,7 +292,7 @@ export class Screen {
   private only(view: View): Writable {
     const stream = new Writable({
       write: (chunk: Buffer, _encoding, done) => {
-        this.running?.terms[view].write(chunk, () => this.draw())
+        this.running?.terms[view].write(chunk, () => this.changed())
         // At once, so the next write is not held back behind this one, out of order with stdout's
         done()
       },
@@ -309,7 +328,7 @@ export class Screen {
     }
     this.shown = []
     this.running.write('\x1B[2J')
-    this.draw()
+    this.changed()
   }
 }
 
