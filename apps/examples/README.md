@@ -10,7 +10,7 @@ pnpm --filter @ji.dev/examples interject    # 运行中插话：steer、follow-u
 pnpm --filter @ji.dev/examples hooks        # 细粒度钩子：自动继续、检索、兜底模型、预算
 ```
 
-默认使用 pi-ai 的 faux provider 离线回放脚本。可以直接聊天的 REPL 在 [`apps/repl`](../repl/README.md)。设置 `MODEL=anthropic/claude-sonnet-5`（或 pi-ai 支持的其他 `provider/model`）即可换成真实模型，API key 从环境变量读取。
+默认使用 pi-ai 的 faux provider 离线回放脚本。可以直接聊天的 coding agent 在 [`apps/coding-agent`](../coding-agent/README.md)。设置 `MODEL=anthropic/claude-sonnet-5`（或 pi-ai 支持的其他 `provider/model`）即可换成真实模型，API key 从环境变量读取。
 
 ## 1. 基本用法
 

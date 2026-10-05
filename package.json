@@ -8,7 +8,7 @@
   },
   "scripts": {
     "demo": "pnpm --filter @ji.dev/demo start",
-    "repl": "pnpm --filter @ji.dev/repl repl",
+    "coding-agent": "pnpm --filter @ji.dev/coding-agent start",
     "replay": "node apps/replay/src/cli.ts",
     "replay:shell": "node apps/replay/src/cli.ts shell",
     "test": "vitest run",

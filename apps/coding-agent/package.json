@@ -1,11 +1,11 @@
 {
-  "name": "@ji.dev/repl",
+  "name": "@ji.dev/coding-agent",
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "description": "A full-screen chat REPL on @ji.dev/llm: DeepSeek, file, shell and search tools with approval, and steering while a reply runs",
+  "description": "A full-screen coding agent on @ji.dev/llm: DeepSeek, file, shell and search tools with approval, and steering while a reply runs",
   "scripts": {
-    "repl": "node src/repl.ts",
+    "start": "node src/main.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

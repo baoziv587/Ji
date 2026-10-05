@@ -1,4 +1,4 @@
-// A chat REPL: DEEPSEEK_API_KEY=sk-... pnpm repl
+// A coding agent to chat with in the terminal: DEEPSEEK_API_KEY=sk-... pnpm coding-agent
 //
 //   It fills the terminal: a bar on top (model, thinking, workspace) and one at the bottom (the status, and the line
 //   you type in) stay put, and only the conversation between them scrolls, with the wheel or PgUp/PgDn. On exit the
@@ -25,7 +25,7 @@
 // The code, a folder a part. This file puts them together, holds the keys, and starts and quits.
 //
 //   agent/    the model, its plugins, and the conversation: sending, steering, going back after a reply that stopped
-//   plugins/  the REPL's own: two small tools, and what waits for a yes
+//   plugins/  the coding agent's own: two small tools, and what waits for a yes
 //   ui/       the terminal: the screen and its bars, a reply and its Markdown, the questions, and the painting they
 //             all share
 //
@@ -240,7 +240,7 @@ function drawFrame(columns: number): Frame {
 
 // Starting and quitting
 
-/** A typo in the model or the level stops the REPL before the first prompt, with the choices listed. */
+/** A typo in the model or the level stops the coding agent before the first prompt, with the choices listed. */
 function startAgentOrQuit(): Agent {
   try {
     return startAgent(ROOT, plugins, asking)
@@ -254,7 +254,7 @@ function startAgentOrQuit(): Agent {
 }
 
 if (!process.stdin.isTTY || !process.stdout.isTTY) {
-  cancel('The REPL draws a bar at the bottom of a terminal: run it in one.')
+  cancel('The coding agent draws a bar at the bottom of a terminal: run it in one.')
   process.exit(1)
 }
 
