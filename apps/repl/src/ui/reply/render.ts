@@ -6,8 +6,8 @@ import type { Status } from '../screen/status.ts'
 import type { Meter } from '../screen/usage.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
-import { clip, dim } from '../paint/text.ts'
-import { describeArguments, describeDone, describeResult } from './calls.ts'
+import { dim } from '../paint/text.ts'
+import { describeArguments, describeDone, describeResult, Output } from './calls.ts'
 import { Gutter } from './gutter.ts'
 
 /** Where a reply shows, and what it counts toward. */
@@ -40,18 +40,23 @@ export interface Stage {
  *   +  use vitest  · steer                     +  use vitest  · steer     <- a message, once it reaches the model
  *
  * Every line of a call or a result is cut to one row, so a long one never wraps under the rail. The status (Running
- * calc 1s) is in the bar, timed from tool_start, so it never counts time the model was writing. A file a call changed
- * goes in `changed`: the conversation can go back, the file cannot.
+ * calc 1s) is in the bar, timed from tool_start, so it never counts time the model was writing; it also says what
+ * keeps the conversation still: a table held back until it ends, or the output of a call still running. A file a
+ * call changed goes in `changed`: the conversation can go back, the file cannot.
  */
 export async function render(r: Run, stage: Stage, changed: Set<string>): Promise<void> {
   const { screen, status, meter } = stage
   const out = new Gutter(screen)
-  const running = new Map<string, string>()
+  // The calls running, by id: their names, and what they have written so far
+  const running = new Map<string, { name: string; output: Output }>()
   // Each view's first tool line in a turn has a blank line before it
   let afterCall = false
   let afterDone = false
 
-  const runningLabel = (): string => `Running ${[...new Set(running.values())].join(', ')}`
+  const runningLabel = (): string => {
+    const names = new Set([...running.values()].map(call => call.name))
+    return `Running ${[...names].join(', ')}`
+  }
 
   status.show('Waiting')
   try {
@@ -82,12 +87,12 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
         case 'thinking':
           meter.streaming()
           await out.write(e.delta, 'thinking')
-          status.show('Thinking', out.describeThought())
+          status.show('Thinking', out.describe())
           break
         case 'text':
           meter.streaming()
-          status.show('Writing')
           await out.write(e.delta, 'text')
+          status.show('Writing', out.describe())
           break
         case 'tool_call':
           out.end()
@@ -100,12 +105,16 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           afterCall = true
           break
         case 'tool_start':
-          running.set(e.call.id, e.call.name)
+          running.set(e.call.id, { name: e.call.name, output: new Output() })
           status.show(runningLabel())
           break
-        case 'tool_update':
-          status.show(runningLabel(), clip(String(e.data)))
+        case 'tool_update': {
+          // The call that wrote last is the one shown
+          const output = running.get(e.call.id)?.output
+          output?.add(e.data)
+          status.show(runningLabel(), output?.describe())
           break
+        }
         case 'tool_end': {
           running.delete(e.call.id)
           if (!e.result.isError && e.call.name !== 'read' && stage.fileTools.has(e.call.name)) {

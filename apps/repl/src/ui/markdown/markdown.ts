@@ -55,6 +55,11 @@ export class Markdown {
     }
   }
 
+  /** What is held back for long, for the status: `table · 14 rows`; empty while the text goes on as it comes. */
+  describe(): string {
+    return this.table.describe()
+  }
+
   /** The text has ended: what is held back is written as it is, and a table is drawn. */
   end(): void {
     const line = this.held

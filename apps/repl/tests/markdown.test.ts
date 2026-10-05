@@ -79,6 +79,26 @@ describe('markdown', () => {
     // Assert
     expect(rows).toEqual(['Look:', '```', 'let x = 1', '```', '┌───┐', '│ a │', '├───┤', '│ b │', '└───┘', '▎ done'])
   })
+
+  it('should say how many rows of a table it holds back, and nothing once the table is drawn', async () => {
+    // Arrange
+    const out = sink()
+    const markdown = new Markdown(out.rows, () => WIDTH)
+
+    // Act
+    await markdown.write('| a |\n')
+    const header = markdown.describe()
+    await markdown.write('|---|\n| 1 |\n| 2 |\n')
+    const held = markdown.describe()
+    const shown = out.text()
+    await markdown.write('after\n')
+
+    // Assert
+    expect(header).toBe('')
+    expect(held).toBe('table · 2 rows')
+    expect(shown).toBe('')
+    expect(markdown.describe()).toBe('')
+  })
 })
 
 // Helpers
