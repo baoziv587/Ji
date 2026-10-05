@@ -31,4 +31,4 @@
 
 ## 运行示例
 
-[示例说明](../../apps/examples/README.md)包含上下文压缩、运行中插话和插件示例。[插件源码](../../apps/examples/src/plugins)可以复制到自己的项目中调整；[`plugins/`](../../plugins) 提供可复用的 workspace 包，目前尚未发布到 npm。可以直接聊天的 coding agent 在 [`apps/coding-agent`](../../apps/coding-agent/README.md)。
+[示例说明](../../apps/examples/README.md)包含上下文压缩、运行中插话和插件示例。[插件源码](../../apps/examples/src/plugins)可以复制到自己的项目中调整；[`plugins/`](../../plugins) 提供可复用的 workspace 包，目前尚未发布到 npm。可以直接聊天的 coding agent 在 [`apps/coding-agent`](../../apps/coding-agent/README.zh-CN.md)。
