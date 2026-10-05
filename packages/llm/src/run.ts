@@ -434,6 +434,7 @@ function scanStep(step: OpenStep, payload: Payload, at: number): OpenStep {
   switch (payload.type) {
     case 'thinking':
     case 'text':
+    case 'tool_call_delta':
     case 'tool_call':
       return s.firstToken === undefined ? { ...s, firstToken: at } : s
     case 'model_end':

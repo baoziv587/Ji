@@ -484,7 +484,8 @@ async function runScenario({ args, reply }: Script, plugins: Plugin[]) {
   const [events, state, summary] = await Promise.all([collect(r), r.state, r.summary])
 
   return {
-    events: events.map(e => (e.type === 'text' ? `text ${e.delta}` : e.type)),
+    // The faux model cuts a call's arguments at random
+    events: events.filter(e => e.type !== 'tool_call_delta').map(e => (e.type === 'text' ? `text ${e.delta}` : e.type)),
     history: state.messages.map(shapeOf),
     usage: summary.usage,
   }
