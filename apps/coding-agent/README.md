@@ -1,9 +1,9 @@
-# REPL：在终端里和 agent 聊天
+# Coding agent：在终端里和 agent 聊天
 
-一个占满当前终端窗口的聊天 REPL，建在 `@ji.dev/llm` 上：DeepSeek 模型、带审批的文件读写、模型自己提问，回答进行中可以随时插话。
+一个占满当前终端窗口的 coding agent，建在 `@ji.dev/llm` 上：DeepSeek 模型、带审批的文件读写、模型自己提问，回答进行中可以随时插话。
 
 ```bash
-DEEPSEEK_API_KEY=sk-... pnpm repl
+DEEPSEEK_API_KEY=sk-... pnpm coding-agent
 DEEPSEEK_MODEL=deepseek-v4-pro ...   # 换模型，默认 deepseek-v4-flash
 DEEPSEEK_THINKING=off ...            # 关闭思考，默认 high；可用档位 off / high / xhigh
 ```
@@ -26,7 +26,7 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 - 对话默认是简洁视图：思考只留一行（用了几秒、多少字），工具调用一次一行，出错时带上错误信息。Ctrl+O 切到详细视图，看完整的思考和每次调用的参数、结果，再按一次切回来；状态行开头的 `details · Ctrl+O hides` 表示正在看详细视图。两个视图的行对不上，所以切换后回到底部。思考进行中，状态行显示已经写了多少字和最后几个词。
 - 对话在等什么，就显示在对话的末尾，原地更新，等完就收起：回答里的表格要等它写完才画，等的时候那里是一行 `◐ table · 14 rows`；工具跑了半秒以上、或者有了输出，就显示一行 `◐  bash(command: "pnpm test")  12s · 340 lines`，最近有输出的那个调用下面带着最后 5 行输出。成功后这几行收成一行 `✓`；失败时简洁视图在 `✗` 下面留着最后 5 行，原因多半在那里。确认问题打开时这几行先让开，答完再回到问题下面。
 - 状态行上面那条线的右端是整个会话的用量，每次模型调用结束时更新：发给模型的 token（含命中缓存的部分）、输出 token、缓存命中率、平均输出速度（不算等第一个 token 的时间）、花费。插件的模型调用、出错和被停掉的回答已经花掉的都算在内。宽度不够时依次隐藏花费、速度、命中率。
-- 鼠标被 REPL 用来滚动，所以在窗口里用鼠标选字要按住修饰键（iTerm2 是 Option，VS Code 要开 `terminal.integrated.macOptionClickForcesSelection`）。退出时整段对话（当前视图）会打印回普通终端，在那里可以照常选择、复制、往回翻。
+- 鼠标被 coding agent 用来滚动，所以在窗口里用鼠标选字要按住修饰键（iTerm2 是 Option，VS Code 要开 `terminal.integrated.macOptionClickForcesSelection`）。退出时整段对话（当前视图）会打印回普通终端，在那里可以照常选择、复制、往回翻。
 
 ## 对话
 
@@ -48,14 +48,14 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 
 ## 代码
 
-`src/` 下只有入口 [`repl.ts`](src/repl.ts)：把下面三块组装起来，放着按键表，负责启动和退出。其余代码按层分目录，层里再按领域分；`agent/` 和 `plugins/` 不知道终端的存在。
+`src/` 下只有入口 [`main.ts`](src/main.ts)：把下面三块组装起来，放着按键表，负责启动和退出。其余代码按层分目录，层里再按领域分；`agent/` 和 `plugins/` 不知道终端的存在。
 
 | 文件                                            | 做什么                                                                                                                                   |
 | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | **`agent/`**                                    | **模型和会话**                                                                                                                           |
 | [`agent.ts`](src/agent/agent.ts)                | 创建 agent：模型、思考档位、system prompt、装哪些插件                                                                                    |
 | [`conversation.ts`](src/agent/conversation.ts)  | 会话：发送、插话；回答没完成时回到发送前，交回发过的消息                                                                                 |
-| **`plugins/`**                                  | **REPL 自己的**                                                                                                                          |
+| **`plugins/`**                                  | **coding agent 自己的**                                                                                                                  |
 | [`tools.ts`](src/plugins/tools.ts)              | 两个小工具 calc 和 now                                                                                                                   |
 | [`permissions.ts`](src/plugins/permissions.ts)  | 哪些调用要等确认：ask/auto 模式、确认里的快捷选项、一次批准后放行的命令和目录。只管策略，不管怎么显示                                    |
 | **`ui/screen/`**                                | **整个画面**                                                                                                                             |
@@ -86,6 +86,6 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 
 简洁和详细两个视图各是一个虚拟终端：stdout 同时写进两边，`screen.brief` 和 `screen.full` 只写进其中一边（clack `log` 的 `output` 选项），确认问题在两边一样地重画，所以切换视图不需要重放对话。
 
-对程序来说，stdout 就是中间那块对话区：`write` 写进虚拟终端，`columns` 和 `rows` 是对话区的大小。所以 [clack](https://bomb.sh/docs/clack/basics/getting-started/) 的输出和确认问题不用改，照常在里面换行、重画。stdin 先经过 `Screen`，滚轮事件被取走，剩下的按键从 `screen.keys` 给 REPL 和确认问题。
+对程序来说，stdout 就是中间那块对话区：`write` 写进虚拟终端，`columns` 和 `rows` 是对话区的大小。所以 [clack](https://bomb.sh/docs/clack/basics/getting-started/) 的输出和确认问题不用改，照常在里面换行、重画。stdin 先经过 `Screen`，滚轮事件被取走，剩下的按键从 `screen.keys` 给 coding agent 和确认问题。
 
 需要在真正的终端里运行。

@@ -1,5 +1,5 @@
-// The agent: the model and its thinking, and the plugins it runs with, all working in the directory the REPL was
-// started from. What of theirs waits for a yes is the permissions' to say, and how it is asked, the screen's.
+// The agent: the model and its thinking, and the plugins it runs with, all working in the directory the coding agent
+// was started from. What of theirs waits for a yes is the permissions' to say, and how it is asked, the screen's.
 
 import type { Agent, Plugin, ThinkingLevel } from '@ji.dev/llm'
 import type { FilesPlugin } from '@ji.dev/plugin-files'
@@ -31,7 +31,7 @@ export function createPlugins(root: string): Plugins {
 
 /**
  * The model comes from DEEPSEEK_MODEL and the level from DEEPSEEK_THINKING. Both are checked here, so a typo stops the
- * REPL before the first prompt: UnknownModelError and UnsupportedThinkingError list the choices.
+ * coding agent before the first prompt: UnknownModelError and UnsupportedThinkingError list the choices.
  */
 export function startAgent(root: string, plugins: Plugins, asking: Plugin): Agent {
   return createAgent({

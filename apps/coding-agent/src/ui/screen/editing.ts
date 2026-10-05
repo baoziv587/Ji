@@ -1,4 +1,4 @@
-// The line typed in the REPL's bar, apart from how it is drawn: edit(state, key) gives the next state.
+// The line typed in the coding agent's bar, apart from how it is drawn: edit(state, key) gives the next state.
 //
 //   ←/→ and Ctrl+A/E move · Backspace/Delete · Ctrl+U/K delete to the start/end · Ctrl+W deletes a word
 //   Enter is left to the caller, which sends the text; inside a paste it is a space, so a paste sends nothing

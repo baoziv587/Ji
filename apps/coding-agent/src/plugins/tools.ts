@@ -1,4 +1,4 @@
-// Two small tools of the REPL's own, beside the plugins'.
+// Two small tools of the coding agent's own, beside the plugins'.
 
 import { tool, Type } from '@ji.dev/llm'
 
