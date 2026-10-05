@@ -14,7 +14,8 @@
   "peerDependencies": {
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
-    "@ji.dev/llm": "workspace:*"
+    "@ji.dev/llm": "workspace:*",
+    "fast-wrap-ansi": "^0.2.2"
   },
   "peerDependenciesMeta": {
     "@clack/core": {
@@ -22,15 +23,16 @@
     },
     "@clack/prompts": {
       "optional": true
+    },
+    "fast-wrap-ansi": {
+      "optional": true
     }
-  },
-  "dependencies": {
-    "fast-wrap-ansi": "^0.2.2"
   },
   "devDependencies": {
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
     "@ji.dev/llm": "workspace:*",
-    "@mariozechner/pi-ai": "^0.73.1"
+    "@mariozechner/pi-ai": "^0.73.1",
+    "fast-wrap-ansi": "^0.2.2"
   }
 }

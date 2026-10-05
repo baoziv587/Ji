@@ -14,6 +14,7 @@ Use this plugin for two tasks:
 ## Let the model ask a question
 
 Add `choices` to the agent. Use `terminal()` to show questions in the terminal.
+`terminal()` needs `@clack/core`, `@clack/prompts`, and `fast-wrap-ansi` installed in your app.
 
 ```ts
 import process from 'node:process'

@@ -229,6 +229,9 @@ importers:
       fast-string-truncated-width:
         specifier: ^3.0.3
         version: 3.0.3
+      fast-wrap-ansi:
+        specifier: ^0.2.2
+        version: 0.2.2
       marked:
         specifier: ^18.0.14
         version: 18.0.14
@@ -296,10 +299,6 @@ importers:
   packages/utils: {}
 
   plugins/choices:
-    dependencies:
-      fast-wrap-ansi:
-        specifier: ^0.2.2
-        version: 0.2.2
     devDependencies:
       '@clack/core':
         specifier: ^1.5.1
@@ -313,6 +312,9 @@ importers:
       '@mariozechner/pi-ai':
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.3)(zod@4.6.5)
+      fast-wrap-ansi:
+        specifier: ^0.2.2
+        version: 0.2.2
 
   plugins/files:
     dependencies:
