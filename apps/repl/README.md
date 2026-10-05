@@ -23,7 +23,8 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 
 - 打开时占满当前终端窗口（终端的 alternate screen，和 vim、htop 一样），顶栏和底栏固定，只有中间的对话滚动。
 - 鼠标滚轮或 PgUp/PgDn 滚动对话；往回翻的时候状态行会提示下面还有多少行，按 Enter 发消息会回到最底部。
-- 对话默认是简洁视图：思考只留一行（用了几秒、多少字），工具调用一次一行，出错时带上错误信息。Ctrl+O 切到详细视图，看完整的思考和每次调用的参数、结果，再按一次切回来；状态行开头的 `details · Ctrl+O hides` 表示正在看详细视图。两个视图的行对不上，所以切换后回到底部。思考进行中，状态行显示已经写了多少字和最后几个词；回答里的表格要等它写完才画，等的时候状态行显示 `table · 14 rows`；bash 这类边跑边输出的工具，状态行显示已经输出了多少行和最后一行。
+- 对话默认是简洁视图：思考只留一行（用了几秒、多少字），工具调用一次一行，出错时带上错误信息。Ctrl+O 切到详细视图，看完整的思考和每次调用的参数、结果，再按一次切回来；状态行开头的 `details · Ctrl+O hides` 表示正在看详细视图。两个视图的行对不上，所以切换后回到底部。思考进行中，状态行显示已经写了多少字和最后几个词。
+- 对话在等什么，就显示在对话的末尾，原地更新，等完就收起：回答里的表格要等它写完才画，等的时候那里是一行 `◐ table · 14 rows`；工具跑了半秒以上、或者有了输出，就显示一行 `◐  bash(command: "pnpm test")  12s · 340 lines`，最近有输出的那个调用下面带着最后 5 行输出。成功后这几行收成一行 `✓`；失败时简洁视图在 `✗` 下面留着最后 5 行，原因多半在那里。确认问题打开时这几行先让开，答完再回到问题下面。
 - 状态行上面那条线的右端是整个会话的用量，每次模型调用结束时更新：发给模型的 token（含命中缓存的部分）、输出 token、缓存命中率、平均输出速度（不算等第一个 token 的时间）、花费。插件的模型调用、出错和被停掉的回答已经花掉的都算在内。宽度不够时依次隐藏花费、速度、命中率。
 - 鼠标被 REPL 用来滚动，所以在窗口里用鼠标选字要按住修饰键（iTerm2 是 Option，VS Code 要开 `terminal.integrated.macOptionClickForcesSelection`）。退出时整段对话（当前视图）会打印回普通终端，在那里可以照常选择、复制、往回翻。
 
@@ -62,6 +63,7 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 | [`cells.ts`](src/ui/screen/cells.ts)            | 把虚拟终端的一行连同颜色、粗体等还原成 ANSI 文本                                                                                         |
 | [`bars.ts`](src/ui/screen/bars.ts)              | 上下两条栏的内容：顶栏、用量线、状态行、输入行。纯函数                                                                                   |
 | [`status.ts`](src/ui/screen/status.ts)          | 底栏里转着的状态：在做什么、做了多久                                                                                                     |
+| [`live.ts`](src/ui/screen/live.ts)              | 对话末尾那几行活的内容：在等的表格、正在跑的工具。别的输出写在它们上面，问题打开时让开                                                   |
 | [`usage.ts`](src/ui/screen/usage.ts)            | 会话用量的累计                                                                                                                           |
 | [`editing.ts`](src/ui/screen/editing.ts)        | 输入行的编辑状态，纯函数 `edit(state, key)`，和绘制分开                                                                                  |
 | **`ui/reply/`**                                 | **一条回答**                                                                                                                             |
@@ -74,7 +76,7 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 | [`code.ts`](src/ui/markdown/code.ts)            | 代码块，逐行上色                                                                                                                         |
 | [`table.ts`](src/ui/markdown/table.ts)          | 表格：等它结束再按终端宽度画成网格，太宽时收窄列、在格子里折行                                                                           |
 | [`flow.ts`](src/ui/markdown/flow.ts)            | 按词折行，每行前面带上列表或引用的前缀                                                                                                   |
-| [`calls.ts`](src/ui/reply/calls.ts)             | 工具调用和结果在两个视图里的样子，每行按显示宽度截断；正在跑的工具输出了多少                                                             |
+| [`calls.ts`](src/ui/reply/calls.ts)             | 工具调用和结果在两个视图里的样子，每行按显示宽度截断；正在跑的工具那一行和它最后几行输出                                                 |
 | **`ui/questions/`**                             | **确认和提问**                                                                                                                           |
 | [`answering.ts`](src/ui/questions/answering.ts) | 把问题交给人：确认的标题、模式、快捷选项，切换模式时重画问题                                                                             |
 | [`diff.ts`](src/ui/questions/diff.ts)           | 确认里的 diff：按文件语言上色，改动的部分用更深的底色                                                                                    |

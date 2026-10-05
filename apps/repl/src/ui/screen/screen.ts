@@ -12,6 +12,8 @@
 // The content comes in two views, each its own headless terminal, and toggle() shows the other one. stdout writes
 // to both; `brief` and `full` write to one only, for what each view shows its own way. A question redraws in both
 // alike, so switching never needs the conversation written again.
+//
+// `live` keeps a few rows at the end of the content, in both views: every write goes in above them.
 
 import type { IBufferCell, Terminal } from '@xterm/headless'
 import { Buffer } from 'node:buffer'
@@ -19,6 +21,7 @@ import process from 'node:process'
 import { PassThrough, Writable } from 'node:stream'
 import xterm from '@xterm/headless'
 import { lineOf, textOf } from './cells.ts'
+import { Live } from './live.ts'
 
 /** What the bars show: their lines, each narrower than the terminal, and the cursor in the bottom one. */
 export interface Frame {
@@ -68,6 +71,11 @@ export class Screen {
   /** Writes to one view only. */
   readonly brief = this.only('brief')
   readonly full = this.only('full')
+  /** The rows at the end of the content that show what a reply is waiting on. */
+  readonly live = new Live(
+    text => this.raw(text),
+    () => ({ columns: process.stdout.columns, rows: process.stdout.rows }),
+  )
 
   private readonly frame: (columns: number) => Frame
   private running: Running | undefined
@@ -118,12 +126,7 @@ export class Screen {
     })
     out.write = ((chunk: string | Uint8Array, ...rest: unknown[]) => {
       const callback = rest.find(arg => typeof arg === 'function') as (() => void) | undefined
-      const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk)
-      terms.brief.write(text, () => this.changed())
-      terms.full.write(text, () => {
-        callback?.()
-        this.changed()
-      })
+      this.put(['brief', 'full'], typeof chunk === 'string' ? chunk : Buffer.from(chunk), callback)
       return true
     }) as typeof out.write
     out.on('resize', this.resize)
@@ -292,13 +295,45 @@ export class Screen {
   private only(view: View): Writable {
     const stream = new Writable({
       write: (chunk: Buffer, _encoding, done) => {
-        this.running?.terms[view].write(chunk, () => this.changed())
+        this.put([view], chunk)
         // At once, so the next write is not held back behind this one, out of order with stdout's
         done()
       },
     })
     Object.defineProperty(stream, 'columns', { get: () => process.stdout.columns })
     return stream
+  }
+
+  /**
+   * Writes `text` to `views`, above the live rows: they are taken away from both views first, and drawn again after
+   * it. `written` is called once the text is in the content.
+   */
+  private put(views: View[], text: string | Buffer, written?: () => void): void {
+    if (this.running === undefined) {
+      return
+    }
+
+    const { terms } = this.running
+    this.raw(this.live.erase())
+    for (const view of views) {
+      terms[view].write(text, () => this.changed())
+    }
+    this.raw(this.live.after(text.toString(), views))
+    // Each terminal parses its writes in order, so this comes after all of them
+    terms.full.write('', () => {
+      written?.()
+      this.changed()
+    })
+  }
+
+  /** Writes to both views as it is: the live rows' own drawing. */
+  private raw(text: string): void {
+    if (this.running === undefined || text === '') {
+      return
+    }
+    for (const term of Object.values(this.running.terms)) {
+      term.write(text, () => this.changed())
+    }
   }
 
   /** Takes the wheel out of stdin; the rest are keys. */
