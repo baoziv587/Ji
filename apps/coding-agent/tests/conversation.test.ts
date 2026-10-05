@@ -7,7 +7,7 @@ import { describe, expect, it, onTestFinished } from 'vitest'
 import { Conversation } from '../src/agent/conversation.ts'
 
 describe('conversation', () => {
-  it('should go back to before a stopped reply, and give back its message and its steer', async () => {
+  it('should go back to before a stopped reply under the same id, and give back its message and its steer', async () => {
     // Arrange
     const seen: number[] = []
     const conversation = new Conversation(createAgent({ model: faux(seen, [answer, answer]) }))
@@ -15,11 +15,13 @@ describe('conversation', () => {
 
     // Act
     const steer = conversation.send('second')
+    const id = conversation.id
     const unfinished = await conversation.follow(run!, stopAtFirstEvent(conversation))
     const next = conversation.send('third')
     await conversation.follow(next!, readAll)
 
     // Assert
+    expect(conversation.id).toBe(id)
     expect(steer).toBeUndefined()
     expect(unfinished).toMatchObject({ stopped: true, sent: ['first', 'second'] })
     // The next reply's model call sees only its own message

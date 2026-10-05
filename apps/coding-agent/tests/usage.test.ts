@@ -46,6 +46,28 @@ describe('meter', () => {
   })
 })
 
+describe('summary', () => {
+  it('should say so when no model was called', () => {
+    // Act
+    const summary = new Meter().summary()
+
+    // Assert
+    expect(summary).toBe('No model calls')
+  })
+
+  it('should count every token for the exit, with the calls and the cost', () => {
+    // Arrange
+    const meter = new Meter()
+
+    // Act
+    meter.end(usage(1000, 200, 3000, 0.01))
+    meter.dropped(usage(500, 0, 500, 0.002))
+
+    // Assert
+    expect(meter.summary()).toBe('Tokens: 5,000 in (70% cached) · 200 out · 2 model calls · $0.0120')
+  })
+})
+
 describe('count', () => {
   it('should shorten thousands and millions, with one decimal below 100', () => {
     // Act

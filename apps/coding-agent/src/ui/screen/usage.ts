@@ -1,4 +1,5 @@
-// What the session has spent so far, for the line above the status: tokens in and out, cache hits, speed and cost
+// What the session has spent so far: tokens in and out, cache hits, speed and cost. In short on the line above the
+// status, in full on exit.
 
 import type { Usage, UsageTotals } from '@ji.dev/llm'
 import { count } from '../paint/text.ts'
@@ -71,16 +72,53 @@ export class Meter {
       return []
     }
 
-    // pi-ai's input excludes cache hits, so what the model was sent is all three
-    const { input, output, cacheRead, cacheWrite, cost } = this.totals
-    const sent = input + cacheRead + cacheWrite
-    const hits = sent === 0 ? 0 : Math.round((cacheRead / sent) * 100)
+    const { output, cost } = this.totals
+    const parts = [`in ${count(this.sent())} · out ${count(output)}`, `cache ${this.hits()}%`]
 
-    const parts = [`in ${count(sent)} · out ${count(output)}`, `cache ${hits}%`]
     if (this.timed.ms > 0) {
-      parts.push(`${Math.round((this.timed.tokens / this.timed.ms) * 1000)} tok/s`)
+      parts.push(`${this.speed()} tok/s`)
     }
+
     parts.push(`$${cost.toFixed(4)}`)
     return parts
   }
+
+  /** The whole session for the exit, every token counted: `48,213 in (86% cached) · 3,104 out · 12 model calls · …`. */
+  summary(): string {
+    if (this.calls === 0) {
+      return 'No model calls'
+    }
+
+    const { output, cost } = this.totals
+    const calls = this.calls === 1 ? '1 model call' : `${this.calls} model calls`
+    const parts = [`${exact(this.sent())} in (${this.hits()}% cached)`, `${exact(output)} out`, calls]
+
+    if (this.timed.ms > 0) {
+      parts.push(`${this.speed()} tok/s`)
+    }
+
+    parts.push(`$${cost.toFixed(4)}`)
+    return `Tokens: ${parts.join(' · ')}`
+  }
+
+  /** pi-ai's input excludes cache hits, so what the model was sent is all three. */
+  private sent(): number {
+    const { input, cacheRead, cacheWrite } = this.totals
+    return input + cacheRead + cacheWrite
+  }
+
+  /** The share of what was sent that came from the cache, in percent. */
+  private hits(): number {
+    const sent = this.sent()
+    return sent === 0 ? 0 : Math.round((this.totals.cacheRead / sent) * 100)
+  }
+
+  private speed(): number {
+    return Math.round((this.timed.tokens / this.timed.ms) * 1000)
+  }
+}
+
+/** Every digit, grouped by thousands: `48,213`. */
+function exact(n: number): string {
+  return n.toLocaleString('en-US')
 }
