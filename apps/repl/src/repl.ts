@@ -26,7 +26,8 @@
 //
 //   agent/    the model, its plugins, and the conversation: sending, steering, going back after a reply that stopped
 //   plugins/  the REPL's own: two small tools, and what waits for a yes
-//   ui/       the terminal: the screen and its bars, a reply, the questions, and the painting they all share
+//   ui/       the terminal: the screen and its bars, a reply and its Markdown, the questions, and the painting they
+//             all share
 //
 // agent/ and plugins/ know nothing of the terminal.
 

@@ -66,7 +66,14 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 | [`editing.ts`](src/ui/screen/editing.ts)        | 输入行的编辑状态，纯函数 `edit(state, key)`，和绘制分开                                                                                  |
 | **`ui/reply/`**                                 | **一条回答**                                                                                                                             |
 | [`render.ts`](src/ui/reply/render.ts)           | 把 run 的事件画成两个视图里的行，和状态栏里的状态                                                                                        |
-| [`gutter.ts`](src/ui/reply/gutter.ts)           | 把流式回复写在 clack 的竖线右边，自己折行；回答里的代码块逐行上色                                                                        |
+| [`gutter.ts`](src/ui/reply/gutter.ts)           | 把流式回复写在 clack 的竖线右边：回答交给 `Markdown`，思考过程原样暗色显示                                                               |
+| **`ui/markdown/`**                              | **回答里的 Markdown，边流边画**                                                                                                          |
+| [`markdown.ts`](src/ui/markdown/markdown.ts)    | 入口：只判断一行归谁处理（文字行、代码块、表格），每种元素自己处理自己的行                                                               |
+| [`line.ts`](src/ui/markdown/line.ts)            | 标题、列表（嵌套、任务）、引用、分隔线：行首一看清是什么就定下前缀，其余逐词输出                                                         |
+| [`inline.ts`](src/ui/markdown/inline.ts)        | 粗体、斜体、删除线、行内代码、链接：标记闭合后才带样式输出，没闭合的原样输出                                                             |
+| [`code.ts`](src/ui/markdown/code.ts)            | 代码块，逐行上色                                                                                                                         |
+| [`table.ts`](src/ui/markdown/table.ts)          | 表格：等它结束再按终端宽度画成网格，太宽时收窄列、在格子里折行                                                                           |
+| [`flow.ts`](src/ui/markdown/flow.ts)            | 按词折行，每行前面带上列表或引用的前缀                                                                                                   |
 | [`calls.ts`](src/ui/reply/calls.ts)             | 工具调用和结果在两个视图里的样子，每行按显示宽度截断                                                                                     |
 | **`ui/questions/`**                             | **确认和提问**                                                                                                                           |
 | [`answering.ts`](src/ui/questions/answering.ts) | 把问题交给人：确认的标题、模式、快捷选项，切换模式时重画问题                                                                             |

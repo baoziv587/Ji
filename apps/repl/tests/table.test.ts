@@ -1,7 +1,7 @@
 // A Markdown table as a grid: columns as wide as their text, aligned as the delimiter says, narrowed until it fits
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { drawTable } from '../src/ui/paint/table.ts'
+import { drawTable } from '../src/ui/markdown/table.ts'
 import { widthOf } from '../src/ui/paint/text.ts'
 
 describe('drawTable', () => {
