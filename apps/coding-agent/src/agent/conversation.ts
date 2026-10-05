@@ -30,6 +30,11 @@ export class Conversation {
     this.session = createSession(agent)
   }
 
+  /** Stays the same when a reply that did not finish takes the conversation back. */
+  get id(): string {
+    return this.session.id
+  }
+
   get agent(): Agent {
     return this.current
   }
@@ -80,7 +85,7 @@ export class Conversation {
       await read(run)
       return undefined
     } catch (error) {
-      this.session = createSession(this.current, { state: this.before })
+      this.session = createSession(this.current, { id: this.session.id, state: this.before })
       const stopped = error instanceof RunError && error.kind === 'aborted' && error.cause === STOPPED
       return { stopped, error, sent: this.sent }
     } finally {

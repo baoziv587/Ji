@@ -1,4 +1,5 @@
 // session.use: switching agents keeps the conversation, and a run in progress switches at the next step boundary.
+// session.id: new for each session unless a resumed one keeps its own.
 import type { Context, SimpleStreamOptions } from '@mariozechner/pi-ai'
 import type { Api, AssistantMessage, Model, RunEvent } from '../src/index.ts'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
@@ -67,6 +68,21 @@ describe('session.use', () => {
     const starts = (await events).flatMap(e => (e.type === 'model_start' ? [e.thinking] : []))
     expect(starts).toEqual(['off', 'high'])
     expect(sent).toEqual([undefined, 'high'])
+  })
+})
+
+describe('session.id', () => {
+  it('should be new for each session, and kept when given', () => {
+    // Arrange
+    const agent = createAgent({ model: thinker([], []) })
+
+    // Act
+    const [a, b] = [createSession(agent), createSession(agent)]
+    const resumed = createSession(agent, { id: a.id, state: a.state })
+
+    // Assert
+    expect(a.id).not.toBe(b.id)
+    expect(resumed.id).toBe(a.id)
   })
 })
 

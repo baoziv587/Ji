@@ -5,7 +5,8 @@
 //   conversation is printed to the terminal, where it stays
 //   Enter sends; replies stream in, with one line per tool call as it finishes. Thinking shows as one line with its
 //   length; Ctrl+O shows it in full, and every call's arguments and result, and back
-//   The line above the status adds up the session: tokens in and out, cache hits, speed, cost
+//   The line above the status adds up the session: tokens in and out, cache hits, speed, cost. On exit the session's
+//   id and its usage in full are printed below the conversation
 //   Enter during a reply steers it: the message reaches the model after the step in progress, and shows above then
 //   Ctrl+C during a reply stops only that reply; Ctrl+C on an empty line or /exit quits
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
@@ -298,4 +299,5 @@ await replying
 
 await screen.settled()
 screen.stop()
+log.message(`Session: ${conversation.id}\n${meter.summary()}`)
 outro('Bye')

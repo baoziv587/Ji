@@ -7,6 +7,8 @@ import { user } from './message.ts'
 import { AgentRun } from './run.ts'
 
 export interface Session {
+  /** Names the session in each Run's info, so records from its runs can be found together. */
+  readonly id: string
   /**
    * Returns the Run that will handle the message; a string becomes a user message.
    * While a Run is in progress the message joins it and that Run is returned; otherwise a new Run starts.
@@ -23,6 +25,8 @@ export interface Session {
 }
 
 export interface SessionOptions {
+  /** Keep the id of the session being resumed. Default: a new random UUID. */
+  id?: string
   /** Resume from a saved state or message list. */
   state?: AgentState | Message[]
   /** Step limit per Run; inserting messages and finishing each take a step. Default 64. */
@@ -34,7 +38,7 @@ export function createSession(agent: Agent, options: SessionOptions = {}): Sessi
 }
 
 class AgentSession implements Session, RunHost {
-  readonly id = randomUUID()
+  readonly id: string
   readonly maxSteps: number
   state: AgentState
 
@@ -42,7 +46,8 @@ class AgentSession implements Session, RunHost {
   private queue: PendingMessage[] = []
   private using: Agent
 
-  constructor(agent: Agent, { state = [], maxSteps = 64 }: SessionOptions) {
+  constructor(agent: Agent, { id = randomUUID(), state = [], maxSteps = 64 }: SessionOptions) {
+    this.id = id
     this.using = agent
     this.maxSteps = maxSteps
     this.state = toState(state)
