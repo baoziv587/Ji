@@ -57,7 +57,7 @@ export function createFileLog(dir: string): () => Log {
     })
 
     return {
-      write: text => {
+      write(text) {
         file.write(text)
       },
       async close(keep) {

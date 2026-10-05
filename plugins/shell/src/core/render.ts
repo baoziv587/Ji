@@ -1,7 +1,7 @@
 // What the model reads (RFC §6): the output, then one line that says how it ended. The omission marker and that line
 // are never cut. Machine-readable fields go in details, which the model never sees.
 
-import type { Outcome } from './fold.ts'
+import type { Outcome, Timeout } from './fold.ts'
 import type { Found } from './ripgrep.ts'
 import type { Clip } from './window.ts'
 import { omittedLines } from './window.ts'
@@ -53,7 +53,7 @@ export function failure(text: string, code: string): Rendered {
 }
 
 /** The clock that stopped a command, as the status line says it. */
-const STOPPED_BY: Record<'total' | 'idle', (seconds: number) => string> = {
+const STOPPED_BY: Record<Timeout['clock'], (seconds: number) => string> = {
   total: seconds => `timed out after ${seconds}s`,
   idle: seconds => `no output for ${seconds}s`,
 }
