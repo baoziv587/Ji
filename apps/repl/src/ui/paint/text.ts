@@ -32,11 +32,16 @@ export function fit(text: string, width: number): string {
   return `${text.slice(0, index)}\x1B[0m…`
 }
 
-/** As much of the end of `text` as fits in `width` columns. */
+/**
+ * As much of the end of `text` as fits in `width` columns. It steps back a grapheme at a time from the end, so a long
+ * text costs no more than a short one: the input line calls it on every draw.
+ */
 export function tail(text: string, width: number): string {
+  const graphemes = GRAPHEMES.segment(text)
   let start = text.length
   let used = 0
-  for (const { segment, index } of [...GRAPHEMES.segment(text)].reverse()) {
+  while (start > 0) {
+    const { segment, index } = graphemes.containing(start - 1)!
     used += widthOf(segment)
     if (used > width) {
       break

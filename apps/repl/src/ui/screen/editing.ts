@@ -80,6 +80,7 @@ function firstGrapheme(text: string): string {
   return graphemes.segment(text)[Symbol.iterator]().next().value?.segment ?? ''
 }
 
+/** Looked up from the end, so a long text costs no more than a short one. */
 function lastGrapheme(text: string): string {
-  return [...graphemes.segment(text)].at(-1)?.segment ?? ''
+  return text === '' ? '' : graphemes.segment(text).containing(text.length - 1)!.segment
 }
