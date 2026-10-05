@@ -1,6 +1,7 @@
 // What the session has spent so far, for the line above the status: tokens in and out, cache hits, speed and cost
 
 import type { Usage, UsageTotals } from '@ji.dev/llm'
+import { count } from '../paint/text.ts'
 
 /**
  * Adds up every model call of the session as it ends: plugin calls, failed ones and those of a stopped reply too,
@@ -82,20 +83,4 @@ export class Meter {
     parts.push(`$${cost.toFixed(4)}`)
     return parts
   }
-}
-
-/** 950, 1.2k, 48.2k, 312k, 1.5M */
-export function count(n: number): string {
-  if (n < 1000) {
-    return String(Math.round(n))
-  }
-  if (n < 1_000_000) {
-    return `${short(n / 1000)}k`
-  }
-  return `${short(n / 1_000_000)}M`
-}
-
-/** One decimal below 100, none from there: 1.2, 48.2, 312. */
-function short(n: number): string {
-  return n < 100 ? n.toFixed(1).replace(/\.0$/, '') : n.toFixed(0)
 }

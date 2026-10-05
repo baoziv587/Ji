@@ -1,14 +1,12 @@
 // What waits for a yes, and what a yes can allow from then on
 import type { ToolCall } from '@ji.dev/llm'
-import type { Questions } from '@ji.dev/plugin-choices'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { APPROVE } from '@ji.dev/plugin-choices'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
 import { createMemoryExecutor, createShellPlugin } from '@ji.dev/plugin-shell'
 import { describe, expect, it } from 'vitest'
-import { Permissions } from '../src/permissions.ts'
+import { Permissions } from '../src/plugins/permissions.ts'
 
 describe('permissions', () => {
   it('should ask about every command until a yes allows them all, and ask again once back in ask mode', async () => {
@@ -27,7 +25,7 @@ describe('permissions', () => {
     const backInAsk = await asked(permissions, command)
 
     // Assert
-    expect(optionsOf(approval.show(question(command)))).toEqual(['yes', 'commands', 'no'])
+    expect(approval.shortcuts().map(o => o.value)).toEqual(['commands'])
     expect(reply).toEqual([['yes']])
     expect([before, allowed, inAuto, backInAsk]).toEqual([true, false, false, true])
     expect(permissions.describeAllowed()).toBe('')
@@ -43,10 +41,9 @@ describe('permissions', () => {
     approval.take([['folder']])
 
     // Assert
-    expect(approval.show(question(read)).questions[0].options.map(o => o.label)).toEqual([
-      'Yes',
+    expect(approval.outside).toBe(true)
+    expect(approval.shortcuts().map(o => o.label)).toEqual([
       expect.stringMatching(/^Yes, and allow reads in .+\/ from now on$/),
-      'No',
     ])
     expect(await asked(permissions, call('read', { path: join(outside, 'b.txt') }))).toBe(false)
     expect(await asked(permissions, call('read', { path: join(outside, '..', 'other.txt') }))).toBe(true)
@@ -97,12 +94,4 @@ async function previewOf(permissions: Permissions, toolCall: ToolCall): Promise<
 
 async function asked(permissions: Permissions, toolCall: ToolCall): Promise<boolean> {
   return (await previewOf(permissions, toolCall)) !== undefined
-}
-
-function question(toolCall: ToolCall): Questions {
-  return { questions: [{ title: 'Run it', options: APPROVE }], call: toolCall }
-}
-
-function optionsOf(q: Questions): string[] {
-  return q.questions[0].options.map(o => o.value)
 }

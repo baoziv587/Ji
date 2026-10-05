@@ -3,8 +3,8 @@ import process from 'node:process'
 import { Writable } from 'node:stream'
 import { stripVTControlCharacters } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { Gutter } from '../src/gutter.ts'
-import { widthOf } from '../src/text.ts'
+import { widthOf } from '../src/ui/paint/text.ts'
+import { Gutter } from '../src/ui/reply/gutter.ts'
 
 const COLUMNS = 40
 

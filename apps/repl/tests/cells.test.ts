@@ -3,7 +3,7 @@ import type { Terminal } from '@xterm/headless'
 import { stripVTControlCharacters } from 'node:util'
 import xterm from '@xterm/headless'
 import { describe, expect, it } from 'vitest'
-import { lineOf, textOf } from '../src/cells.ts'
+import { lineOf, textOf } from '../src/ui/screen/cells.ts'
 
 async function written(text: string, cols = 10): Promise<Terminal> {
   const term = new xterm.Terminal({ cols, rows: 4, convertEol: true, allowProposedApi: true })

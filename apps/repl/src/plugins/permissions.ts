@@ -7,22 +7,22 @@
 //              command, or allow reads in the folder of a file outside. Switching back to ask takes the last two back
 
 import type { ToolCall } from '@ji.dev/llm'
-import type { Option, Preview, Questions, Reply } from '@ji.dev/plugin-choices'
+import type { Option, Preview, Reply } from '@ji.dev/plugin-choices'
 import type { FilesPlugin } from '@ji.dev/plugin-files'
 import type { ShellPlugin } from '@ji.dev/plugin-shell'
 import { homedir } from 'node:os'
 import { dirname, sep } from 'node:path'
-import { styleText } from 'node:util'
 import { DISMISSED } from '@ji.dev/plugin-choices'
 import { localWorkspace } from '@ji.dev/plugin-files'
-import { dim, hint } from './text.ts'
 
 export type Mode = 'ask' | 'auto'
 
-/** A question about a call as the person sees it, and what their reply does. */
+/** A call about to be asked about, and what a reply to it does. */
 export interface Approval {
-  /** Built again after every switch of the mode, since its title and its shortcuts depend on the mode. */
-  show: (questions: Questions) => Questions
+  /** It reaches outside the workspace: the riskiest kind of call, asked about in either mode, with No first. */
+  outside: boolean
+  /** The yes that also change what is asked from now on. Read again after every switch of the mode, which changes them. */
+  shortcuts: () => Option[]
   /** A shortcut is a yes: what it changes is done here, and the call takes it as a plain yes. */
   take: (reply: Reply) => Reply
 }
@@ -113,13 +113,8 @@ export class Permissions {
     const folder = real === undefined ? undefined : dirname(real)
 
     return {
-      show: q => {
-        const [only] = q.questions
-        const [yes, no] = only.options
-        const title = `${only.title}? ${dim(`· ${this.describeMode()} ·`)} ${hint('Shift+Tab', 'switches')}`
-        const options = [yes, ...this.shortcutsFor(call, far, folder), no]
-        return { ...q, questions: [{ ...only, title, options }] }
-      },
+      outside: far,
+      shortcuts: () => this.shortcutsFor(call, far, folder),
       take: reply => this.take(reply, folder),
     }
   }
@@ -143,8 +138,8 @@ export class Permissions {
     if (!far || proposal === undefined || 'role' in proposal) {
       return proposal
     }
-    // The riskiest kind of call, so it is the one question that stands out, and a yes has to be chosen
-    return { ...proposal, title: `${proposal.title} ${styleText('yellow', '(outside the workspace)')}`, initial: 'no' }
+    // The riskiest kind of call, so a yes has to be chosen
+    return { ...proposal, initial: 'no' }
   }
 
   /** Every command waits for a yes, until one says not to ask again. A command that is not a string is refused still. */

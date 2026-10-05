@@ -1,7 +1,7 @@
 // Code in color: which language a fence or a path names, and how a line is painted
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { highlight, languageOf, loadLanguage } from '../src/highlight.ts'
+import { highlight, languageOf, loadLanguage } from '../src/ui/paint/highlight.ts'
 
 describe('languageOf', () => {
   it('should know a fence by its first word, and a path by its name or else its extension', () => {

@@ -43,25 +43,37 @@ ji · deepseek/deepseek-v4-flash · thinking high · ~/project     ← 顶栏：
 - 启动目录之外的文件也能读写，但无论哪种模式都要先确认，问题标题末尾会用黄色标出 `(outside the workspace)`，光标默认停在 No。自动同意只覆盖启动目录。
 - 确认一次也可以不再问：bash 的确认里有“Yes, and allow every command from now on”，读启动目录外的文件时有“Yes, and allow reads in ~/某目录/ from now on”（这个目录和它的子目录）。放行了什么会用黄色写在状态行；Shift+Tab 切回逐个确认时全部收回。
 - 模型可以用 `ask_user` 工具自己提问、自己给选项：一个问题是单选或多选，几个问题就是 Tabs（←/→ 切换，最后一个 Tab 汇总提交），每个问题都能选 Other 自己输入。任何问题按 Esc 都只是关掉这一个（审批算 No），回复继续；Ctrl+C 停掉整个回复。问题打开时按键归问题，输入行变灰，打过的字留着。
-- 这些都来自一个插件：`choices({ answer, approve: permissions.approve })`。它带上 `ask_user` 工具，在 `toolCall` 层对 `approve` 里的 preview 提出的调用 `yield` 一个 `ask:choices` 事件，并在 `toolCalls` 层用 `answer` 回答所有问题（RFC-0007 §5）；`@ji.dev/plugin-choices/terminal` 的 `terminal()` 就是一个在终端里画问题的 `answer`。模式决定的是“问不问”（[`Permissions`](src/permissions.ts) 的 preview 在自动模式下对启动目录内的文件调用返回 `undefined`），不是“怎么答”。换成 `approve: [named('bash')]` 或 `[everyCall]`，就能审批任何工具。
+- 这些都来自一个插件：`choices({ answer: answering.answer, approve: permissions.approve })`。它带上 `ask_user` 工具，在 `toolCall` 层对 `approve` 里的 preview 提出的调用 `yield` 一个 `ask:choices` 事件，并在 `toolCalls` 层用 `answer` 回答所有问题（RFC-0007 §5）；`@ji.dev/plugin-choices/terminal` 的 `terminal()` 就是一个在终端里画问题的 `answer`。模式决定的是“问不问”（[`Permissions`](src/plugins/permissions.ts) 的 preview 在自动模式下对启动目录内的文件调用返回 `undefined`），不是“怎么答”。换成 `approve: [named('bash')]` 或 `[everyCall]`，就能审批任何工具。
 
 ## 代码
 
-| 文件                                   | 做什么                                                                                                                                   |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| [`repl.ts`](src/repl.ts)               | 入口：agent、插件、提问流程、渲染循环、按键、两条栏的内容                                                                                |
-| [`permissions.ts`](src/permissions.ts) | 哪些调用要等确认：ask/auto 模式、确认里的快捷选项、一次批准后放行的命令和目录                                                            |
-| [`gutter.ts`](src/gutter.ts)           | 把流式回复写在 clack 的竖线右边；回答里的代码块逐行上色                                                                                  |
-| [`calls.ts`](src/calls.ts)             | 工具调用和结果在两个视图里的样子，每行按显示宽度截断                                                                                     |
-| [`diff.ts`](src/diff.ts)               | 确认里的 diff：按文件语言上色，改动的部分用更深的底色                                                                                    |
-| [`highlight.ts`](src/highlight.ts)     | 用 [shiki](https://shiki.style) 给代码上色，逐行带着语法状态，可以给一行的一部分加底色                                                   |
-| [`status.ts`](src/status.ts)           | 底栏里转着的状态：在做什么、做了多久                                                                                                     |
-| [`text.ts`](src/text.ts)               | 按显示宽度截断、取尾，和按键提示的写法                                                                                                   |
-| [`tools.ts`](src/tools.ts)             | REPL 自带的两个小工具 calc 和 now                                                                                                        |
-| [`screen.ts`](src/screen.ts)           | 终端的三块布局。程序写到 stdout 的内容进一个 [`@xterm/headless`](https://github.com/xtermjs/xterm.js) 虚拟终端，再按滚动位置画出其中一屏 |
-| [`cells.ts`](src/cells.ts)             | 把虚拟终端的一行连同颜色、粗体等还原成 ANSI 文本                                                                                         |
-| [`usage.ts`](src/usage.ts)             | 会话用量的累计和显示                                                                                                                     |
-| [`editing.ts`](src/editing.ts)         | 输入行的编辑状态，纯函数 `edit(state, key)`，和绘制分开                                                                                  |
+`src/` 下只有入口 [`repl.ts`](src/repl.ts)：把下面三块组装起来，放着按键表，负责启动和退出。其余代码按层分目录，层里再按领域分；`agent/` 和 `plugins/` 不知道终端的存在。
+
+| 文件                                            | 做什么                                                                                                                                   |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **`agent/`**                                    | **模型和会话**                                                                                                                           |
+| [`agent.ts`](src/agent/agent.ts)                | 创建 agent：模型、思考档位、system prompt、装哪些插件                                                                                    |
+| [`conversation.ts`](src/agent/conversation.ts)  | 会话：发送、插话；回答没完成时回到发送前，交回发过的消息                                                                                 |
+| **`plugins/`**                                  | **REPL 自己的**                                                                                                                          |
+| [`tools.ts`](src/plugins/tools.ts)              | 两个小工具 calc 和 now                                                                                                                   |
+| [`permissions.ts`](src/plugins/permissions.ts)  | 哪些调用要等确认：ask/auto 模式、确认里的快捷选项、一次批准后放行的命令和目录。只管策略，不管怎么显示                                    |
+| **`ui/screen/`**                                | **整个画面**                                                                                                                             |
+| [`screen.ts`](src/ui/screen/screen.ts)          | 终端的三块布局。程序写到 stdout 的内容进一个 [`@xterm/headless`](https://github.com/xtermjs/xterm.js) 虚拟终端，再按滚动位置画出其中一屏 |
+| [`cells.ts`](src/ui/screen/cells.ts)            | 把虚拟终端的一行连同颜色、粗体等还原成 ANSI 文本                                                                                         |
+| [`bars.ts`](src/ui/screen/bars.ts)              | 上下两条栏的内容：顶栏、用量线、状态行、输入行。纯函数                                                                                   |
+| [`status.ts`](src/ui/screen/status.ts)          | 底栏里转着的状态：在做什么、做了多久                                                                                                     |
+| [`usage.ts`](src/ui/screen/usage.ts)            | 会话用量的累计                                                                                                                           |
+| [`editing.ts`](src/ui/screen/editing.ts)        | 输入行的编辑状态，纯函数 `edit(state, key)`，和绘制分开                                                                                  |
+| **`ui/reply/`**                                 | **一条回答**                                                                                                                             |
+| [`render.ts`](src/ui/reply/render.ts)           | 把 run 的事件画成两个视图里的行，和状态栏里的状态                                                                                        |
+| [`gutter.ts`](src/ui/reply/gutter.ts)           | 把流式回复写在 clack 的竖线右边，自己折行；回答里的代码块逐行上色                                                                        |
+| [`calls.ts`](src/ui/reply/calls.ts)             | 工具调用和结果在两个视图里的样子，每行按显示宽度截断                                                                                     |
+| **`ui/questions/`**                             | **确认和提问**                                                                                                                           |
+| [`answering.ts`](src/ui/questions/answering.ts) | 把问题交给人：确认的标题、模式、快捷选项，切换模式时重画问题                                                                             |
+| [`diff.ts`](src/ui/questions/diff.ts)           | 确认里的 diff：按文件语言上色，改动的部分用更深的底色                                                                                    |
+| **`ui/paint/`**                                 | **大家共用的画法**                                                                                                                       |
+| [`text.ts`](src/ui/paint/text.ts)               | 按显示宽度截断、取尾、折行，按键提示和数字的写法                                                                                         |
+| [`highlight.ts`](src/ui/paint/highlight.ts)     | 用 [shiki](https://shiki.style) 给代码上色，逐行带着语法状态，可以给一行的一部分加底色                                                   |
 
 简洁和详细两个视图各是一个虚拟终端：stdout 同时写进两边，`screen.brief` 和 `screen.full` 只写进其中一边（clack `log` 的 `output` 选项），确认问题在两边一样地重画，所以切换视图不需要重放对话。
 

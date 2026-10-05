@@ -1,4 +1,5 @@
-// Text for the terminal: measured in the columns it shows in, so a line cut to fit never wraps, colors and all.
+// Text for the terminal: measured in the columns it shows in, so a line cut to fit never wraps, colors and all; and
+// the small pieces every part of it writes the same way: dim text, key hints, counts.
 
 import process from 'node:process'
 import { styleText } from 'node:util'
@@ -91,6 +92,17 @@ export function room(): number {
   return Math.max(20, (process.stdout.columns || 80) - 4)
 }
 
+/** A count in a few characters: 950, 1.2k, 48.2k, 312k, 1.5M */
+export function count(n: number): string {
+  if (n < 1000) {
+    return String(Math.round(n))
+  }
+  if (n < 1_000_000) {
+    return `${short(n / 1000)}k`
+  }
+  return `${short(n / 1_000_000)}M`
+}
+
 export function dim(s: string): string {
   return styleText('dim', s)
 }
@@ -112,4 +124,9 @@ export function hint(key: string, action: string, color?: 'cyan' | 'yellow'): st
 
 export function hints(list: Hint[]): string {
   return list.map(([key, action]) => hint(key, action)).join(dim(' · '))
+}
+
+/** One decimal below 100, none from there: 1.2, 48.2, 312. */
+function short(n: number): string {
+  return n < 100 ? n.toFixed(1).replace(/\.0$/, '') : n.toFixed(0)
 }

@@ -18,5 +18,8 @@
     "@xterm/headless": "^6.0.0",
     "fast-string-truncated-width": "^3.0.3",
     "shiki": "^4.5.0"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-ai": "^0.73.1"
   }
 }

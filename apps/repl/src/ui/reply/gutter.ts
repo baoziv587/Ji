@@ -1,12 +1,11 @@
 // A reply's streamed text, written to the right of clack's rail, lined up with the prompts above and below.
 
 import type { Writable } from 'node:stream'
-import type { PaintLine } from './highlight.ts'
+import type { PaintLine } from '../paint/highlight.ts'
 import process from 'node:process'
 import { styleText } from 'node:util'
-import { languageOf, loadLanguage } from './highlight.ts'
-import { bar, dim, room, tail, widthOf, wrapRows } from './text.ts'
-import { count } from './usage.ts'
+import { languageOf, loadLanguage } from '../paint/highlight.ts'
+import { bar, count, dim, room, tail, widthOf, wrapRows } from '../paint/text.ts'
 
 export type BlockKind = 'thinking' | 'text'
 

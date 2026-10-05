@@ -4,8 +4,8 @@ import process from 'node:process'
 import { stripVTControlCharacters } from 'node:util'
 import { toolError } from '@ji.dev/llm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { describeArguments, describeDone, describeResult } from '../src/calls.ts'
-import { widthOf } from '../src/text.ts'
+import { widthOf } from '../src/ui/paint/text.ts'
+import { describeArguments, describeDone, describeResult } from '../src/ui/reply/calls.ts'
 
 const COLUMNS = 60
 
