@@ -1,4 +1,4 @@
-// The bars: the keys that matter now, the usage as far as it fits, and an input line that keeps the cursor in view
+// The bars: a title that gives up the workspace first, the keys that matter now, the usage as far as it fits, and an input line that keeps the cursor in view
 import type { Bars } from '../src/ui/screen/bars.ts'
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it } from 'vitest'
@@ -9,6 +9,23 @@ import { EMPTY } from '../src/ui/screen/editing.ts'
 const COLUMNS = 80
 
 describe('frameOf', () => {
+  it('should give up the workspace before the model, its first folders first', () => {
+    // Arrange
+    const root = '~/projects/pi-rsi/apps/coding-agent'
+
+    // Act
+    const wide = titleOf(COLUMNS, { root })
+    const narrower = titleOf(60, { root })
+    const narrow = titleOf(42, { root })
+    const narrowest = titleOf(35, { root })
+
+    // Assert
+    expect(wide).toBe(`ji · deepseek/deepseek-v4-flash · high · ${root}`)
+    expect(narrower).toBe('ji · deepseek/deepseek-v4-flash · high · …/coding-agent')
+    expect(narrow).toBe('ji · deepseek/deepseek-v4-flash · high')
+    expect(narrowest).toBe('ji · deepseek-v4-flash · high')
+  })
+
   it('should list only the keys that matter now', () => {
     // Act
     const idle = statusOf({})
@@ -78,6 +95,10 @@ function bars(changes: Partial<Bars>): Bars {
     allowed: '',
     ...changes,
   }
+}
+
+function titleOf(columns: number, changes: Partial<Bars>): string {
+  return stripVTControlCharacters(frameOf(columns, bars(changes)).top[1]).trim()
 }
 
 function statusOf(changes: Partial<Bars>): string {
