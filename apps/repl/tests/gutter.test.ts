@@ -77,6 +77,35 @@ describe('gutter', () => {
     expect(body.map(row => row.slice(RAIL.length)).join('')).toBe(code)
   })
 
+  it('should draw a table once it ends, however it streams in, between the lines around it', async () => {
+    // Arrange
+    const reply = 'Before\n| a | b |\n|---|--:|\n| x | 12 |\nAfter'
+
+    // Act: a character at a time
+    const rows = await written([...reply])
+
+    // Assert
+    expect(rows).toEqual([
+      `${RAIL}Before`,
+      `${RAIL}┌───┬────┐`,
+      `${RAIL}│ a │  b │`,
+      `${RAIL}├───┼────┤`,
+      `${RAIL}│ x │ 12 │`,
+      `${RAIL}└───┴────┘`,
+      `${RAIL}After`,
+    ])
+  })
+
+  it('should draw a table that ends the reply, and leave a line with pipes and no delimiter as it is', async () => {
+    // Act
+    const table = await written(['| a |\n|---|\n| x |'])
+    const pipes = await written(['| not a table |\nmore'])
+
+    // Assert
+    expect(table).toEqual([`${RAIL}┌───┐`, `${RAIL}│ a │`, `${RAIL}├───┤`, `${RAIL}│ x │`, `${RAIL}└───┘`])
+    expect(pipes).toEqual([`${RAIL}| not a table |`, `${RAIL}more`])
+  })
+
   it('should leave short lines as they are, with a bare rail for a blank one', async () => {
     // Act
     const rows = await written(['one\n', '\ntwo'])

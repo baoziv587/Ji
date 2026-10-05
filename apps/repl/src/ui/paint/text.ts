@@ -15,6 +15,8 @@ const SGR = /(\x1B\[[\d;]*m)/
 
 const GRAPHEMES = new Intl.Segmenter()
 
+const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' })
+
 export function widthOf(text: string): number {
   return truncatedWidth(text).width
 }
@@ -85,6 +87,20 @@ export function wrapRows(text: string, width: number, first = width): string[] {
 
   rows.push(row)
   return rows
+}
+
+/** The words of `text`, and the spaces between them; punctuation stays with the word before it, to end a row. */
+export function wordsOf(text: string): string[] {
+  const words: string[] = []
+  for (const { segment, isWordLike } of WORDS.segment(text)) {
+    const last = words.at(-1)
+    if (isWordLike !== true && segment.trim() !== '' && last !== undefined && last.trim() !== '') {
+      words[words.length - 1] = last + segment
+    } else {
+      words.push(segment)
+    }
+  }
+  return words
 }
 
 /** Collapses to one line, cut to `width` columns, so wrapping doesn't break the left rail. */
