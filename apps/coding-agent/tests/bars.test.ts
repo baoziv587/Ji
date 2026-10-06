@@ -51,17 +51,25 @@ describe('viewOf', () => {
     expect(status).toContain('auto · allows commands · 2 queued')
   })
 
-  it('should leave out the usage that does not fit, from the end', () => {
+  it('should show the usage under the input line, leaving out what does not fit from the end', () => {
     // Arrange
-    const usage = ['in 1.2k · out 300', 'cache 50%', `${'x'.repeat(60)} tok/s`]
+    const usage = ['ctx 4.2k/200k', 'in 1.2k · out 300', 'cache 50%', `${'x'.repeat(COLUMNS)} tok/s`]
 
     // Act
-    const rule = stripVTControlCharacters(drawn(COLUMNS, { usage }).rows.at(-4)!)
+    const rows = drawn(COLUMNS, { usage }).rows.map(row => stripVTControlCharacters(row))
 
     // Assert
-    expect(rule).toContain('in 1.2k · out 300 · cache 50% ─')
-    expect(rule).not.toContain('tok/s')
-    expect(displayWidth(rule)).toBe(COLUMNS)
+    expect(rows.at(-1)!.trimEnd()).toBe(' ctx 4.2k/200k · in 1.2k · out 300 · cache 50%')
+    expect(rows.at(-2)).toContain('Ask anything')
+    expect(rows.at(-4)).toBe('─'.repeat(COLUMNS))
+  })
+
+  it('should keep the row under the input line blank before any usage', () => {
+    // Act
+    const rows = drawn(COLUMNS, {}).rows
+
+    // Assert
+    expect(stripVTControlCharacters(rows.at(-1)!).trim()).toBe('')
   })
 
   it('should scroll a long input sideways, keeping the cursor in view', () => {
