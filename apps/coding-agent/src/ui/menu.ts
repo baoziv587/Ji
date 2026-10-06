@@ -1,9 +1,14 @@
-// The commands typed after a `/`, and the menu of them that opens as one is typed: the ones that start with what is
-// typed, one chosen. ↑↓ choose, Tab completes, Enter runs the chosen one, or completes one that takes something, and
-// Esc closes. Enter on a whole line runs the command it names.
+// The commands typed after a `/`, and the menu of them that opens as one is typed: the ones whose name or hint has
+// what is typed, one chosen. ↑↓ choose, Tab completes, Enter runs the chosen one, or completes one that takes
+// something, and Esc closes. Enter on a whole line runs the command it names.
+//
+// What is typed is looked for in the name first, then in the hint, case aside: the names that start with it come first,
+// then the names that have it, then the hints that do. Where it was found is underlined, in the name and the hint
+// alike, so a match by the hint shows why it is there.
 
 import type { Editing, KeyHint } from '@ji.dev/tui'
 import type { Menu } from './bars.ts'
+import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
 import { editingText, EMPTY_EDITING } from '@ji.dev/tui'
 
@@ -27,6 +32,11 @@ export interface MenuKey {
 /** A command is being typed: a `/` and no space yet. */
 const TYPING = /^\/\S*$/
 
+/** Where a command matched, best first: a name starting with what is typed, a name having it, a hint having it. */
+const NAME_START = 0
+const NAME = 1
+const HINT = 2
+
 export class CommandMenu {
   /** Read every time: a feature's commands can change while the coding agent runs. */
   private readonly commands: () => readonly Command[]
@@ -49,21 +59,29 @@ export class CommandMenu {
   groups(): Map<string, string[]> {
     const groups = new Map<string, string[]>()
     for (const { name, group } of this.commands()) {
-      if (group !== undefined) {
-        groups.set(group, [...(groups.get(group) ?? []), name])
+      if (group === undefined) {
+        continue
       }
+      const names = groups.get(group) ?? []
+      names.push(name)
+      groups.set(group, names)
     }
     return groups
   }
 
-  /** The menu as the bars show it; none while no command is typed, or none matches. */
+  /** The menu as the bars show it; none while no command is typed, or none matches. What is typed is underlined. */
   view(editing: Editing): Menu | undefined {
     const matching = this.matching(editing)
     if (matching === undefined) {
       return undefined
     }
 
-    return { items: matching.map(hintOf), selected: this.selected }
+    const query = this.typed.slice(1).toLowerCase()
+    const items = matching.map((command): KeyHint => {
+      const [key, action] = hintOf(command)
+      return [underlined(key, query), underlined(action, query)]
+    })
+    return { items, selected: this.selected }
   }
 
   /** A key while the menu is open; undefined for one that is not the menu's, or while it is closed. */
@@ -118,7 +136,7 @@ export class CommandMenu {
     return true
   }
 
-  /** The commands that start with what is typed, while a command is being typed. */
+  /** The commands with what is typed in their name or hint, best matches first, while a command is being typed. */
   private matching(editing: Editing): Command[] | undefined {
     const typed = editingText(editing)
     if (typed !== this.typed) {
@@ -129,9 +147,48 @@ export class CommandMenu {
       return undefined
     }
 
-    const matching = this.commands().filter(command => command.name.startsWith(typed))
+    // One list per rank, each in the commands' own order; the ranks one after the other
+    const query = typed.slice(1).toLowerCase()
+    const byRank: Command[][] = [[], [], []]
+    for (const command of this.commands()) {
+      const rank = rankOf(command, query)
+      if (rank !== undefined) {
+        byRank[rank].push(command)
+      }
+    }
+
+    const matching = byRank.flat()
     return matching.length === 0 ? undefined : matching
   }
+}
+
+/** How well a command matches `query`, lowercased; undefined for one that does not. An empty query matches every name. */
+function rankOf({ name, hint }: Command, query: string): number | undefined {
+  const lowered = name.slice(1).toLowerCase()
+  if (lowered.startsWith(query)) {
+    return NAME_START
+  }
+  if (lowered.includes(query)) {
+    return NAME
+  }
+  if (hint.toLowerCase().includes(query)) {
+    return HINT
+  }
+  return undefined
+}
+
+/** `text` with its first `query` underlined, the query lowercased already; as it is without one, or with an empty query. */
+function underlined(text: string, query: string): string {
+  if (query === '') {
+    return text
+  }
+  const at = text.toLowerCase().indexOf(query)
+  if (at === -1) {
+    return text
+  }
+
+  const end = at + query.length
+  return `${text.slice(0, at)}${styleText('underline', text.slice(at, end))}${text.slice(end)}`
 }
 
 /** The command's name in the input, with a space after it when it takes something, for what comes next. */
