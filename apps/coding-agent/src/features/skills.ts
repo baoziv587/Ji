@@ -27,17 +27,25 @@ export interface Skill {
 }
 
 export interface SkillsFeature extends Feature {
+  /** The load in progress, or the last one: the first starts at creation, so nothing waits for it; /reload-skills the rest. */
+  readonly loading: Promise<readonly Skill[]>
   /** Reads the folder again; the commands and what the model gets follow. */
   reload: () => Promise<readonly Skill[]>
 }
 
-export async function createSkillsFeature(dir: string): Promise<SkillsFeature> {
-  let skills = byName(await loadSkills(dir))
+export function createSkillsFeature(dir: string): SkillsFeature {
+  let skills = new Map<string, Skill>()
 
-  const reload = async (): Promise<readonly Skill[]> => {
-    const loaded = await loadSkills(dir)
-    skills = byName(loaded)
-    return loaded
+  const load = (): Promise<readonly Skill[]> =>
+    loadSkills(dir).then(loaded => {
+      skills = byName(loaded)
+      return loaded
+    })
+  let loading = load()
+
+  const reload = (): Promise<readonly Skill[]> => {
+    loading = load()
+    return loading
   }
 
   const reloading: Command = {
@@ -53,12 +61,19 @@ export async function createSkillsFeature(dir: string): Promise<SkillsFeature> {
 
   const plugin = definePlugin({
     name: 'skills',
-    request: before(req => ({ ...req, messages: req.messages.map(m => expand(m, skills)) })),
+    // Waits for the load in progress, so a skill sent for while the folder is read is not missed
+    request: before(async req => {
+      await loading.catch(() => undefined)
+      return { ...req, messages: req.messages.map(m => expand(m, skills)) }
+    }),
   })
 
   return {
     plugin,
     reload,
+    get loading() {
+      return loading
+    },
     get commands() {
       return [reloading, ...[...skills.values()].map(commandOf)]
     },
@@ -159,7 +174,12 @@ function expand(message: Message, skills: Map<string, Skill>): Message {
 
 /** No `run`: the line goes to the model as typed, and the request hook expands it there. */
 function commandOf(skill: Skill): Command {
-  return { name: `/${skill.name}`, arg: skill.argumentHint, hint: firstSentence(skill.description) || 'runs the skill' }
+  return {
+    name: `/${skill.name}`,
+    arg: skill.argumentHint,
+    hint: firstSentence(skill.description) || 'runs the skill',
+    group: 'Skills',
+  }
 }
 
 function byName(skills: readonly Skill[]): Map<string, Skill> {

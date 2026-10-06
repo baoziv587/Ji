@@ -42,6 +42,9 @@ const plugins = createPlugins(workspace, executor)
 /** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. */
 const permissions = new Permissions(workspace, plugins.files, plugins.shell)
 
+/** Read in the background: the screen comes up first, and the menu has them a moment later. */
+const skills = createSkillsFeature(SKILLS)
+
 /**
  * What the agent runs with: each plugin, and what the terminal asks before its calls. The shell's before the files
  * plugin: a command runs after the edits the model wrote before it. grep is read-only, so never asked about. The
@@ -51,7 +54,7 @@ const features: Feature[] = [
   { plugin: plugins.shell, approve: permissions.commandCalls },
   { plugin: plugins.search },
   { plugin: plugins.files, approve: permissions.fileCalls },
-  await createSkillsFeature(SKILLS),
+  skills,
 ]
 
 /** The bars around the conversation, built by buildView; stdout is the conversation between them. */
@@ -155,6 +158,12 @@ process.on('SIGINT', () => {
 screen.keys.on('keypress', input.onKey)
 
 screen.start()
+
+// The menu reads the commands as it draws: once the skills are in, a draw shows them
+skills.loading.then(
+  () => screen.draw(),
+  (error: unknown) => log.warn(`Skills: ${error instanceof Error ? error.message : String(error)}`),
+)
 
 const toolCount = TOOLS.length === 1 ? '1 tool' : `${TOOLS.length} tools`
 const welcome = `${dimText(`${toolCount} ·`)} ${formatKeyHint('/help', 'lists keys, commands and tools')}`
