@@ -163,7 +163,7 @@ function review(s: Choosing): string[] {
   })
 }
 
-/** The keys that work here, each in bold before the dim words for what it does. */
+/** The keys that work here, each cyan and bold before the dim words for what it does. */
 function keys(s: Choosing): string {
   const esc: Hint = ['Esc', 'dismisses']
   if (onSend(s)) {
@@ -187,7 +187,7 @@ function keys(s: Choosing): string {
 type Hint = [key: string, action: string]
 
 function hints(list: Hint[]): string {
-  return list.map(([key, action]) => `${styleText('bold', key)} ${dim(action)}`).join(dim(' · '))
+  return list.map(([key, action]) => `${styleText(['cyan', 'bold'], key)} ${dim(action)}`).join(dim(' · '))
 }
 
 function headers(s: Choosing): string[] {

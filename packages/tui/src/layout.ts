@@ -3,9 +3,8 @@
 
 import type { KeyHint } from './text.ts'
 import { homedir } from 'node:os'
-import { styleText } from 'node:util'
 import { wrapAnsi } from 'fast-wrap-ansi'
-import { dimText, displayWidth } from './text.ts'
+import { dimText, displayWidth, paintKey } from './text.ts'
 
 /** A part of a help screen: a title, then keys in a column, or text wrapped under it. */
 export interface HelpSection {
@@ -76,10 +75,10 @@ function wrappedRows(text: string, width: number): string[] {
     .map(row => `  ${dimText(row)}`)
 }
 
-/** A key a row, in bold and padded to `keyWidth`, then what it does, dim. */
+/** A key a row, padded to `keyWidth`, then what it does, dim. */
 function keyRows(hints: KeyHint[], keyWidth: number): string[] {
   return hints.map(([key, action]) => {
     const padding = ' '.repeat(keyWidth - displayWidth(key))
-    return `  ${styleText('bold', key)}${padding}  ${dimText(action)}`
+    return `  ${paintKey(key)}${padding}  ${dimText(action)}`
   })
 }

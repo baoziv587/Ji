@@ -11,6 +11,7 @@ import {
   formatKeyHint,
   formatKeyHints,
   leftTruncatedPaths,
+  paintKey,
   pickFirstThatFits,
   renderInputLine,
 } from '@ji.dev/tui'
@@ -102,7 +103,7 @@ function statusLine(bars: Bars): string {
 
   let below = ''
   if (bars.below > 0) {
-    below = `${styleText('yellow', `↓ ${bars.below} more lines`)} ${styleText(['yellow', 'bold'], 'PgDn')}`
+    below = `${styleText('yellow', `↓ ${bars.below} more lines`)} ${paintKey('PgDn')}`
   }
 
   return [details, bars.status, below, mode, allowed, queued, formatKeyHints(keysOf(bars))]

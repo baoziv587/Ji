@@ -1,6 +1,5 @@
 // A reply's streamed text, written to the right of clack's rail, lined up with the prompts above and below.
 
-import type { Format } from '@ji.dev/tui'
 import type { Writable } from 'node:stream'
 import process from 'node:process'
 import { styleText } from 'node:util'
@@ -38,7 +37,7 @@ interface Writer {
 /** Enough of the thinking's end to fill the status. */
 const RECENT = 200
 
-const THINKING: Format[] = ['dim', 'italic']
+const THINKING: ('dim' | 'italic')[] = ['dim', 'italic']
 
 /**
  * Thinking and answer text each get their own block: the answer is Markdown, the thinking dim text as it comes, each

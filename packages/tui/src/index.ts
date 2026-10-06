@@ -43,6 +43,7 @@ export {
   formatCount,
   formatKeyHint,
   formatKeyHints,
+  paintKey,
   splitWords,
   tailToWidth,
   wrapToRows,
