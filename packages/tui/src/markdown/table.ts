@@ -14,10 +14,10 @@
 
 import type { Tokens } from 'marked'
 import type { Flow } from './flow.ts'
-import type { Piece } from './inline.ts'
+import type { StyledText } from './inline.ts'
 import { Lexer } from 'marked'
 import { dimText, displayWidth, splitWords, wrapToRows } from '../text.ts'
-import { paint, piecesOf, textOf } from './inline.ts'
+import { flattenInlineTokens, paint, textOf } from './inline.ts'
 
 type Align = Tokens.TableCell['align']
 
@@ -120,23 +120,23 @@ export function drawTable(markdown: string, width: number): string[] | undefined
   }
 
   const table = token as Tokens.Table
-  const header = table.header.map(cell => piecesOf(cell.tokens, ['bold']))
-  const rows = table.rows.map(row => row.map(cell => piecesOf(cell.tokens, [])))
-  const widths = widthsOf([header, ...rows], width)
+  const header = table.header.map(cell => flattenInlineTokens(cell.tokens, ['bold']))
+  const rows = table.rows.map(row => row.map(cell => flattenInlineTokens(cell.tokens, [])))
+  const widths = fitColumnWidths([header, ...rows], width)
   if (widths === undefined) {
     return undefined
   }
 
   const rule = (left: string, middle: string, right: string): string =>
     dimText(`${left}─${widths.map(w => '─'.repeat(w)).join(`─${middle}─`)}─${right}`)
-  const lines = (cells: Piece[][]): string[] => linesOf(cells, widths, table.align)
+  const row = (cells: StyledText[][]): string[] => drawRow(cells, widths, table.align)
   const between = rule('├', '┼', '┤')
 
   return [
     rule('┌', '┬', '┐'),
-    ...lines(header),
+    ...row(header),
     between,
-    ...rows.flatMap((row, i) => (i === 0 ? lines(row) : [between, ...lines(row)])),
+    ...rows.flatMap((cells, i) => (i === 0 ? row(cells) : [between, ...row(cells)])),
     rule('└', '┴', '┘'),
   ]
 }
@@ -145,7 +145,7 @@ export function drawTable(markdown: string, width: number): string[] | undefined
  * Each column's width, borders apart. A table that fits keeps the widths of its text; one that does not gives each
  * column its longest word first, then what is left in proportion to what each still lacks.
  */
-function widthsOf(table: Piece[][][], width: number): number[] | undefined {
+function fitColumnWidths(table: StyledText[][][], width: number): number[] | undefined {
   const columns = table[0].length
   // `│ ` before each cell, ` │` after the last, and ` │ ` between
   const room = width - (3 * columns + 1)
@@ -199,21 +199,21 @@ function share(total: number, weights: number[]): number[] {
 }
 
 /** One row of the table: as many lines as its tallest cell, the others filled with blank ones. */
-function linesOf(cells: Piece[][], widths: number[], align: Align[]): string[] {
-  const wrapped = cells.map((cell, i) => wrap(cell, widths[i]))
+function drawRow(cells: StyledText[][], widths: number[], align: Align[]): string[] {
+  const wrapped = cells.map((cell, i) => wrapCell(cell, widths[i]))
   const height = Math.max(...wrapped.map(lines => lines.length))
   const border = dimText('│')
 
   const lines: string[] = []
   for (let line = 0; line < height; line++) {
-    const texts = wrapped.map((lines, i) => pad(lines[line] ?? '', widths[i], align[i]))
+    const texts = wrapped.map((lines, i) => padCell(lines[line] ?? '', widths[i], align[i]))
     lines.push(`${border} ${texts.join(` ${border} `)} ${border}`)
   }
   return lines
 }
 
 /** A cell's text in lines of at most `width` columns, broken between words; a word longer than a line is cut. */
-function wrap(cell: Piece[], width: number): string[] {
+function wrapCell(cell: StyledText[], width: number): string[] {
   const lines: string[] = []
   let line = ''
   let used = 0
@@ -255,7 +255,7 @@ function wrap(cell: Piece[], width: number): string[] {
 }
 
 /** A line of a cell, filled out to `width` with spaces on the side its alignment leaves open. */
-function pad(text: string, width: number, align: Align): string {
+function padCell(text: string, width: number, align: Align): string {
   const gap = Math.max(0, width - displayWidth(text))
   switch (align) {
     case 'right':

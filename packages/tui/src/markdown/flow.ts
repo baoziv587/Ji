@@ -1,6 +1,6 @@
 // Text laid out in rows that fit: prose broken between words, code cut where a row fills, each row after a line's lead.
 
-import type { Format, Piece } from './inline.ts'
+import type { Format, StyledText } from './inline.ts'
 import { displayWidth, splitWords, wrapToRows } from '../text.ts'
 import { paint } from './inline.ts'
 
@@ -31,9 +31,9 @@ export class Flow {
   /** The row is full: the next text goes on a new one, and spaces before it are left out. */
   private broken = false
   /** The last word, held back until it ends. */
-  private word: Piece | undefined
+  private word: StyledText | undefined
   /** The space before the next word: written with it, or left out where the row breaks. */
-  private space: Piece | undefined
+  private space: StyledText | undefined
 
   constructor(rows: Rows, width: () => number) {
     this.rows = rows
@@ -114,7 +114,7 @@ export class Flow {
     }
   }
 
-  private place(word: Piece): void {
+  private place(word: StyledText): void {
     if (word.text.trim() === '') {
       this.space = this.column === 0 || this.broken ? undefined : word
       return
