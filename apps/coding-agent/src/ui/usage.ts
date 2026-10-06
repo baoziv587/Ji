@@ -1,8 +1,13 @@
-// What the session has spent so far: tokens in and out, cache hits, speed and cost. In short on the line above the
-// status, in full on exit.
+// How much the history holds now, against where it is compacted; then what the session has spent so far: cost, tokens
+// in and out, cache hits and speed. In short on the line above the status, in full on exit.
 
 import type { Usage, UsageTotals } from '@ji.dev/llm'
+import { styleText } from 'node:util'
 import { formatCount } from '@ji.dev/tui'
+
+/** The share of the limit past which the history shows in the warning color, and then in the error color. */
+const NEAR = 0.7
+const FULL = 0.9
 
 /**
  * Adds up every model call of the session as it ends: plugin calls, failed ones and those of a stopped reply too,
@@ -17,6 +22,9 @@ export class Meter {
   /** When the call being timed started, or streamed its first token; undefined while none is. */
   private from: number | undefined
   private streamed = false
+
+  /** The history's tokens; undefined until the main model has answered once. */
+  private context: { tokens: number; estimated: boolean } | undefined
 
   /** A main-model call starts, to be timed. */
   start(): void {
@@ -43,6 +51,19 @@ export class Meter {
     }
   }
 
+  /** The main model answered: what it was sent and wrote is the history now, as the provider counted it. */
+  measured(usage: Usage): void {
+    this.context = {
+      tokens: usage.input + usage.cacheRead + usage.cacheWrite + usage.output,
+      estimated: false,
+    }
+  }
+
+  /** The history became a summary: an estimate until the main model counts it. */
+  compacted(tokens: number): void {
+    this.context = { tokens, estimated: true }
+  }
+
   /** A call failed or was cancelled: what the provider billed, if anything, still counts, but not toward the speed. */
   dropped(usage?: Usage): void {
     this.from = undefined
@@ -64,23 +85,26 @@ export class Meter {
   }
 
   /**
-   * `in 48.2k · out 3.1k`, `cache 86%`, `41 tok/s`, `$0.0123`: most important first, so a narrow line drops from the
-   * end. Empty before any call has ended.
+   * `ctx 32k/200k`, `$0.0123`, `in 48.2k · out 3.1k`, `cache 86%`, `41 tok/s`: most important first, so a narrow line
+   * drops from the end. `limit` is where the history is compacted. Empty before any call has ended.
    */
-  parts(): string[] {
+  parts(limit: number): string[] {
     if (this.calls === 0) {
       return []
     }
 
     const { output, cost } = this.totals
-    const parts = [`in ${formatCount(this.sent())} · out ${formatCount(output)}`, `cache ${this.hits()}%`]
+    const parts = [
+      `$${cost.toFixed(4)}`,
+      `in ${formatCount(this.sent())} · out ${formatCount(output)}`,
+      `cache ${this.hits()}%`,
+    ]
 
     if (this.timed.ms > 0) {
       parts.push(`${this.speed()} tok/s`)
     }
 
-    parts.push(`$${cost.toFixed(4)}`)
-    return parts
+    return this.context === undefined ? parts : [describeContext(this.context, limit), ...parts]
   }
 
   /** The whole session for the exit, every token counted: `48,213 in (86% cached) · 3,104 out · 12 model calls · …`. */
@@ -116,6 +140,18 @@ export class Meter {
   private speed(): number {
     return Math.round((this.timed.tokens / this.timed.ms) * 1000)
   }
+}
+
+/** `ctx 32k/200k`, `~` before an estimate; in the warning color near the limit, the error color nearly at it. */
+function describeContext({ tokens, estimated }: { tokens: number; estimated: boolean }, limit: number): string {
+  const text = `ctx ${estimated ? '~' : ''}${formatCount(tokens)}/${formatCount(limit)}`
+  if (tokens >= limit * FULL) {
+    return styleText('red', text)
+  }
+  if (tokens >= limit * NEAR) {
+    return styleText('yellow', text)
+  }
+  return text
 }
 
 /** Every digit, grouped by thousands: `48,213`. */
