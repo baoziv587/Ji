@@ -12,16 +12,18 @@
 //
 // The content comes in two views, each its own headless terminal, and toggle() shows the other one. stdout writes
 // to both; `brief` and `full` write to one only, for what each view shows its own way. A prompt redraws in both
-// alike, so switching never needs the content written again.
+// alike, so switching never needs the content written again. Where each write to both starts is marked in both, so
+// switching keeps the line at the top of the window in its place.
 //
 // `live` keeps a few rows at the end of the content, in both views: every write goes in above them.
 
-import type { IBufferCell, Terminal } from '@xterm/headless'
+import type { IBufferCell, IMarker, Terminal } from '@xterm/headless'
 import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { emitKeypressEvents } from 'node:readline'
 import { PassThrough, Writable } from 'node:stream'
 import xterm from '@xterm/headless'
+import { Anchors } from './anchors.ts'
 import { lineOf, textOf } from './cells.ts'
 import { Live } from './live.ts'
 
@@ -87,6 +89,8 @@ export class Screen {
   private readonly frame: (columns: number) => Frame
   private running: Running | undefined
   private shownView: View = 'brief'
+  /** Where the two views hold the same content. */
+  private readonly anchors = new Anchors()
 
   /** The first line shown, while scrolled back; undefined while following the end. */
   private top: number | undefined
@@ -197,6 +201,7 @@ export class Screen {
     write(`${LEAVE}${text}${text === '' ? '' : '\n'}`)
     terms.brief.dispose()
     terms.full.dispose()
+    this.anchors.clear()
   }
 
   /** The view on screen. */
@@ -204,10 +209,23 @@ export class Screen {
     return this.shownView
   }
 
-  /** Shows the other view, at its end: its lines are not the same as this one's, so the place scrolled to is not kept. */
+  /**
+   * Shows the other view with what was at the top of the window still there, what one view shows and the other does
+   * not opening or closing below it; it follows the end only once the end is in the window.
+   */
   toggle(): void {
-    this.shownView = this.shownView === 'brief' ? 'full' : 'brief'
-    this.follow()
+    const from = this.shownView
+    const to = from === 'brief' ? 'full' : 'brief'
+    this.shownView = to
+    if (this.running === undefined) {
+      return
+    }
+
+    const { terms } = this.running
+    const top = this.anchors.find(this.top ?? terms[from].buffer.active.baseY, from, to)
+    const end = terms[to].buffer.active.baseY
+    this.top = top >= end ? undefined : top
+    this.changed()
   }
 
   /**
@@ -331,6 +349,9 @@ export class Screen {
 
     const { terms } = this.running
     this.raw(this.live.erase())
+    if (views.length === 2) {
+      this.anchor(terms)
+    }
     for (const view of views) {
       terms[view].write(text, () => this.changed())
     }
@@ -340,6 +361,19 @@ export class Screen {
       written?.()
       this.changed()
     })
+  }
+
+  /** Marks the line each view's cursor is on once it has parsed what came before: the next write starts there. */
+  private anchor(terms: Record<View, Terminal>): void {
+    const pair: Partial<Record<View, IMarker>> = {}
+    for (const view of ['brief', 'full'] as const) {
+      terms[view].write('', () => {
+        pair[view] = terms[view].registerMarker(0)
+        if (pair.brief !== undefined && pair.full !== undefined) {
+          this.anchors.add({ brief: pair.brief, full: pair.full })
+        }
+      })
+    }
   }
 
   /** Writes to both views as it is: the live rows' own drawing. */
