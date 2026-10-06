@@ -48,7 +48,7 @@ describe('permissions', () => {
     expect(await asked(permissions, call('read', { path: join(outside, 'b.txt') }))).toBe(false)
     expect(await asked(permissions, call('read', { path: join(outside, '..', 'other.txt') }))).toBe(true)
     expect(await asked(permissions, call('edit', { path: join(outside, 'a.txt'), content: 'x' }))).toBe(true)
-    expect(permissions.describeAllowed()).toMatch(/^allows reads in /)
+    expect(permissions.describeAllowed()).toMatch(/^allows .+\/$/)
   })
 
   it('should still refuse a command that is not a string once every command is allowed', async () => {

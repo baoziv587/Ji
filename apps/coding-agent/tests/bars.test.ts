@@ -45,10 +45,10 @@ describe('viewOf', () => {
 
   it('should show the mode, what a yes allowed and the steers not yet delivered', () => {
     // Act
-    const status = statusOf({ mode: 'auto: approves', auto: true, allowed: 'allows every command', queued: 2 })
+    const status = statusOf({ mode: 'auto', auto: true, allowed: 'allows commands', queued: 2 })
 
     // Assert
-    expect(status).toContain('auto: approves · allows every command · 2 queued')
+    expect(status).toContain('auto · allows commands · 2 queued')
   })
 
   it('should leave out the usage that does not fit, from the end', () => {

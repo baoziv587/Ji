@@ -80,6 +80,7 @@ const TOOLS = toolNamesOf(features, asking)
 const commands = createCommandMenu({
   conversation,
   tools: TOOLS,
+  mode: () => permissions.describeMode(),
   quit,
   extra: () => features.flatMap(f => f.commands ?? []),
 })
@@ -118,7 +119,7 @@ function buildView(): Element {
       status: status.describe(),
       view: screen.view,
       below: screen.below,
-      mode: permissions.describeMode(),
+      mode: permissions.mode,
       auto: permissions.mode === 'auto',
       allowed: permissions.describeAllowed(),
     },
