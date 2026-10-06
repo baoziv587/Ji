@@ -107,7 +107,8 @@ export function createCompactionPlugin({
       yield { type: 'compaction:start', tokens: before }
 
       const deadline = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs)
-      const request = { model, systemPrompt: SUMMARIZE, messages: [user(transcript(messages.slice(0, cut)))] }
+      const earlier = transcript(messages.slice(0, cut))
+      const request = { model, systemPrompt: SUMMARIZE, messages: [user(earlier)] }
       let summary: string
       try {
         summary = textOf(yield* complete(request, { signal: deadline })).trim()
@@ -165,58 +166,6 @@ export function estimateTokens(messages: Message[], from = 0): number {
 }
 
 /**
- * A message in the history is never changed, and every step's history holds the same message objects: counting each
- * one once keeps a long history from being scanned again on every step. Weak, so a finished session's messages are
- * freed with it.
- */
-const tokenCounts = new WeakMap<Message, number>()
-
-function tokensOf(m: Message): number {
-  let tokens = tokenCounts.get(m)
-  if (tokens === undefined) {
-    tokens = countTokens(m)
-    tokenCounts.set(m, tokens)
-  }
-  return tokens
-}
-
-/** ~4 ASCII characters per token, and a token for each other character: CJK text runs about one per character. */
-function countTokens(m: Message): number {
-  let ascii = 0
-  let other = 0
-  let images = 0
-  const count = (text: string): void => {
-    for (let i = 0; i < text.length; i++) {
-      const code = text.charCodeAt(i)
-      if (code < 0x80) {
-        ascii++
-      } else if (code < LOW_SURROGATES[0] || code > LOW_SURROGATES[1]) {
-        // The second half of a surrogate pair belongs to the character before it
-        other++
-      }
-    }
-  }
-
-  if (typeof m.content === 'string') {
-    count(m.content)
-    return Math.ceil(ascii / 4) + other
-  }
-  for (const c of m.content) {
-    if (c.type === 'text') {
-      count(c.text)
-    } else if (c.type === 'thinking') {
-      count(c.thinking)
-    } else if (c.type === 'toolCall') {
-      count(c.name)
-      count(JSON.stringify(c.arguments))
-    } else {
-      images++
-    }
-  }
-  return Math.ceil(ascii / 4) + other + images * IMAGE_TOKENS
-}
-
-/**
  * Keeps the latest messages that fit in keepTokens, and at least the last one. The kept part never starts on a tool
  * result: providers reject one separated from the call that produced it, so the cut steps back to the assistant
  * message that made the calls.
@@ -247,6 +196,61 @@ export function cutIndex(messages: Message[], keepTokens: number): number {
   return cut
 }
 
+/**
+ * A message in the history is never changed, and every step's history holds the same message objects: counting each
+ * one once keeps a long history from being scanned again on every step. Weak, so a finished session's messages are
+ * freed with it.
+ */
+const tokenCounts = new WeakMap<Message, number>()
+
+function tokensOf(m: Message): number {
+  let tokens = tokenCounts.get(m)
+  if (tokens === undefined) {
+    tokens = countTokens(m)
+    tokenCounts.set(m, tokens)
+  }
+  return tokens
+}
+
+/** ~4 ASCII characters per token, and a token for each other character: CJK text runs about one per character. */
+function countTokens(m: Message): number {
+  let ascii = 0
+  let other = 0
+  const count = (text: string): void => {
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i)
+      if (code < 0x80) {
+        ascii++
+      } else if (code < LOW_SURROGATES[0] || code > LOW_SURROGATES[1]) {
+        // The second half of a surrogate pair belongs to the character before it
+        other++
+      }
+    }
+  }
+
+  let images = 0
+  const content = typeof m.content === 'string' ? [{ type: 'text' as const, text: m.content }] : m.content
+  for (const c of content) {
+    switch (c.type) {
+      case 'text':
+        count(c.text)
+        break
+      case 'thinking':
+        count(c.thinking)
+        break
+      case 'toolCall':
+        count(c.name)
+        count(JSON.stringify(c.arguments))
+        break
+      case 'image':
+        images++
+        break
+    }
+  }
+
+  return Math.ceil(ascii / 4) + other + images * IMAGE_TOKENS
+}
+
 /** Something new to summarize: not nothing, and not only the summary of an earlier compaction. */
 function worthSummarizing(messages: Message[], cut: number): boolean {
   return cut > 1 || (cut === 1 && !isSummary(messages[0]))
@@ -263,22 +267,23 @@ function isSummary(m: Message): boolean {
 }
 
 function transcript(messages: Message[]): string {
-  return messages
-    .map(m => {
-      if (m.role === 'user') {
-        return isSummary(m)
-          ? `Earlier summary:\n${textOfUser(m).slice(SUMMARY_PREFIX.length + 1)}`
-          : `User: ${textOfUser(m)}`
-      }
-      if (m.role === 'assistant') {
-        const calls = callsOf(m).map(c => `-> ${c.name}(${clip(JSON.stringify(c.arguments))})`)
-        return [`Assistant: ${textOf(m)}`, ...calls].join('\n')
-      }
+  return messages.map(transcriptEntry).join('\n\n')
+}
 
-      const text = m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
-      return `Tool ${m.toolName}${m.isError ? ' (error)' : ''}: ${clip(text)}`
-    })
-    .join('\n\n')
+/** One message as the summarizer reads it: who said it, and what, with tool parts clipped. */
+function transcriptEntry(m: Message): string {
+  if (m.role === 'user') {
+    return isSummary(m)
+      ? `Earlier summary:\n${textOfUser(m).slice(SUMMARY_PREFIX.length + 1)}`
+      : `User: ${textOfUser(m)}`
+  }
+  if (m.role === 'assistant') {
+    const calls = callsOf(m).map(c => `-> ${c.name}(${clip(JSON.stringify(c.arguments))})`)
+    return [`Assistant: ${textOf(m)}`, ...calls].join('\n')
+  }
+
+  const text = m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
+  return `Tool ${m.toolName}${m.isError ? ' (error)' : ''}: ${clip(text)}`
 }
 
 function clip(text: string): string {
