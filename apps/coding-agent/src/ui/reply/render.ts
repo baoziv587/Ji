@@ -152,6 +152,7 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           break
         case 'compaction:end':
           if (e.error === undefined) {
+            meter.compacted(e.after)
             const sizes = `${formatCount(e.before)} → ${formatCount(e.after)} tokens`
             log.message(dimText(`Compacted the conversation: ${sizes}`), { symbol: dimText('≡') })
           } else {
@@ -230,6 +231,9 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
         }
         case 'model_end':
           meter.end(e.message.usage)
+          if (e.by === undefined) {
+            meter.measured(e.message.usage)
+          }
           writing.clear()
           // Its calls have not started yet: one may wait for a question
           status.show('Waiting')

@@ -10,7 +10,7 @@ import { choices } from '@ji.dev/plugin-choices'
 import { localWorkspace } from '@ji.dev/plugin-files'
 import { createLocalExecutor } from '@ji.dev/plugin-shell'
 import { abbreviateHomePath, dimText, formatKeyHint, Screen, Status } from '@ji.dev/tui'
-import { createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
+import { contextLimitOf, createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
 import { Permissions } from './features/permissions.ts'
 import { createSkillsFeature } from './features/skills.ts'
@@ -114,7 +114,7 @@ function buildView(): Element {
       replying: conversation.replying,
       asking: answering.open,
       queued: conversation.queued,
-      usage: meter.parts(),
+      usage: meter.parts(contextLimitOf(model)),
       status: status.describe(),
       view: screen.view,
       below: screen.below,

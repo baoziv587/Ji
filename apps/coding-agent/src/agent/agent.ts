@@ -12,10 +12,7 @@ import { files } from '@ji.dev/plugin-files'
 import { createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
 import { createTruncateToolResultsPlugin } from '@ji.dev/plugin-truncate-tool-results'
 
-/**
- * The history is compacted at 80% of the model's context window, and never past this: a longer history costs more on
- * every call and the model attends to it less well.
- */
+/** A longer history costs more on every call, and the model attends to it less well. */
 const MAX_HISTORY_TOKENS = 200_000
 
 /** The tool plugins, built before the features: the permissions need the files' and the shell's to tell their calls. */
@@ -56,10 +53,15 @@ export function startAgent(root: string, features: readonly Feature[], asking: P
  * of the conversation becomes a summary. First in the list, so the cut applies to what every other plugin returns.
  */
 function contextPlugins(model: ModelInfo): AnyPlugin[] {
-  return [
-    createTruncateToolResultsPlugin(),
-    createCompactionPlugin({ maxTokens: Math.min(Math.floor(model.contextWindow * 0.8), MAX_HISTORY_TOKENS) }),
-  ]
+  return [createTruncateToolResultsPlugin(), createCompactionPlugin({ maxTokens: contextLimitOf(model) })]
+}
+
+/**
+ * Where the history is compacted: at 80% of the model's context window, and never past MAX_HISTORY_TOKENS. The usage
+ * line shows the history against it.
+ */
+export function contextLimitOf(model: ModelInfo): number {
+  return Math.min(Math.floor(model.contextWindow * 0.8), MAX_HISTORY_TOKENS)
 }
 
 /** Every tool the agent can call, by name, for the help line. */
