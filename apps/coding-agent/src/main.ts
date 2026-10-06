@@ -34,7 +34,8 @@
 // agent/ and plugins/ know nothing of the terminal.
 
 import type { Agent, Run } from '@ji.dev/llm'
-import type { Editing, Frame, HelpSection, Keypress } from '@ji.dev/tui'
+import type { Editing, Element, HelpSection, Keypress } from '@ji.dev/tui'
+import type { Bars } from './ui/bars.ts'
 import process from 'node:process'
 import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
@@ -47,6 +48,7 @@ import {
   EMPTY_EDITING,
   formatHelpSections,
   formatKeyHint,
+  formatKeypress,
   Screen,
   Status,
   widthBesideRail,
@@ -55,7 +57,7 @@ import { createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
 import { Permissions } from './plugins/permissions.ts'
 import { Answering } from './ui/answering.ts'
-import { frameOf } from './ui/bars.ts'
+import { viewOf } from './ui/bars.ts'
 import { render } from './ui/reply/render.ts'
 import { Meter } from './ui/usage.ts'
 
@@ -72,8 +74,8 @@ const plugins = createPlugins(ROOT)
 /** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. */
 const permissions = new Permissions(ROOT, plugins.files, plugins.shell)
 
-/** The bars around the conversation, drawn by drawFrame; stdout is the conversation between them. */
-const screen = new Screen(drawFrame)
+/** The bars around the conversation, built by buildView; stdout is the conversation between them. */
+const screen = new Screen(buildView)
 
 /** What the session has spent, on the line above the status. */
 const meter = new Meter()
@@ -149,31 +151,31 @@ const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
 
 /**
  * The mode, the view and Ctrl+C work everywhere, as scrolling does in the screen; while a question is open, the other
- * keys are its own. Pastes come between markers, so a pasted line break does not send.
+ * keys are its own. Pastes come between markers, so a pasted line break does not send. The screen draws after each.
  */
-function onKey(char: string | undefined, key: (Keypress & { shift?: boolean }) | undefined): void {
-  if (key?.name === 'tab' && key.shift === true) {
-    answering.switchMode()
-    return
-  }
-  if (key?.name === 'o' && key.ctrl === true) {
-    screen.toggle()
-    return
-  }
-  if (key?.name === 'c' && key.ctrl === true) {
-    interrupt()
-    return
+function onKey(char: string | undefined, raw: Keypress | undefined): void {
+  const key = { ...raw, char }
+  const name = formatKeypress(key)
+  switch (name) {
+    case 'shift+tab':
+      answering.switchMode()
+      return
+    case 'ctrl+o':
+      screen.toggle()
+      return
+    case 'ctrl+c':
+      interrupt()
+      return
   }
   if (answering.open) {
     return
   }
-  if (key?.name === 'return' && !editing.pasting) {
+  if (name === 'return' && !editing.pasting) {
     submit()
     return
   }
 
-  editing = applyKey(editing, { ...key, char })
-  screen.draw()
+  editing = applyKey(editing, key)
 }
 
 /** Enter: a command, a new reply, or a steer for the one in progress. */
@@ -203,13 +205,11 @@ function submit(): void {
     return
   }
 
+  // Undefined for a steer: it shows once it reaches the model, and is counted as queued until then
   const run = conversation.send(message)
-  if (run === undefined) {
-    // A steer: it shows once it reaches the model, and is counted as queued until then
-    screen.draw()
-    return
+  if (run !== undefined) {
+    replying = converse(run)
   }
-  replying = converse(run)
 }
 
 function think(arg: string): void {
@@ -252,17 +252,16 @@ function interrupt(): void {
     conversation.stop()
   } else if (editingText(editing) !== '') {
     editing = EMPTY_EDITING
-    screen.draw()
   } else {
     quit()
   }
 }
 
-// The bars
+// The screen
 
-function drawFrame(columns: number): Frame {
+function buildView(): Element {
   const { model, thinking } = conversation.agent
-  return frameOf(columns, {
+  const bars: Bars = {
     model: `${model.provider}/${model.id}`,
     thinking,
     root: WORKSPACE,
@@ -277,7 +276,8 @@ function drawFrame(columns: number): Frame {
     mode: permissions.describeMode(),
     auto: permissions.mode === 'auto',
     allowed: permissions.describeAllowed(),
-  })
+  }
+  return viewOf(bars, screen.content)
 }
 
 // Starting and quitting

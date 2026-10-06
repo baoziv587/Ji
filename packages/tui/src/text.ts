@@ -27,6 +27,9 @@ export function fitToWidth(text: string, width: number): string {
   if (displayWidth(text) <= width) {
     return text
   }
+  if (width <= 0) {
+    return ''
+  }
 
   const { index } = truncatedWidth(text, { limit: width - 1 })
   return `${text.slice(0, index)}\x1B[0m…`
