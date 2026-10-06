@@ -9,7 +9,8 @@
 //   id and its usage in full are printed below the conversation
 //   Enter during a reply steers it: the message reaches the model after the step in progress, and shows above then
 //   Ctrl+C during a reply stops only that reply; Ctrl+C on an empty line or /exit quits
-//   /help lists the keys, the commands and the tools
+//   /help lists the keys, the commands and the tools; a / typed on an empty line opens a menu of the commands, and
+//   ↑↓ and Enter run one, Tab completes it
 //   DEEPSEEK_MODEL=deepseek-v4-pro switches the model (default deepseek-v4-flash)
 //   DEEPSEEK_THINKING=off turns thinking off (default high); /think <level> switches it mid-chat, thinking shows in gray
 //   The model can read and edit files: every read, and every change shown as a diff, waits for a yes
@@ -34,8 +35,8 @@
 // agent/ and plugins/ know nothing of the terminal.
 
 import type { Agent, Run } from '@ji.dev/llm'
-import type { Editing, Element, HelpSection, Keypress } from '@ji.dev/tui'
-import type { Bars } from './ui/bars.ts'
+import type { Editing, Element, HelpSection, KeyHint, Keypress } from '@ji.dev/tui'
+import type { Bars, Menu } from './ui/bars.ts'
 import process from 'node:process'
 import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
@@ -105,15 +106,28 @@ const levels = conversation.agent.model.thinkingLevels.join('|')
 
 const TOOLS = toolNamesOf(plugins, asking)
 
+const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
+
+/** A command typed after a `/`: the menu lists it, /help too, and Enter runs it. */
+interface Command {
+  name: string
+  /** What it takes after its name, as the menu shows it; without one, the menu runs it at once. */
+  arg?: string
+  hint: string
+  run: (arg: string) => void
+}
+
+const COMMANDS: Command[] = [
+  { name: '/think', arg: `<${levels}>`, hint: 'sets thinking', run: think },
+  { name: '/help', hint: 'lists keys, commands and tools', run: help },
+  { name: '/exit', hint: 'quits', run: () => quit() },
+]
+
 /** What /help lists: the commands, the keys by when they work, and the tools. */
 const HELP: HelpSection[] = [
   {
     title: 'Commands',
-    rows: [
-      [`/think <${levels}>`, 'sets thinking'],
-      ['/help', 'lists this'],
-      ['/exit', 'quits'],
-    ],
+    rows: COMMANDS.map(hintOf),
   },
   {
     title: 'While replying',
@@ -142,10 +156,11 @@ const MISSING_KEY =
 /** The input line. */
 let editing: Editing = EMPTY_EDITING
 
+/** The command chosen in the menu, by its place among the ones that match: back to the first as the text changes. */
+let selected = 0
+
 /** The reply in progress, settled once it has written its last line. */
 let replying: Promise<void> = Promise.resolve()
-
-const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
 
 // The keys
 
@@ -170,12 +185,73 @@ function onKey(char: string | undefined, raw: Keypress | undefined): void {
   if (answering.open) {
     return
   }
+
+  const matching = matchingCommands()
+  if (matching !== undefined && onMenuKey(name, matching)) {
+    return
+  }
   if (name === 'return' && !editing.pasting) {
     submit()
     return
   }
 
+  const typed = editingText(editing)
   editing = applyKey(editing, key)
+  if (editingText(editing) !== typed) {
+    selected = 0
+  }
+}
+
+/** The menu's keys: ↑↓ choose, Tab completes, Enter runs or completes one that takes something, Esc closes. */
+function onMenuKey(name: string, matching: Command[]): boolean {
+  const command = matching[selected]
+  switch (name) {
+    case 'up':
+      selected = (selected + matching.length - 1) % matching.length
+      return true
+    case 'down':
+      selected = (selected + 1) % matching.length
+      return true
+    case 'tab':
+      complete(command)
+      return true
+    case 'escape':
+      editing = EMPTY_EDITING
+      return true
+    case 'return':
+      if (editing.pasting) {
+        return false
+      }
+
+      complete(command)
+      if (command.arg === undefined) {
+        submit()
+      }
+      return true
+  }
+
+  return false
+}
+
+/** The command's name in the input, with a space after it when it takes something, for what comes next. */
+function complete(command: Command): void {
+  editing = { ...EMPTY_EDITING, before: command.arg === undefined ? command.name : `${command.name} ` }
+  selected = 0
+}
+
+/** The commands that start with what is typed, while a command is being typed: a `/` and no space yet. */
+function matchingCommands(): Command[] | undefined {
+  const typed = editingText(editing)
+  if (!/^\/\S*$/.test(typed)) {
+    return undefined
+  }
+  const matching = COMMANDS.filter(command => command.name.startsWith(typed))
+  return matching.length === 0 ? undefined : matching
+}
+
+/** `/think <level>` and what it does, for the menu and /help. */
+function hintOf({ name, arg, hint }: Command): KeyHint {
+  return [arg === undefined ? name : `${name} ${arg}`, hint]
 }
 
 /** Enter: a command, a new reply, or a steer for the one in progress. */
@@ -192,16 +268,15 @@ function submit(): void {
   if (message === '') {
     return
   }
-  if (message === '/exit') {
-    quit()
-    return
-  }
-  if (message === '/help') {
-    log.message(formatHelpSections(HELP, widthBesideRail()), { spacing: 0 })
-    return
-  }
-  if (message === '/think' || message.startsWith('/think ')) {
-    think(message.slice('/think'.length).trim())
+  if (message.startsWith('/')) {
+    const [name, ...rest] = message.split(/\s+/)
+    const command = COMMANDS.find(c => c.name === name)
+
+    if (command === undefined) {
+      log.warn(`No such command: ${name}. /help lists them.`)
+      return
+    }
+    command.run(rest.join(' '))
     return
   }
 
@@ -210,6 +285,10 @@ function submit(): void {
   if (run !== undefined) {
     replying = converse(run)
   }
+}
+
+function help(): void {
+  log.message(formatHelpSections(HELP, widthBesideRail()), { spacing: 0 })
 }
 
 function think(arg: string): void {
@@ -276,8 +355,19 @@ function buildView(): Element {
     mode: permissions.describeMode(),
     auto: permissions.mode === 'auto',
     allowed: permissions.describeAllowed(),
+    menu: menuOf(),
   }
   return viewOf(bars, screen.content)
+}
+
+/** The matching commands as the menu shows them, the chosen one marked; none while no command is typed. */
+function menuOf(): Menu | undefined {
+  const matching = matchingCommands()
+  if (matching === undefined) {
+    return undefined
+  }
+
+  return { items: matching.map(hintOf), selected }
 }
 
 // Starting and quitting

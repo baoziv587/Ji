@@ -1,12 +1,13 @@
 // The screen: the conversation between two bars. On top, the model and its settings; at the bottom, the session's
-// usage, the status line and the input line with the cursor in it. Both keep a blank row at the terminal's edge and a
-// column on each side of their text; only the rules run across.
+// usage, the status line, the commands menu while a `/` is typed, and the input line with the cursor in it. Both keep
+// a blank row at the terminal's edge and a column on each side of their text; only the rules run across.
 
 import type { Editing, Element, KeyHint, View } from '@ji.dev/tui'
 import { styleText } from 'node:util'
 import {
   createFirstThatFitsElement,
   createInputElement,
+  createMenuElement,
   createRuleElement,
   createTextElement,
   dimText,
@@ -45,6 +46,13 @@ export interface Bars {
   auto: boolean
   /** What a yes allowed; empty while nothing is. */
   allowed: string
+  /** The commands that match what is typed after a `/`, one chosen; undefined while none is typed. */
+  menu?: Menu
+}
+
+export interface Menu {
+  items: KeyHint[]
+  selected: number
 }
 
 /** The bars around `content`, which takes the rows they leave. */
@@ -56,6 +64,7 @@ export function viewOf(bars: Bars, content: Element): Element {
     content,
     createRuleElement(bars.usage),
     inset(createTextElement(statusLine(bars))),
+    bars.menu && inset(createMenuElement(bars.menu.items, bars.menu.selected)),
     // Muted while a question is open, the cursor hidden: the keys are its own
     inset(createInputElement(bars.editing, { placeholder: placeholder(bars), muted: bars.asking })),
     createTextElement(''),
@@ -110,6 +119,14 @@ function statusLine(bars: Bars): string {
 
 /** The keys that matter now. */
 function keysOf(bars: Bars): KeyHint[] {
+  if (bars.menu !== undefined) {
+    return [
+      ['↑↓', 'choose'],
+      ['Tab', 'completes'],
+      ['Enter', 'runs'],
+      ['Esc', 'closes'],
+    ]
+  }
   if (!bars.replying) {
     const keys: KeyHint[] = [
       ['Shift+Tab', 'switches'],

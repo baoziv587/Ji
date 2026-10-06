@@ -8,6 +8,7 @@ import { EMPTY_EDITING } from '../src/editing.ts'
 import { createFirstThatFitsElement } from '../src/elements/first-that-fits.ts'
 import { stackHorizontally } from '../src/elements/horizontal-stack.ts'
 import { createInputElement } from '../src/elements/input.ts'
+import { createMenuElement } from '../src/elements/menu.ts'
 import { padElement } from '../src/elements/pad.ts'
 import { createRuleElement } from '../src/elements/rule.ts'
 import { createTextElement } from '../src/elements/text.ts'
@@ -163,6 +164,32 @@ describe('createRuleElement', () => {
 
     // Assert
     expect(rows).toEqual(['─'.repeat(10)])
+  })
+})
+
+describe('createMenuElement', () => {
+  const ITEMS: [string, string][] = [
+    ['/think <level>', 'sets thinking'],
+    ['/help', 'lists this'],
+    ['/exit', 'quits'],
+  ]
+
+  it('should line the keys up in a column and mark the chosen one', () => {
+    // Act
+    const rows = plain(createMenuElement(ITEMS, 1).render(40).rows)
+
+    // Assert
+    expect(rows).toEqual(['  /think <level>  sets thinking', '❯ /help           lists this', '  /exit           quits'])
+  })
+
+  it('should keep the chosen one in view when the height is short of the items', () => {
+    // Act
+    const last = plain(createMenuElement(ITEMS, 2).render(40, 2).rows)
+    const first = plain(createMenuElement(ITEMS, 0).render(40, 2).rows)
+
+    // Assert
+    expect(last.map(row => row.slice(0, 7))).toEqual(['  /help', '❯ /exit'])
+    expect(first.map(row => row.slice(0, 8))).toEqual(['❯ /think', '  /help '])
   })
 })
 
