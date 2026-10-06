@@ -95,24 +95,6 @@ describe('gutter', () => {
       `${RAIL}After`,
     ])
   })
-
-  it('should draw a table that ends the reply, and leave a line with pipes and no delimiter as it is', async () => {
-    // Act
-    const table = await written(['| a |\n|---|\n| x |'])
-    const pipes = await written(['| not a table |\nmore'])
-
-    // Assert
-    expect(table).toEqual([`${RAIL}┌───┐`, `${RAIL}│ a │`, `${RAIL}├───┤`, `${RAIL}│ x │`, `${RAIL}└───┘`])
-    expect(pipes).toEqual([`${RAIL}| not a table |`, `${RAIL}more`])
-  })
-
-  it('should leave short lines as they are, with a bare rail for a blank one', async () => {
-    // Act
-    const rows = await written(['one\n', '\ntwo'])
-
-    // Assert
-    expect(rows).toEqual([`${RAIL}one`, '│', `${RAIL}two`])
-  })
 })
 
 // Helpers

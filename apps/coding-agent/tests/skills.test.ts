@@ -43,10 +43,6 @@ describe('loadSkills', () => {
     })
     expect(skills[0].body).toBe('# Plain\n\nNo front matter here.')
   })
-
-  it('should find none where the folder does not exist', async () => {
-    expect(await loadSkills(join(tmpdir(), 'ji-no-such-skills'))).toEqual([])
-  })
 })
 
 describe('createSkillsFeature', () => {

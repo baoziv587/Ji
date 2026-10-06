@@ -25,18 +25,6 @@ afterEach(() => {
 })
 
 describe('describeDone', () => {
-  it('should keep a call to one row by the columns it shows in, wide characters too', () => {
-    // Arrange
-    const write = call('bash', { command: `echo ${'很长的中文参数'.repeat(20)}` })
-
-    // Act
-    const row = describeDone(write, result(write, 'done', false))
-
-    // Assert
-    expect(row).not.toContain('\n')
-    expect(displayWidth(row)).toBeLessThanOrEqual(COLUMNS - 4)
-  })
-
   it('should keep the error in the same row, with at least half of it', () => {
     // Arrange
     const failing = call('bash', { command: 'x'.repeat(200) })

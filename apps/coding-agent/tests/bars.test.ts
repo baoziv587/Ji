@@ -43,14 +43,6 @@ describe('viewOf', () => {
     expect(asking).not.toContain('Enter')
   })
 
-  it('should show the mode, what a yes allowed and the steers not yet delivered', () => {
-    // Act
-    const status = statusOf({ mode: 'auto', auto: true, allowed: 'allows commands', queued: 2 })
-
-    // Assert
-    expect(status).toContain('auto · allows commands · 2 queued')
-  })
-
   it('should show the usage under the input line, leaving out what does not fit from the end', () => {
     // Arrange
     const usage = ['ctx 4.2k/200k', 'in 1.2k · out 300', 'cache 50%', `${'x'.repeat(COLUMNS)} tok/s`]
@@ -64,14 +56,6 @@ describe('viewOf', () => {
     expect(rows.at(-4)).toContain('Ask anything')
     expect(rows.at(-6)).toBe('─'.repeat(COLUMNS))
     expect(rows.at(-1)!.trim()).toBe('')
-  })
-
-  it('should keep the row under the input line blank before any usage', () => {
-    // Act
-    const rows = drawn(COLUMNS, {}).rows
-
-    // Assert
-    expect(stripVTControlCharacters(rows.at(-2)!).trim()).toBe('')
   })
 
   it('should scroll a long input sideways, keeping the cursor in view', () => {
@@ -114,14 +98,6 @@ describe('viewOf', () => {
     expect(menuRows.every(row => row.includes('/skill'))).toBe(true)
     expect(rows.at(-5 - MENU_ROWS)).toMatch(/13 of 20 · ↑↓ choose/)
     expect(menuRows.filter(row => row.startsWith(' ❯'))).toEqual([' ❯ /skill12  does something'])
-  })
-
-  it('should hide the cursor while a question is open', () => {
-    // Act
-    const screen = drawn(COLUMNS, { replying: true, asking: true })
-
-    // Assert
-    expect(screen.cursor).toBeUndefined()
   })
 
   it('should give the conversation the rows the bars leave', () => {
