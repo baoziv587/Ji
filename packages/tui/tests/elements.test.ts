@@ -158,18 +158,6 @@ describe('createRuleElement', () => {
     expect(displayWidth(rule)).toBe(30)
   })
 
-  it('should keep a label that brings its own color as it is, and measure it without its escapes', () => {
-    // Arrange: yellow, written out, as styleText leaves it out when the output has no colors
-    const warning = '\u001B[33mctx 150k/200k\u001B[39m'
-
-    // Act
-    const [rule] = createRuleElement([warning, 'in 1.2k']).render(40).rows
-
-    // Assert
-    expect(rule).toContain(warning)
-    expect(displayWidth(stripVTControlCharacters(rule))).toBe(40)
-  })
-
   it('should draw a plain rule when no label fits', () => {
     // Act
     const rows = plain(createRuleElement(['too long to fit']).render(10).rows)

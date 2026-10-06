@@ -1,9 +1,15 @@
 // How much the history holds now, against where it is compacted; then what the session has spent so far: cost, tokens
-// in and out, cache hits and speed. In short on the line above the status, in full on exit.
+// in and out, cache hits and speed. In short under the input line, in full on exit.
 
 import type { Usage, UsageTotals } from '@ji.dev/llm'
 import { styleText } from 'node:util'
-import { formatCount } from '@ji.dev/tui'
+import { dimText, formatCount } from '@ji.dev/tui'
+
+/** The history's tokens, and whether they are an estimate or the provider's count. */
+interface ContextSize {
+  tokens: number
+  estimated: boolean
+}
 
 /** The share of the limit past which the history shows in the warning color, and then in the error color. */
 const NEAR = 0.7
@@ -24,7 +30,7 @@ export class Meter {
   private streamed = false
 
   /** The history's tokens; undefined until the main model has answered once. */
-  private context: { tokens: number; estimated: boolean } | undefined
+  private context: ContextSize | undefined
 
   /** A main-model call starts, to be timed. */
   start(): void {
@@ -86,7 +92,8 @@ export class Meter {
 
   /**
    * `ctx 32k/200k`, `$0.0123`, `in 48.2k · out 3.1k`, `cache 86%`, `41 tok/s`: most important first, so a narrow line
-   * drops from the end. `limit` is where the history is compacted. Empty before any call has ended.
+   * drops from the end. `limit` is where the history is compacted. Dim, all but a history near the limit. Empty before
+   * any call has ended.
    */
   parts(limit: number): string[] {
     if (this.calls === 0) {
@@ -104,7 +111,12 @@ export class Meter {
       parts.push(`${this.speed()} tok/s`)
     }
 
-    return this.context === undefined ? parts : [describeContext(this.context, limit), ...parts]
+    const dimmed = parts.map(dimText)
+    if (this.context === undefined) {
+      return dimmed
+    }
+
+    return [describeContext(this.context, limit), ...dimmed]
   }
 
   /** The whole session for the exit, every token counted: `48,213 in (86% cached) · 3,104 out · 12 model calls · …`. */
@@ -142,8 +154,8 @@ export class Meter {
   }
 }
 
-/** `ctx 32k/200k`, `~` before an estimate; in the warning color near the limit, the error color nearly at it. */
-function describeContext({ tokens, estimated }: { tokens: number; estimated: boolean }, limit: number): string {
+/** `ctx 32k/200k`, `~` before an estimate; dim, but in the warning color near the limit, the error color nearly at it. */
+function describeContext({ tokens, estimated }: ContextSize, limit: number): string {
   const text = `ctx ${estimated ? '~' : ''}${formatCount(tokens)}/${formatCount(limit)}`
   if (tokens >= limit * FULL) {
     return styleText('red', text)
@@ -151,7 +163,7 @@ function describeContext({ tokens, estimated }: { tokens: number; estimated: boo
   if (tokens >= limit * NEAR) {
     return styleText('yellow', text)
   }
-  return text
+  return dimText(text)
 }
 
 /** Every digit, grouped by thousands: `48,213`. */

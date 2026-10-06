@@ -1,6 +1,7 @@
-// The screen: the conversation between two bars. On top, the model and its settings; at the bottom, the session's
-// usage, the status line, the commands menu while a `/` is typed, and the input line with the cursor in it. Both keep
-// a blank row at the terminal's edge and a column on each side of their text; only the rules run across.
+// The screen: the conversation between two bars. On top, the model and its settings; at the bottom, the status line, the
+// commands menu while a `/` is typed, the input line with the cursor in it, and the usage under it, where the eye already
+// is. The top bar keeps a blank row at the terminal's edge; the usage takes that row at the bottom, blank until the first
+// reply. Both keep a column on each side of their text; only the rules run across.
 //
 // The menu takes a few rows at most and scrolls inside them, so the conversation keeps its room however many commands
 // match; the status line says which of them is chosen, so what is out of view is known to be there.
@@ -36,7 +37,7 @@ export interface Bars {
   asking: boolean
   /** The steers not yet delivered. */
   queued: number
-  /** The session's usage so far, most important first. */
+  /** The history's size, then the session's usage so far: most important first, each part styled already. */
   usage: string[]
   /** What the reply is doing and for how long; empty while none runs. */
   status: string
@@ -68,13 +69,22 @@ export function viewOf(bars: Bars, content: Element): Element {
     inset(createFirstThatFitsElement(titleVersions(bars))),
     createRuleElement([]),
     content,
-    createRuleElement(bars.usage),
+    createRuleElement([]),
     inset(createTextElement(statusLine(bars))),
     bars.menu && inset(capped(createMenuElement(bars.menu.items, bars.menu.selected), MENU_ROWS)),
     // Muted while a question is open, the cursor hidden: the keys are its own
     inset(createInputElement(bars.editing, { placeholder: placeholder(bars), muted: bars.asking })),
-    createTextElement(''),
+    inset(createFirstThatFitsElement(usageVersions(bars.usage))),
   ])
+}
+
+/** All of the usage, then less and less of it from the end: the history's size goes last. None, a blank row. */
+function usageVersions(usage: string[]): string[] {
+  const versions: string[] = []
+  for (let shown = usage.length; shown > 0; shown--) {
+    versions.push(usage.slice(0, shown).join(dimText(' · ')))
+  }
+  return versions
 }
 
 /** A bar's text, a column in from each side. */
