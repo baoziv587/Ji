@@ -1,7 +1,7 @@
 // The screen: the conversation between two bars. On top, the model and its settings; at the bottom, the status line, the
-// commands menu while a `/` is typed, the input line with the cursor in it, and the usage under it, where the eye already
-// is. The top bar keeps a blank row at the terminal's edge; the usage takes that row at the bottom, blank until the first
-// reply. Both keep a column on each side of their text; only the rules run across.
+// commands menu while a `/` is typed and the input line with the cursor in it, then a blank row and the usage, a group of
+// its own, blank until the first reply. Both bars keep a blank row at the terminal's edge and a column on each side of
+// their text; only the rules run across.
 //
 // The menu takes a few rows at most and scrolls inside them, so the conversation keeps its room however many commands
 // match; the status line says which of them is chosen, so what is out of view is known to be there.
@@ -59,6 +59,9 @@ export interface Menu {
   selected: number
 }
 
+/** Between the history's size and the session's spending: wider than the ` · ` within it, so the two read as groups. */
+const USAGE_GAP = '   '
+
 /** The menu's rows at most: about as many as can be taken in at a glance, and never most of the screen. */
 export const MENU_ROWS = 8
 
@@ -74,17 +77,23 @@ export function viewOf(bars: Bars, content: Element): Element {
     bars.menu && inset(capped(createMenuElement(bars.menu.items, bars.menu.selected), MENU_ROWS)),
     // Muted while a question is open, the cursor hidden: the keys are its own
     inset(createInputElement(bars.editing, { placeholder: placeholder(bars), muted: bars.asking })),
+    createTextElement(''),
     inset(createFirstThatFitsElement(usageVersions(bars.usage))),
+    createTextElement(''),
   ])
 }
 
-/** All of the usage, then less and less of it from the end: the history's size goes last. None, a blank row. */
+/**
+ * All of the usage, then less and less of it from the end: the first part, the history's size, goes last. It stands
+ * apart from the rest, which go together: `ctx 32k/200k   $0.0123 · in 48k · out 3.1k`. None, a blank row.
+ */
 function usageVersions(usage: string[]): string[] {
+  const [first, ...rest] = usage
   const versions: string[] = []
-  for (let shown = usage.length; shown > 0; shown--) {
-    versions.push(usage.slice(0, shown).join(dimText(' · ')))
+  for (let shown = rest.length; shown > 0; shown--) {
+    versions.push(`${first}${USAGE_GAP}${rest.slice(0, shown).join(dimText(' · '))}`)
   }
-  return versions
+  return first === undefined ? versions : [...versions, first]
 }
 
 /** A bar's text, a column in from each side. */

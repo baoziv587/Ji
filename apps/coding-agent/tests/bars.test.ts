@@ -59,9 +59,11 @@ describe('viewOf', () => {
     const rows = drawn(COLUMNS, { usage }).rows.map(row => stripVTControlCharacters(row))
 
     // Assert
-    expect(rows.at(-1)!.trimEnd()).toBe(' ctx 4.2k/200k · in 1.2k · out 300 · cache 50%')
-    expect(rows.at(-2)).toContain('Ask anything')
-    expect(rows.at(-4)).toBe('─'.repeat(COLUMNS))
+    expect(rows.at(-2)!.trimEnd()).toBe(' ctx 4.2k/200k   in 1.2k · out 300 · cache 50%')
+    expect(rows.at(-3)!.trim()).toBe('')
+    expect(rows.at(-4)).toContain('Ask anything')
+    expect(rows.at(-6)).toBe('─'.repeat(COLUMNS))
+    expect(rows.at(-1)!.trim()).toBe('')
   })
 
   it('should keep the row under the input line blank before any usage', () => {
@@ -69,7 +71,7 @@ describe('viewOf', () => {
     const rows = drawn(COLUMNS, {}).rows
 
     // Assert
-    expect(stripVTControlCharacters(rows.at(-1)!).trim()).toBe('')
+    expect(stripVTControlCharacters(rows.at(-2)!).trim()).toBe('')
   })
 
   it('should scroll a long input sideways, keeping the cursor in view', () => {
@@ -78,12 +80,12 @@ describe('viewOf', () => {
 
     // Act
     const screen = drawn(COLUMNS, { editing })
-    const input = stripVTControlCharacters(screen.rows.at(-2)!)
+    const input = stripVTControlCharacters(screen.rows.at(-4)!)
 
     // Assert
     expect(input).toMatch(/aend$/)
     expect(displayWidth(input)).toBeLessThan(COLUMNS)
-    expect(screen.cursor).toEqual({ row: ROWS - 2, column: displayWidth(input) })
+    expect(screen.cursor).toEqual({ row: ROWS - 4, column: displayWidth(input) })
   })
 
   it('should show the commands menu above the input, with its own keys', () => {
@@ -95,8 +97,8 @@ describe('viewOf', () => {
     const rows = screen.rows.map(row => stripVTControlCharacters(row))
 
     // Assert
-    expect(rows.at(-3)).toBe(' ❯ /help  lists this')
-    expect(rows.at(-4)).toMatch(/↑↓ choose · Tab completes · Enter runs · Esc closes$/)
+    expect(rows.at(-5)).toBe(' ❯ /help  lists this')
+    expect(rows.at(-6)).toMatch(/↑↓ choose · Tab completes · Enter runs · Esc closes$/)
   })
 
   it('should keep the menu to a few rows with the chosen one in view, and say which of them it is', () => {
@@ -106,11 +108,11 @@ describe('viewOf', () => {
     // Act
     const screen = viewOf(bars({ menu: { items, selected: 12 } }), CONTENT).render(COLUMNS, 30)
     const rows = screen.rows.map(row => stripVTControlCharacters(row))
-    const menuRows = rows.slice(-2 - MENU_ROWS, -2)
+    const menuRows = rows.slice(-4 - MENU_ROWS, -4)
 
     // Assert
     expect(menuRows.every(row => row.includes('/skill'))).toBe(true)
-    expect(rows.at(-3 - MENU_ROWS)).toMatch(/13 of 20 · ↑↓ choose/)
+    expect(rows.at(-5 - MENU_ROWS)).toMatch(/13 of 20 · ↑↓ choose/)
     expect(menuRows.filter(row => row.startsWith(' ❯'))).toEqual([' ❯ /skill12  does something'])
   })
 
@@ -137,7 +139,7 @@ describe('viewOf', () => {
     const screen = viewOf(bars({}), content).render(COLUMNS, ROWS)
 
     // Assert
-    expect(given).toEqual([ROWS - 7])
+    expect(given).toEqual([ROWS - 9])
     expect(screen.rows).toHaveLength(ROWS)
   })
 })
@@ -173,5 +175,5 @@ function titleOf(columns: number, changes: Partial<Bars>): string {
 }
 
 function statusOf(changes: Partial<Bars>): string {
-  return stripVTControlCharacters(drawn(COLUMNS, changes).rows.at(-3)!)
+  return stripVTControlCharacters(drawn(COLUMNS, changes).rows.at(-5)!)
 }
