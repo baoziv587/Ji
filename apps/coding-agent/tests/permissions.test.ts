@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
 import { createMemoryExecutor, createShellPlugin } from '@ji.dev/plugin-shell'
 import { describe, expect, it } from 'vitest'
-import { Permissions } from '../src/plugins/permissions.ts'
+import { Permissions } from '../src/features/permissions.ts'
 
 describe('permissions', () => {
   it('should ask about every command until a yes allows them all, and ask again once back in ask mode', async () => {
@@ -83,7 +83,7 @@ function call(name: string, args: Record<string, unknown>): ToolCall {
 
 /** The first answer from the previews, as choices takes them. */
 async function previewOf(permissions: Permissions, toolCall: ToolCall): Promise<unknown> {
-  for (const preview of permissions.approve) {
+  for (const preview of [permissions.fileCalls, permissions.commandCalls]) {
     const proposal = await preview(toolCall, new AbortController().signal)
     if (proposal !== undefined) {
       return proposal

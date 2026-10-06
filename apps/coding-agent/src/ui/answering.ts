@@ -5,7 +5,7 @@
 import type { ToolCall } from '@ji.dev/llm'
 import type { Questions, Reply } from '@ji.dev/plugin-choices'
 import type { Screen, Status } from '@ji.dev/tui'
-import type { Approval, Permissions } from '../plugins/permissions.ts'
+import type { Approval, Permissions } from '../features/permissions.ts'
 import { styleText } from 'node:util'
 import { terminal } from '@ji.dev/plugin-choices/terminal'
 import { detectLanguage, dimText, formatKeyHint, loadCodePainter, paintDiff } from '@ji.dev/tui'

@@ -3,6 +3,7 @@
 
 import type { HelpSection } from '@ji.dev/tui'
 import type { Conversation } from '../agent/conversation.ts'
+import type { Command } from './menu.ts'
 import { log } from '@clack/prompts'
 import { formatHelpSections, widthBesideRail } from '@ji.dev/tui'
 import { CommandMenu } from './menu.ts'
@@ -12,15 +13,18 @@ export interface CommandContext {
   /** Every tool the model can call, by name. */
   tools: string[]
   quit: () => void
+  /** The features' commands, after the built-in ones. */
+  extra?: Command[]
 }
 
-export function createCommandMenu({ conversation, tools, quit }: CommandContext): CommandMenu {
+export function createCommandMenu({ conversation, tools, quit, extra = [] }: CommandContext): CommandMenu {
   const levels = conversation.agent.model.thinkingLevels.join('|')
 
   const menu: CommandMenu = new CommandMenu([
     { name: '/think', arg: `<${levels}>`, hint: 'sets thinking', run: arg => think(conversation, arg) },
     { name: '/help', hint: 'lists keys, commands and tools', run: () => help(menu, tools) },
     { name: '/exit', hint: 'quits', run: quit },
+    ...extra,
   ])
   return menu
 }

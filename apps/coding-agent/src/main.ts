@@ -1,5 +1,6 @@
 import type { Agent } from '@ji.dev/llm'
 import type { Element } from '@ji.dev/tui'
+import type { Feature } from './features/feature.ts'
 import process from 'node:process'
 import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
@@ -7,7 +8,7 @@ import { choices } from '@ji.dev/plugin-choices'
 import { abbreviateHomePath, dimText, formatKeyHint, Screen, Status } from '@ji.dev/tui'
 import { createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
-import { Permissions } from './plugins/permissions.ts'
+import { Permissions } from './features/permissions.ts'
 import { Answering } from './ui/answering.ts'
 import { viewOf } from './ui/bars.ts'
 import { createCommandMenu } from './ui/commands.ts'
@@ -29,6 +30,16 @@ const plugins = createPlugins(ROOT)
 /** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. */
 const permissions = new Permissions(ROOT, plugins.files, plugins.shell)
 
+/**
+ * What the agent runs with: each plugin, and what the terminal asks before its calls. The shell's before the files
+ * plugin: a command runs after the edits the model wrote before it. grep is read-only, so never asked about.
+ */
+const features: Feature[] = [
+  { plugin: plugins.shell, approve: permissions.commandCalls },
+  { plugin: plugins.search },
+  { plugin: plugins.files, approve: permissions.fileCalls },
+]
+
 /** The bars around the conversation, built by buildView; stdout is the conversation between them. */
 const screen = new Screen(buildView)
 
@@ -43,13 +54,13 @@ const answering = new Answering(screen, status, permissions)
  * The model asks with ask_user; permissions say which calls wait for a yes (RFC-0007 §5). None of them knows about the
  * terminal: `answer` puts every question to the person.
  */
-const asking = choices({ answer: answering.answer, approve: permissions.approve })
+const asking = choices({ answer: answering.answer, approve: features.flatMap(f => f.approve ?? []) })
 
 const conversation = new Conversation(startAgentOrQuit())
 
-const TOOLS = toolNamesOf(plugins, asking)
+const TOOLS = toolNamesOf(features, asking)
 
-const commands = createCommandMenu({ conversation, tools: TOOLS, quit })
+const commands = createCommandMenu({ conversation, tools: TOOLS, quit, extra: features.flatMap(f => f.commands ?? []) })
 
 /** The input line and its keys; a reply shows on the stage, the conversation's part of the screen. */
 const input = new Input({
@@ -98,7 +109,7 @@ function buildView(): Element {
 /** A typo in the model or the level stops the coding agent before the first prompt, with the choices listed. */
 function startAgentOrQuit(): Agent {
   try {
-    return startAgent(ROOT, plugins, asking)
+    return startAgent(ROOT, features, asking)
   } catch (error) {
     if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
       cancel(error.message)

@@ -36,9 +36,6 @@ const SHORTCUTS = {
 }
 
 export class Permissions {
-  /** For choices: which file calls and which commands wait for a yes. */
-  readonly approve: readonly Preview[]
-
   private current: Mode = 'ask'
   /** In ask mode, until the person answers a read with "stop asking about reads". */
   private askReads = true
@@ -61,7 +58,6 @@ export class Permissions {
     this.shellNames = new Set(shellTools.tools?.map(t => t.name))
     this.rooted = localWorkspace(root)
     this.anywhere = localWorkspace(root, { allow: () => true })
-    this.approve = [this.fileCalls, this.commandCalls]
   }
 
   get mode(): Mode {
@@ -120,10 +116,10 @@ export class Permissions {
   }
 
   /**
-   * Inside the root, only what the mode asks about; outside it, always, so auto mode never reaches past the root
-   * unseen, unless a yes allowed reads in the file's folder.
+   * For the files feature: inside the root, only what the mode asks about; outside it, always, so auto mode never
+   * reaches past the root unseen, unless a yes allowed reads in the file's folder.
    */
-  private readonly fileCalls: Preview = async (call, signal) => {
+  readonly fileCalls: Preview = async (call, signal) => {
     const far = await this.outside(call)
     if (!far && (this.current === 'auto' || (call.name === 'read' && !this.askReads))) {
       return undefined
@@ -142,8 +138,11 @@ export class Permissions {
     return { ...proposal, initial: 'no' }
   }
 
-  /** Every command waits for a yes, until one says not to ask again. A command that is not a string is refused still. */
-  private readonly commandCalls: Preview = call => {
+  /**
+   * For the shell feature: every command waits for a yes, until one says not to ask again. A command that is not a
+   * string is refused still.
+   */
+  readonly commandCalls: Preview = call => {
     const proposal = this.shellTools.preview(call)
     if (this.allowed.commands && proposal !== undefined && !('role' in proposal)) {
       return undefined
