@@ -1,14 +1,22 @@
 // The agent: the model and its thinking, and the features it runs with, all working in the directory the coding agent
 // was started from. What of theirs waits for a yes is the permissions' to say, and how it is asked, the screen's.
 
-import type { Agent, AnyPlugin, Plugin, ThinkingLevel } from '@ji.dev/llm'
+import type { Agent, AnyPlugin, ModelInfo, Plugin, ThinkingLevel } from '@ji.dev/llm'
 import type { FilesPlugin, Workspace } from '@ji.dev/plugin-files'
 import type { CommandExecutor, ShellPlugin } from '@ji.dev/plugin-shell'
 import type { Feature } from '../features/feature.ts'
 import process from 'node:process'
-import { createAgent } from '@ji.dev/llm'
+import { createAgent, findModel } from '@ji.dev/llm'
+import { createCompactionPlugin } from '@ji.dev/plugin-compaction'
 import { files } from '@ji.dev/plugin-files'
 import { createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
+import { createTruncateToolResultsPlugin } from '@ji.dev/plugin-truncate-tool-results'
+
+/**
+ * The history is compacted at 80% of the model's context window, and never past this: a longer history costs more on
+ * every call and the model attends to it less well.
+ */
+const MAX_HISTORY_TOKENS = 200_000
 
 /** The tool plugins, built before the features: the permissions need the files' and the shell's to tell their calls. */
 export interface Plugins {
@@ -34,12 +42,24 @@ export function createPlugins(workspace: Workspace, executor: CommandExecutor): 
  * coding agent before the first prompt: UnknownModelError and UnsupportedThinkingError list the choices.
  */
 export function startAgent(root: string, features: readonly Feature[], asking: Plugin): Agent {
+  const model = findModel(`deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`)
   return createAgent({
-    model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`,
+    model,
     thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
     system: `You are a concise assistant running in a terminal. Use tools when they help. File paths are relative to ${root}.`,
-    plugins: pluginList(features, asking),
+    plugins: [...contextPlugins(model), ...pluginList(features, asking)],
   })
+}
+
+/**
+ * What keeps the history within the model's context: a tool result is cut before the model sees it, and an old part
+ * of the conversation becomes a summary. First in the list, so the cut applies to what every other plugin returns.
+ */
+function contextPlugins(model: ModelInfo): AnyPlugin[] {
+  return [
+    createTruncateToolResultsPlugin(),
+    createCompactionPlugin({ maxTokens: Math.min(Math.floor(model.contextWindow * 0.8), MAX_HISTORY_TOKENS) }),
+  ]
 }
 
 /** Every tool the agent can call, by name, for the help line. */

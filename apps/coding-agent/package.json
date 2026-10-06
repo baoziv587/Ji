@@ -13,8 +13,10 @@
     "@clack/prompts": "^1.8.1",
     "@ji.dev/llm": "workspace:*",
     "@ji.dev/plugin-choices": "workspace:*",
+    "@ji.dev/plugin-compaction": "workspace:*",
     "@ji.dev/plugin-files": "workspace:*",
     "@ji.dev/plugin-shell": "workspace:*",
+    "@ji.dev/plugin-truncate-tool-results": "workspace:*",
     "@ji.dev/tui": "workspace:*"
   },
   "devDependencies": {

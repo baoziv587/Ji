@@ -5,7 +5,7 @@ import type { LiveRows, Screen, Status } from '@ji.dev/tui'
 import type { Meter } from '../usage.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
-import { dimText, OutputTail, paintRail } from '@ji.dev/tui'
+import { dimText, formatCount, OutputTail, paintRail } from '@ji.dev/tui'
 import {
   describeArguments,
   describeDone,
@@ -64,6 +64,7 @@ export interface Stage {
  *   |  Test Files  13 passed                   |  Test Files  13 passed      it, taken away once it ends
  *   v  calc(expr: "17*23")                     v  calc  391               <- tool_end: green, or red x with the error
  *   +  use vitest  · steer                     +  use vitest  · steer     <- a message, once it reaches the model
+ *   =  Compacted 180k -> 32k tokens            =  Compacted 180k -> 32k   <- the older history became a summary
  *
  * Every line of a call or a result is cut to one row, so a long one never wraps under the rail. What the conversation
  * waits on shows at its end, in the screen's live rows: a table held back until it ends, a call the model is still
@@ -136,13 +137,27 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           }
           break
         case 'model_start':
-          // The level actually sent, after any plugin and after mapping to what the model supports
-          status.show(e.thinking === 'off' ? 'Waiting' : 'Thinking')
           afterCall = false
           afterDone = false
+          // A plugin's call streams nothing, and the plugin says what it is doing
           if (e.by === undefined) {
+            // The level actually sent, after any plugin and after mapping to what the model supports
+            status.show(e.thinking === 'off' ? 'Waiting' : 'Thinking')
             meter.start()
           }
+          break
+        case 'compaction:start':
+          out.end()
+          status.show('Compacting', `${formatCount(e.tokens)} tokens`)
+          break
+        case 'compaction:end':
+          if (e.error === undefined) {
+            const sizes = `${formatCount(e.before)} → ${formatCount(e.after)} tokens`
+            log.message(dimText(`Compacted the conversation: ${sizes}`), { symbol: dimText('≡') })
+          } else {
+            log.warn(`Could not compact the conversation, so it goes on in full: ${e.error}`)
+          }
+          status.show('Waiting')
           break
         case 'thinking':
           meter.streaming()
