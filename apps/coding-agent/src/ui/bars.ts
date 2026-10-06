@@ -43,7 +43,7 @@ export interface Bars {
   view: View
   /** The lines below the screen, scrolled past. */
   below: number
-  /** The mode, described. */
+  /** `ask` or `auto`: what each asks about is in /help, so the status line keeps its room. */
   mode: string
   /** The less careful mode, so it stands out in the warning color. */
   auto: boolean

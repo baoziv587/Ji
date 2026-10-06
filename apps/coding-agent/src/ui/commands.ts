@@ -1,5 +1,5 @@
 // The coding agent's commands: /think switches the thinking level, /help lists the commands, the keys by when they
-// work and the tools, /exit quits.
+// work, the mode and the tools, /exit quits.
 
 import type { HelpSection } from '@ji.dev/tui'
 import type { Conversation } from '../agent/conversation.ts'
@@ -12,17 +12,19 @@ export interface CommandContext {
   conversation: Conversation
   /** Every tool the model can call, by name. */
   tools: string[]
+  /** The mode now, in full: the status line shows only its name. */
+  mode: () => string
   quit: () => void
   /** The features' commands, after the built-in ones; read every time, as they can change. */
   extra?: () => Command[]
 }
 
-export function createCommandMenu({ conversation, tools, quit, extra = () => [] }: CommandContext): CommandMenu {
+export function createCommandMenu({ conversation, tools, mode, quit, extra = () => [] }: CommandContext): CommandMenu {
   const levels = conversation.agent.model.thinkingLevels.join('|')
 
   const menu: CommandMenu = new CommandMenu(() => [
     { name: '/think', arg: `<${levels}>`, hint: 'sets thinking', run: arg => think(conversation, arg) },
-    { name: '/help', hint: 'lists keys, commands and tools', run: () => help(menu, tools) },
+    { name: '/help', hint: 'lists keys, commands and tools', run: () => help(menu, tools, mode()) },
     { name: '/exit', hint: 'quits', run: quit },
     ...extra(),
   ])
@@ -42,7 +44,7 @@ function think(conversation: Conversation, arg: string): void {
   log.success(`Thinking: ${conversation.agent.thinking}`)
 }
 
-function help(menu: CommandMenu, tools: string[]): void {
+function help(menu: CommandMenu, tools: string[], mode: string): void {
   const groups = [...menu.groups()].map(([group, names]): HelpSection => {
     return { title: `${group} (${names.length})`, rows: names.join(', ') }
   })
@@ -65,6 +67,7 @@ function help(menu: CommandMenu, tools: string[]): void {
         ['Wheel, PgUp/PgDn', 'scroll'],
       ],
     },
+    { title: 'Mode', rows: mode },
     { title: `Tools (${tools.length})`, rows: tools.join(', ') },
   ]
   log.message(formatHelpSections(sections, widthBesideRail()), { spacing: 0 })

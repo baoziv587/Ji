@@ -71,7 +71,7 @@ export class Permissions {
     }
   }
 
-  /** Starts with the mode's name, the word the help line uses for it. */
+  /** In full, for /help: the status line shows only the mode's name. */
   describeMode(): string {
     if (this.current === 'auto') {
       return 'auto: approves file calls inside the workspace, asks about the rest'
@@ -80,18 +80,18 @@ export class Permissions {
     return `ask: before every ${commands}file ${this.askReads ? 'read and change' : 'change'}`
   }
 
-  /** What a yes allowed, in either mode: `allows every command, reads in ~/notes/`; empty while nothing is. */
+  /** What a yes allowed, in either mode, short for the status line: `allows commands, ~/notes/`; empty while nothing is. */
   describeAllowed(): string {
     const parts: string[] = []
     if (this.allowed.commands) {
-      parts.push('every command')
+      parts.push('commands')
     }
 
     const folders = [...this.allowed.folders]
     if (folders.length === 1) {
-      parts.push(`reads in ${home(folders[0])}/`)
+      parts.push(`${home(folders[0])}/`)
     } else if (folders.length > 1) {
-      parts.push(`reads in ${folders.length} folders outside`)
+      parts.push(`${folders.length} folders`)
     }
     return parts.length === 0 ? '' : `allows ${parts.join(', ')}`
   }
