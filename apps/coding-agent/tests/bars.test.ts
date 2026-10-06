@@ -78,6 +78,19 @@ describe('viewOf', () => {
     expect(screen.cursor).toEqual({ row: ROWS - 2, column: displayWidth(input) })
   })
 
+  it('should show the commands menu above the input, with its own keys', () => {
+    // Arrange
+    const menu = { items: [['/help', 'lists this'] as [string, string]], selected: 0 }
+
+    // Act
+    const screen = drawn(COLUMNS, { menu })
+    const rows = screen.rows.map(row => stripVTControlCharacters(row))
+
+    // Assert
+    expect(rows.at(-3)).toBe(' ❯ /help  lists this')
+    expect(rows.at(-4)).toMatch(/↑↓ choose · Tab completes · Enter runs · Esc closes$/)
+  })
+
   it('should hide the cursor while a question is open', () => {
     // Act
     const screen = drawn(COLUMNS, { replying: true, asking: true })

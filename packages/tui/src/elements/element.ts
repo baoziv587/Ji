@@ -9,6 +9,7 @@
 //   wrapped-text       text wrapped to the width
 //   first-that-fits    the first of several versions that fits
 //   rule               a dim rule with labels
+//   menu               keys and what they do, one chosen
 //   input              the input line, with the cursor in it
 //
 // An element is a plain object: `{ ...element, fill: true }` changes how it is laid out, and one with a `render` of its
