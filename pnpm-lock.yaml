@@ -217,12 +217,18 @@ importers:
       '@ji.dev/plugin-choices':
         specifier: workspace:*
         version: link:../../plugins/choices
+      '@ji.dev/plugin-compaction':
+        specifier: workspace:*
+        version: link:../../plugins/compaction
       '@ji.dev/plugin-files':
         specifier: workspace:*
         version: link:../../plugins/files
       '@ji.dev/plugin-shell':
         specifier: workspace:*
         version: link:../../plugins/shell
+      '@ji.dev/plugin-truncate-tool-results':
+        specifier: workspace:*
+        version: link:../../plugins/truncate-tool-results
       '@ji.dev/tui':
         specifier: workspace:*
         version: link:../../packages/tui
@@ -322,6 +328,15 @@ importers:
         specifier: ^0.2.2
         version: 0.2.2
 
+  plugins/compaction:
+    devDependencies:
+      '@ji.dev/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+      '@mariozechner/pi-ai':
+        specifier: ^0.73.1
+        version: 0.73.1(ws@8.21.3)(zod@4.6.5)
+
   plugins/files:
     dependencies:
       diff:
@@ -373,6 +388,15 @@ importers:
       '@ji.dev/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
+      '@ji.dev/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+      '@mariozechner/pi-ai':
+        specifier: ^0.73.1
+        version: 0.73.1(ws@8.21.3)(zod@4.6.5)
+
+  plugins/truncate-tool-results:
+    devDependencies:
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm

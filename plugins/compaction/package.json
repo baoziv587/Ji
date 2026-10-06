@@ -1,0 +1,20 @@
+{
+  "name": "@ji.dev/plugin-compaction",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Summarizes the older part of a long conversation so the history fits the model's context",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@ji.dev/llm": "workspace:*"
+  },
+  "devDependencies": {
+    "@ji.dev/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}
