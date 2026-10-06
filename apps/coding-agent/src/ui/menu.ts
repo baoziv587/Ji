@@ -14,6 +14,8 @@ export interface Command {
   hint: string
   /** What it does in the terminal. Without one, the line goes to the model as typed: a plugin knows what it means. */
   run?: (arg: string) => void
+  /** Where /help lists it, by name only among the others of its group; without one, under Commands with its hint. */
+  group?: string
 }
 
 /** What a key of the menu's did: the input after it, and whether what is in it is to be sent. */
@@ -36,9 +38,22 @@ export class CommandMenu {
     this.commands = commands
   }
 
-  /** `/think <level>` and what each does, for /help. */
+  /** The commands without a group: `/think` and what it does, for /help. */
   hints(): KeyHint[] {
-    return this.commands().map(hintOf)
+    return this.commands()
+      .filter(command => command.group === undefined)
+      .map(hintOf)
+  }
+
+  /** The names of the commands with a group, by group, in the order the groups first appear. */
+  groups(): Map<string, string[]> {
+    const groups = new Map<string, string[]>()
+    for (const { name, group } of this.commands()) {
+      if (group !== undefined) {
+        groups.set(group, [...(groups.get(group) ?? []), name])
+      }
+    }
+    return groups
   }
 
   /** The menu as the bars show it; none while no command is typed, or none matches. */
@@ -124,6 +139,7 @@ function completed(command: Command): Editing {
   return { ...EMPTY_EDITING, before: command.arg === undefined ? command.name : `${command.name} ` }
 }
 
+/** The name alone in the key column, so a long argument hint does not push every column out; the hint comes after it. */
 function hintOf({ name, arg, hint }: Command): KeyHint {
-  return [arg === undefined ? name : `${name} ${arg}`, hint]
+  return [name, arg === undefined ? hint : `${arg}  ${hint}`]
 }

@@ -55,13 +55,16 @@ describe('createSkillsFeature', () => {
     const dir = await skillsDir({ review: REVIEW, plain: 'Plain.\n' })
 
     // Act
-    const feature = await createSkillsFeature(dir)
+    const feature = createSkillsFeature(dir)
+    const atOnce = feature.commands?.map(c => c.name)
+    await feature.loading
 
     // Assert
-    expect(feature.commands?.map(c => [c.name, c.arg, c.hint])).toEqual([
-      ['/reload-skills', undefined, expect.stringContaining('reads')],
-      ['/plain', undefined, 'runs the skill'],
-      ['/review', '[target]', 'Reviews a change.'],
+    expect(atOnce).toEqual(['/reload-skills'])
+    expect(feature.commands?.map(c => [c.name, c.arg, c.hint, c.group])).toEqual([
+      ['/reload-skills', undefined, expect.stringContaining('reads'), undefined],
+      ['/plain', undefined, 'runs the skill', 'Skills'],
+      ['/review', '[target]', 'Reviews a change.', 'Skills'],
     ])
     expect(feature.commands?.slice(1).every(c => c.run === undefined)).toBe(true)
   })
@@ -69,11 +72,11 @@ describe('createSkillsFeature', () => {
   it('should hand the model the instructions for /name args and leave every other message alone', async () => {
     // Arrange
     const dir = await skillsDir({ review: REVIEW })
-    const feature = await createSkillsFeature(dir)
+    const feature = createSkillsFeature(dir)
     const [review] = await loadSkills(dir)
     const messages = [user('/review the diff'), user('hello'), user('/unknown'), user('/review')]
 
-    // Act
+    // Act: without waiting for the load, which the hook does itself
     const sent = await requestedBy(feature.plugin.request!, messages)
 
     // Assert
@@ -92,7 +95,8 @@ describe('createSkillsFeature', () => {
   it('should find a skill written after a reload, in the commands and for the model alike', async () => {
     // Arrange
     const dir = await skillsDir({})
-    const feature = await createSkillsFeature(dir)
+    const feature = createSkillsFeature(dir)
+    await feature.loading
     const before = feature.commands?.map(c => c.name)
 
     // Act

@@ -1,6 +1,9 @@
 // The screen: the conversation between two bars. On top, the model and its settings; at the bottom, the session's
 // usage, the status line, the commands menu while a `/` is typed, and the input line with the cursor in it. Both keep
 // a blank row at the terminal's edge and a column on each side of their text; only the rules run across.
+//
+// The menu takes a few rows at most and scrolls inside them, so the conversation keeps its room however many commands
+// match; the status line says which of them is chosen, so what is out of view is known to be there.
 
 import type { Editing, Element, KeyHint, View } from '@ji.dev/tui'
 import { styleText } from 'node:util'
@@ -55,6 +58,9 @@ export interface Menu {
   selected: number
 }
 
+/** The menu's rows at most: about as many as can be taken in at a glance, and never most of the screen. */
+export const MENU_ROWS = 8
+
 /** The bars around `content`, which takes the rows they leave. */
 export function viewOf(bars: Bars, content: Element): Element {
   return stackVertically([
@@ -64,7 +70,7 @@ export function viewOf(bars: Bars, content: Element): Element {
     content,
     createRuleElement(bars.usage),
     inset(createTextElement(statusLine(bars))),
-    bars.menu && inset(createMenuElement(bars.menu.items, bars.menu.selected)),
+    bars.menu && inset(capped(createMenuElement(bars.menu.items, bars.menu.selected), MENU_ROWS)),
     // Muted while a question is open, the cursor hidden: the keys are its own
     inset(createInputElement(bars.editing, { placeholder: placeholder(bars), muted: bars.asking })),
     createTextElement(''),
@@ -74,6 +80,11 @@ export function viewOf(bars: Bars, content: Element): Element {
 /** A bar's text, a column in from each side. */
 function inset(element: Element): Element {
   return padElement(element, { left: 1, right: 1 })
+}
+
+/** No taller than `rows`, whatever room there is: the element keeps its chosen row in view inside them. */
+function capped(element: Element, rows: number): Element {
+  return { render: (width, height) => element.render(width, Math.min(rows, height ?? rows)) }
 }
 
 /**
@@ -106,13 +117,15 @@ function statusLine(bars: Bars): string {
   // As careless as auto, until switching back to ask takes it back
   const allowed = bars.allowed === '' ? '' : styleText('yellow', bars.allowed)
   const queued = bars.queued === 0 ? '' : styleText('cyan', `${bars.queued} queued`)
+  // Which of the matching commands is chosen: the ones out of view are known to be there, and typing more narrows them
+  const chosen = bars.menu === undefined ? '' : dimText(`${bars.menu.selected + 1} of ${bars.menu.items.length}`)
 
   let below = ''
   if (bars.below > 0) {
     below = `${styleText('yellow', `↓ ${bars.below} more lines`)} ${paintKey('PgDn')}`
   }
 
-  return [details, bars.status, below, mode, allowed, queued, formatKeyHints(keysOf(bars))]
+  return [details, bars.status, below, mode, allowed, queued, chosen, formatKeyHints(keysOf(bars))]
     .filter(part => part !== '')
     .join(dimText(' · '))
 }

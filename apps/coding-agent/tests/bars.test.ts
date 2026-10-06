@@ -4,7 +4,7 @@ import type { Bars } from '../src/ui/bars.ts'
 import { stripVTControlCharacters } from 'node:util'
 import { displayWidth, EMPTY_EDITING } from '@ji.dev/tui'
 import { describe, expect, it } from 'vitest'
-import { viewOf } from '../src/ui/bars.ts'
+import { MENU_ROWS, viewOf } from '../src/ui/bars.ts'
 
 const COLUMNS = 80
 const ROWS = 12
@@ -89,6 +89,21 @@ describe('viewOf', () => {
     // Assert
     expect(rows.at(-3)).toBe(' ❯ /help  lists this')
     expect(rows.at(-4)).toMatch(/↑↓ choose · Tab completes · Enter runs · Esc closes$/)
+  })
+
+  it('should keep the menu to a few rows with the chosen one in view, and say which of them it is', () => {
+    // Arrange
+    const items = Array.from({ length: 20 }, (_, i): [string, string] => [`/skill${i}`, 'does something'])
+
+    // Act
+    const screen = viewOf(bars({ menu: { items, selected: 12 } }), CONTENT).render(COLUMNS, 30)
+    const rows = screen.rows.map(row => stripVTControlCharacters(row))
+    const menuRows = rows.slice(-2 - MENU_ROWS, -2)
+
+    // Assert
+    expect(menuRows.every(row => row.includes('/skill'))).toBe(true)
+    expect(rows.at(-3 - MENU_ROWS)).toMatch(/13 of 20 · ↑↓ choose/)
+    expect(menuRows.filter(row => row.startsWith(' ❯'))).toEqual([' ❯ /skill12  does something'])
   })
 
   it('should hide the cursor while a question is open', () => {

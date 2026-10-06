@@ -43,8 +43,12 @@ function think(conversation: Conversation, arg: string): void {
 }
 
 function help(menu: CommandMenu, tools: string[]): void {
+  const groups = [...menu.groups()].map(([group, names]): HelpSection => {
+    return { title: `${group} (${names.length})`, rows: names.join(', ') }
+  })
   const sections: HelpSection[] = [
     { title: 'Commands', rows: menu.hints() },
+    ...groups,
     {
       title: 'While replying',
       rows: [
