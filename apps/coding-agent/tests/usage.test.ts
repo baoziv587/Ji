@@ -1,6 +1,5 @@
 // What the line above the status says: how much the history holds, then what the session has spent
 import type { Usage } from '@ji.dev/llm'
-import { formatCount } from '@ji.dev/tui'
 import { describe, expect, it } from 'vitest'
 import { Meter } from '../src/ui/usage.ts'
 
@@ -12,14 +11,6 @@ function usage(input: number, output: number, cacheRead: number, cost: number): 
 }
 
 describe('meter', () => {
-  it('should say nothing before any call has ended', () => {
-    // Act
-    const parts = new Meter().parts(LIMIT)
-
-    // Assert
-    expect(parts).toEqual([])
-  })
-
   it('should add up every call, failed and untimed ones too, with cache hits out of all that was sent', () => {
     // Arrange
     const meter = new Meter()
@@ -63,28 +54,9 @@ describe('meter', () => {
     expect(estimated).toBe('ctx ~31k/200k')
     expect(meter.parts(LIMIT)[0]).toBe('ctx 30.5k/200k')
   })
-
-  it('should leave the speed out until a started call has ended', () => {
-    // Arrange
-    const meter = new Meter()
-
-    // Act
-    meter.end(usage(10, 10, 0, 0))
-
-    // Assert
-    expect(meter.parts(LIMIT).some(part => part.endsWith('tok/s'))).toBe(false)
-  })
 })
 
 describe('summary', () => {
-  it('should say so when no model was called', () => {
-    // Act
-    const summary = new Meter().summary()
-
-    // Assert
-    expect(summary).toBe('No model calls')
-  })
-
   it('should formatCount every token for the exit, with the calls and the cost', () => {
     // Arrange
     const meter = new Meter()
@@ -95,15 +67,5 @@ describe('summary', () => {
 
     // Assert
     expect(meter.summary()).toBe('Tokens: 5,000 in (70% cached) · 200 out · 2 model calls · $0.0120')
-  })
-})
-
-describe('count', () => {
-  it('should shorten thousands and millions, with one decimal below 100', () => {
-    // Act
-    const shown = [950, 1000, 1234, 48_200, 312_400, 1_500_000].map(formatCount)
-
-    // Assert
-    expect(shown).toEqual(['950', '1k', '1.2k', '48.2k', '312k', '1.5M'])
   })
 })

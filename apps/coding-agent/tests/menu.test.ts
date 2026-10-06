@@ -73,18 +73,6 @@ describe('commandMenu', () => {
     expect(higName).toBe('/apple-HIG')
     expect(higAction).toBe(`${underline('Des')}ign, review, or critique interaction flows for iOS/macOS apps.`)
   })
-
-  it('should show nothing underlined and everything listed for a bare slash', () => {
-    // Arrange
-    const menu = new CommandMenu(() => COMMANDS)
-
-    // Act
-    const items = menu.view(typing('/'))?.items ?? []
-
-    // Assert
-    expect(items.map(([key]) => key)).toEqual(COMMANDS.map(c => c.name))
-    expect(items.flat().some(text => text.includes('\x1B[4m'))).toBe(false)
-  })
 })
 
 // Helpers

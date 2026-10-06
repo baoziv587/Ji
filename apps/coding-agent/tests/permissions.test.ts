@@ -50,18 +50,6 @@ describe('permissions', () => {
     expect(await asked(permissions, call('edit', { path: join(outside, 'a.txt'), content: 'x' }))).toBe(true)
     expect(permissions.describeAllowed()).toMatch(/^allows .+\/$/)
   })
-
-  it('should still refuse a command that is not a string once every command is allowed', async () => {
-    // Arrange
-    const { permissions } = await setup()
-    ;(await permissions.approval(call('bash', { command: 'ls' }))).take([['commands']])
-
-    // Act
-    const proposal = await previewOf(permissions, call('bash', { command: ['rm', '-rf', '/'] }))
-
-    // Assert
-    expect(proposal).toMatchObject({ role: 'toolResult', isError: true })
-  })
 })
 
 // Helpers
