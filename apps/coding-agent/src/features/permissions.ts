@@ -8,12 +8,11 @@
 
 import type { ToolCall } from '@ji.dev/llm'
 import type { Option, Preview, Reply } from '@ji.dev/plugin-choices'
-import type { FilesPlugin } from '@ji.dev/plugin-files'
+import type { FilesPlugin, Resolver } from '@ji.dev/plugin-files'
 import type { ShellPlugin } from '@ji.dev/plugin-shell'
 import { homedir } from 'node:os'
 import { dirname, sep } from 'node:path'
 import { DISMISSED } from '@ji.dev/plugin-choices'
-import { localWorkspace } from '@ji.dev/plugin-files'
 
 export type Mode = 'ask' | 'auto'
 
@@ -46,18 +45,17 @@ export class Permissions {
   private readonly shellTools: ShellPlugin
   private readonly fileNames: Set<string>
   private readonly shellNames: Set<string>
-  /** Refuses every path outside the root: only to tell where a path leads. */
-  private readonly rooted: ReturnType<typeof localWorkspace>
-  /** Every file, the root's or not: to tell a file's real path. */
-  private readonly anywhere: ReturnType<typeof localWorkspace>
+  /** Tells where a path really leads, in the files plugin's own terms; the root is where '.' leads. */
+  private readonly workspace: Resolver
+  private top: Promise<string> | undefined
 
-  constructor(root: string, fileTools: FilesPlugin, shellTools: ShellPlugin) {
+  /** `workspace` is the one the files plugin was given: it must reach every file, the root's or not. */
+  constructor(workspace: Resolver, fileTools: FilesPlugin, shellTools: ShellPlugin) {
+    this.workspace = workspace
     this.fileTools = fileTools
     this.shellTools = shellTools
     this.fileNames = new Set(fileTools.tools?.map(t => t.name))
     this.shellNames = new Set(shellTools.tools?.map(t => t.name))
-    this.rooted = localWorkspace(root)
-    this.anywhere = localWorkspace(root, { allow: () => true })
   }
 
   get mode(): Mode {
@@ -150,15 +148,20 @@ export class Permissions {
     return proposal
   }
 
+  /** A path that cannot be resolved counts as outside: better asked about than let through. */
   private async outside(call: ToolCall): Promise<boolean> {
     const path: unknown = call.arguments.path
     if (!this.fileNames.has(call.name) || typeof path !== 'string') {
       return false
     }
-    return this.rooted.resolve(path).then(
-      () => false,
-      () => true,
-    )
+
+    this.top ??= this.workspace.resolve('.')
+    try {
+      const [real, root] = await Promise.all([this.workspace.resolve(path), this.top])
+      return real !== root && !real.startsWith(root + sep)
+    } catch {
+      return true
+    }
   }
 
   /** The real path of the file a call is about; undefined for a call without one. */
@@ -167,7 +170,7 @@ export class Permissions {
     if (typeof path !== 'string') {
       return undefined
     }
-    return this.anywhere.resolve(path).catch(() => undefined)
+    return this.workspace.resolve(path).catch(() => undefined)
   }
 
   private async readAllowed(call: ToolCall): Promise<boolean> {

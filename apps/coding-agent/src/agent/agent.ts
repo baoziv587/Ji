@@ -2,28 +2,28 @@
 // was started from. What of theirs waits for a yes is the permissions' to say, and how it is asked, the screen's.
 
 import type { Agent, AnyPlugin, Plugin, ThinkingLevel } from '@ji.dev/llm'
-import type { FilesPlugin } from '@ji.dev/plugin-files'
-import type { ShellPlugin } from '@ji.dev/plugin-shell'
+import type { FilesPlugin, Workspace } from '@ji.dev/plugin-files'
+import type { CommandExecutor, ShellPlugin } from '@ji.dev/plugin-shell'
 import type { Feature } from '../features/feature.ts'
 import process from 'node:process'
 import { createAgent } from '@ji.dev/llm'
-import { files, localWorkspace } from '@ji.dev/plugin-files'
-import { createLocalExecutor, createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
+import { files } from '@ji.dev/plugin-files'
+import { createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
 
 /** The tool plugins, built before the features: the permissions need the files' and the shell's to tell their calls. */
 export interface Plugins {
-  /** read and edit, on any file: what lies outside the root is asked about, not refused. */
+  /** read and edit, on any file the workspace reaches: what lies outside the root is asked about, not refused. */
   files: FilesPlugin
-  /** bash, run in the root. */
+  /** bash, run by the executor. */
   shell: ShellPlugin
-  /** grep, run in the root. */
+  /** grep, run by the executor. */
   search: Plugin
 }
 
-export function createPlugins(root: string): Plugins {
-  const executor = createLocalExecutor({ cwd: root })
+/** Where the files are and where commands run: the two backends, local or remote, chosen by whoever starts the agent. */
+export function createPlugins(workspace: Workspace, executor: CommandExecutor): Plugins {
   return {
-    files: files(localWorkspace(root, { allow: () => true })),
+    files: files(workspace),
     shell: createShellPlugin(executor),
     search: createSearchPlugin(executor),
   }

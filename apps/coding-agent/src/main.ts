@@ -5,6 +5,8 @@ import process from 'node:process'
 import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
 import { choices } from '@ji.dev/plugin-choices'
+import { localWorkspace } from '@ji.dev/plugin-files'
+import { createLocalExecutor } from '@ji.dev/plugin-shell'
 import { abbreviateHomePath, dimText, formatKeyHint, Screen, Status } from '@ji.dev/tui'
 import { createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
@@ -25,10 +27,14 @@ const WORKSPACE = abbreviateHomePath(ROOT)
 
 const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
 
-const plugins = createPlugins(ROOT)
+/** The local machine: files anywhere on it, the permissions say which are asked about, and commands run in the root. */
+const workspace = localWorkspace(ROOT, { allow: () => true })
+const executor = createLocalExecutor({ cwd: ROOT })
+
+const plugins = createPlugins(workspace, executor)
 
 /** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. */
-const permissions = new Permissions(ROOT, plugins.files, plugins.shell)
+const permissions = new Permissions(workspace, plugins.files, plugins.shell)
 
 /**
  * What the agent runs with: each plugin, and what the terminal asks before its calls. The shell's before the files

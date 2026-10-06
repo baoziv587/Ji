@@ -72,9 +72,10 @@ async function setup(): Promise<{ permissions: Permissions; outside: string }> {
   await writeFile(join(outside, 'a.txt'), 'a\n')
   await writeFile(join(outside, 'b.txt'), 'b\n')
 
-  const fileTools = files(localWorkspace(root, { allow: () => true }))
+  const workspace = localWorkspace(root, { allow: () => true })
+  const fileTools = files(workspace)
   const shellTools = createShellPlugin(createMemoryExecutor(() => ({})))
-  return { permissions: new Permissions(root, fileTools, shellTools), outside }
+  return { permissions: new Permissions(workspace, fileTools, shellTools), outside }
 }
 
 function call(name: string, args: Record<string, unknown>): ToolCall {
