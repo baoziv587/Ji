@@ -9,6 +9,7 @@
 
 import type { BundledLanguage, GrammarState, Highlighter } from 'shiki'
 import process from 'node:process'
+import { styleText } from 'node:util'
 import { bundledLanguages, createHighlighter } from 'shiki'
 
 /** A background over part of a line: from `start` to `end`, in UTF-16 units. A later one covers an earlier. */
@@ -30,6 +31,12 @@ const THEME = LIGHT ? 'github-light' : 'github-dark'
 export const DIFF_COLORS = LIGHT
   ? { removed: { line: '#ffebe9', changed: '#ffcecb' }, added: { line: '#e6ffec', changed: '#abf2bc' } }
   : { removed: { line: '#3c1e22', changed: '#6e2f33' }, added: { line: '#16331f', changed: '#1f5f30' } }
+
+/**
+ * Inline code: International Klein Blue on a light background. On a dark one that blue cannot be read, so it is the
+ * same hue made lighter (OKLCH 0.66 0.17 263), at 5.2:1 against a #1e1e1e background.
+ */
+const INLINE_CODE: `#${string}` = LIGHT ? '#002fa7' : '#598df9'
 
 /** A token's style bits, as vscode-textmate numbers them, each with its SGR code. */
 const STYLES = [
@@ -75,6 +82,11 @@ export async function loadCodePainter(lang: BundledLanguage | undefined): Promis
 export async function highlightCode(code: string, lang: BundledLanguage | undefined): Promise<string[]> {
   const paint = (await loadCodePainter(lang))()
   return code.split('\n').map(line => paint(line))
+}
+
+/** `text` as inline code, in its own blue; only the foreground is set, so styles around it stay. */
+export function paintInlineCode(text: string): string {
+  return styleText(INLINE_CODE, text)
 }
 
 /**

@@ -135,15 +135,18 @@ export function dimText(s: string): string {
   return styleText('dim', s)
 }
 
+/** Every key a hint names, so keys read alike wherever they show: cyan and bold. */
+export function paintKey(key: string): string {
+  return styleText(['cyan', 'bold'], key)
+}
+
 /**
- * The key in bold, so it stands out from the dim words around it; in `color` too where its part of the line has one.
- * Weight, not a color of its own: the colors already say who or what (cyan you, yellow a warning).
+ * The key, cyan and bold, before the dim words for what it does; where its part of the line has a color of its own,
+ * the words are in `color` instead.
  */
 export function formatKeyHint(key: string, action: string, color?: 'cyan' | 'yellow'): string {
-  if (color === undefined) {
-    return `${styleText('bold', key)} ${dimText(action)}`
-  }
-  return `${styleText([color, 'bold'], key)} ${styleText(color, action)}`
+  const words = color === undefined ? dimText(action) : styleText(color, action)
+  return `${paintKey(key)} ${words}`
 }
 
 export function formatKeyHints(list: KeyHint[]): string {

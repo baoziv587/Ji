@@ -6,8 +6,13 @@
 import type { Token } from 'marked'
 import { styleText } from 'node:util'
 import { Lexer } from 'marked'
+import { paintInlineCode } from '../highlight.ts'
 
-export type Format = Extract<Parameters<typeof styleText>[0], readonly unknown[]>[number]
+/** A style styleText knows. */
+type StyleFormat = Extract<Parameters<typeof styleText>[0], readonly unknown[]>[number]
+
+/** A style styleText knows, or `code`: inline code, in a color of its own. */
+export type Format = StyleFormat | 'code'
 
 /** Text in the styles around it: a line or a cell is a run of these. */
 export interface Piece {
@@ -28,7 +33,9 @@ export function textOf(pieces: Piece[]): string {
 }
 
 export function paint({ text, formats }: Piece): string {
-  return formats.length === 0 ? text : styleText(formats, text)
+  const styles = formats.filter((format): format is StyleFormat => format !== 'code')
+  const styled = styles.length === 0 ? text : styleText(styles, text)
+  return formats.includes('code') ? paintInlineCode(styled) : styled
 }
 
 /** Inline tokens as styled pieces, in `formats` and the styles of their own: a link has its address after it. */
@@ -42,7 +49,7 @@ export function piecesOf(tokens: Token[], formats: Format[]): Piece[] {
       case 'del':
         return piecesOf(token.tokens ?? [], [...formats, 'strikethrough'])
       case 'codespan':
-        return [{ text: token.text, formats: [...formats, 'magenta'] }]
+        return [{ text: token.text, formats: [...formats, 'code'] }]
       case 'link': {
         const text = piecesOf(token.tokens ?? [], [...formats, 'underline'])
         return textOf(text) === token.href
