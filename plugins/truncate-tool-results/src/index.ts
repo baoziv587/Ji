@@ -87,8 +87,10 @@ export function truncateText(text: string, maxChars: number): string {
   }
 
   const budget = Math.max(0, maxChars - NOTE_ROOM)
-  const headEnd = snapBack(text, Math.floor(budget * 0.75))
-  const tailStart = snapForward(text, text.length - (budget - Math.floor(budget * 0.75)))
+  const headBudget = Math.floor(budget * 0.75)
+  const tailBudget = budget - headBudget
+  const headEnd = snapBack(text, headBudget)
+  const tailStart = snapForward(text, text.length - tailBudget)
 
   const lines = countNewlines(text, headEnd, tailStart)
   const note = `\n[... ${tailStart - headEnd} characters (${lines} lines) omitted; to see them, narrow the call: a line range, a filter, or head/tail ...]\n`
@@ -98,14 +100,18 @@ export function truncateText(text: string, maxChars: number): string {
 /** The head ends after the last newline in its final 20%, else at `end`; never inside a surrogate pair. */
 function snapBack(text: string, end: number): number {
   const newline = text.lastIndexOf('\n', end - 1)
-  const snapped = newline >= 0 && newline < end && newline + 1 >= end * (1 - SNAP) ? newline + 1 : end
+  const nearEnd = newline >= 0 && newline < end && newline + 1 >= end * (1 - SNAP)
+  const snapped = nearEnd ? newline + 1 : end
+
   return isLowSurrogate(text.charCodeAt(snapped)) ? snapped - 1 : snapped
 }
 
 /** The tail starts after the first newline in its first 20%, else at `start`; never inside a surrogate pair. */
 function snapForward(text: string, start: number): number {
   const newline = text.indexOf('\n', start)
-  const snapped = newline >= 0 && newline + 1 <= start + (text.length - start) * SNAP ? newline + 1 : start
+  const nearStart = newline >= 0 && newline + 1 <= start + (text.length - start) * SNAP
+  const snapped = nearStart ? newline + 1 : start
+
   return isLowSurrogate(text.charCodeAt(snapped)) ? snapped + 1 : snapped
 }
 
