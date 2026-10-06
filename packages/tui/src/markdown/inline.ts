@@ -1,7 +1,9 @@
 // Inline Markdown: bold, italic, struck out, code and links, as text in the styles around it.
 //
-//   piecesOf      marked's inline tokens as styled pieces: a table's cells, and a line once it ends
-//   InlineStream  a line as it streams in: plain text goes at once, a span from where it may open until it closes
+//   flattenInlineTokens  marked's nested inline tokens as a flat list of styled pieces: a table's cells, and a line
+//                        once it ends
+//   InlineStream         a line as it streams in: plain text goes at once, a span from where it may open until it
+//                        closes
 
 import type { Token } from 'marked'
 import { styleText } from 'node:util'
@@ -15,7 +17,7 @@ type StyleFormat = Extract<Parameters<typeof styleText>[0], readonly unknown[]>[
 export type Format = StyleFormat | 'code'
 
 /** Text in the styles around it: a line or a cell is a run of these. */
-export interface Piece {
+export interface StyledText {
   text: string
   formats: Format[]
 }
@@ -28,30 +30,33 @@ const LETTER_OR_DIGIT = /[A-Z0-9]/i
 /** What a backslash escapes: ASCII punctuation. */
 const ESCAPED = new Set('!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~')
 
-export function textOf(pieces: Piece[]): string {
+export function textOf(pieces: StyledText[]): string {
   return pieces.map(p => p.text).join('')
 }
 
-export function paint({ text, formats }: Piece): string {
+export function paint({ text, formats }: StyledText): string {
   const styles = formats.filter((format): format is StyleFormat => format !== 'code')
   const styled = styles.length === 0 ? text : styleText(styles, text)
   return formats.includes('code') ? paintInlineCode(styled) : styled
 }
 
-/** Inline tokens as styled pieces, in `formats` and the styles of their own: a link has its address after it. */
-export function piecesOf(tokens: Token[], formats: Format[]): Piece[] {
-  return tokens.flatMap((token): Piece[] => {
+/**
+ * Inline tokens, nested as bold in a link, flattened into styled pieces: each in `formats` and the styles around it;
+ * a link has its address after it.
+ */
+export function flattenInlineTokens(tokens: Token[], formats: Format[]): StyledText[] {
+  return tokens.flatMap((token): StyledText[] => {
     switch (token.type) {
       case 'strong':
-        return piecesOf(token.tokens ?? [], [...formats, 'bold'])
+        return flattenInlineTokens(token.tokens ?? [], [...formats, 'bold'])
       case 'em':
-        return piecesOf(token.tokens ?? [], [...formats, 'italic'])
+        return flattenInlineTokens(token.tokens ?? [], [...formats, 'italic'])
       case 'del':
-        return piecesOf(token.tokens ?? [], [...formats, 'strikethrough'])
+        return flattenInlineTokens(token.tokens ?? [], [...formats, 'strikethrough'])
       case 'codespan':
         return [{ text: token.text, formats: [...formats, 'code'] }]
       case 'link': {
-        const text = piecesOf(token.tokens ?? [], [...formats, 'underline'])
+        const text = flattenInlineTokens(token.tokens ?? [], [...formats, 'underline'])
         return textOf(text) === token.href
           ? text
           : [...text, { text: ` (${token.href})`, formats: [...formats, 'dim'] }]
@@ -77,13 +82,13 @@ export function piecesOf(tokens: Token[], formats: Format[]): Piece[] {
  * a space (`a * b`): either would hold up the rest of the line, waiting for a close that seldom comes.
  */
 export class InlineStream {
-  private readonly emit: (pieces: Piece[]) => void
+  private readonly emit: (pieces: StyledText[]) => void
   private readonly formats: Format[]
   private pending = ''
   /** The last character let go, to tell whether a mark after it may open a span. */
   private last = ''
 
-  constructor(emit: (pieces: Piece[]) => void, formats: Format[]) {
+  constructor(emit: (pieces: StyledText[]) => void, formats: Format[]) {
     this.emit = emit
     this.formats = formats
   }
@@ -96,7 +101,7 @@ export class InlineStream {
   /** The line has ended: what waits is read as it is. */
   end(): void {
     if (this.pending !== '') {
-      this.emit(piecesOf(Lexer.lexInline(this.pending), this.formats))
+      this.emit(flattenInlineTokens(Lexer.lexInline(this.pending), this.formats))
     }
     this.pending = ''
     this.last = ''
@@ -114,7 +119,7 @@ export class InlineStream {
 
       const [first, ...rest] = Lexer.lexInline(this.pending)
       if (first.type !== 'text' && rest.length > 0) {
-        this.emit(piecesOf([first], this.formats))
+        this.emit(flattenInlineTokens([first], this.formats))
         this.last = first.raw.at(-1) ?? ''
         this.pending = this.pending.slice(first.raw.length)
       } else if (this.neverCloses()) {
