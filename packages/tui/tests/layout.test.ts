@@ -1,30 +1,8 @@
-// Fitting a line to its width: the first version that fits, a path shortened from its start, a rule with labels, help
+// A path shortened from its start, or with the home folder as ~; help
 import { homedir } from 'node:os'
 import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import {
-  abbreviateHomePath,
-  drawRuleWithLabels,
-  formatHelpSections,
-  leftTruncatedPaths,
-  pickFirstThatFits,
-} from '../src/layout.ts'
-import { displayWidth } from '../src/text.ts'
-
-describe('pickFirstThatFits', () => {
-  it('should give the first line that fits, and none when none does', () => {
-    // Arrange
-    const lines = ['a long line', 'short', 'x']
-
-    // Act
-    const fitting = pickFirstThatFits(5, lines)
-    const none = pickFirstThatFits(0, lines)
-
-    // Assert
-    expect(fitting).toBe('short')
-    expect(none).toBeUndefined()
-  })
-})
+import { abbreviateHomePath, formatHelpSections, leftTruncatedPaths } from '../src/layout.ts'
 
 describe('leftTruncatedPaths', () => {
   it('should leave out the first folders one at a time, keeping the last', () => {
@@ -50,25 +28,6 @@ describe('abbreviateHomePath', () => {
     expect(inside).toBe('~/projects/app')
     expect(itself).toBe('~')
     expect(beside).toBe(`${home}-other/app`)
-  })
-})
-
-describe('drawRuleWithLabels', () => {
-  it('should keep as many labels as fit, from the first, and the rule its full width', () => {
-    // Act
-    const rule = stripVTControlCharacters(drawRuleWithLabels(30, ['in 1.2k', 'cache 50%', 'x'.repeat(20)]))
-
-    // Assert
-    expect(rule).toMatch(/─ in 1\.2k · cache 50% ─$/)
-    expect(displayWidth(rule)).toBe(30)
-  })
-
-  it('should draw a plain rule when no label fits', () => {
-    // Act
-    const rule = stripVTControlCharacters(drawRuleWithLabels(10, ['too long to fit']))
-
-    // Assert
-    expect(rule).toBe('─'.repeat(10))
   })
 })
 

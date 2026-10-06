@@ -1,13 +1,18 @@
 // The bars: a title that gives up the workspace first, the keys that matter now, the usage as far as it fits, and an input line that keeps the cursor in view
+import type { Element, Rendered } from '@ji.dev/tui'
 import type { Bars } from '../src/ui/bars.ts'
 import { stripVTControlCharacters } from 'node:util'
 import { displayWidth, EMPTY_EDITING } from '@ji.dev/tui'
 import { describe, expect, it } from 'vitest'
-import { frameOf } from '../src/ui/bars.ts'
+import { viewOf } from '../src/ui/bars.ts'
 
 const COLUMNS = 80
+const ROWS = 12
 
-describe('frameOf', () => {
+/** The conversation's part, empty. */
+const CONTENT: Element = { fill: true, render: () => ({ rows: [] }) }
+
+describe('viewOf', () => {
   it('should give up the workspace before the model, its first folders first', () => {
     // Arrange
     const root = '~/projects/pi-rsi/apps/coding-agent'
@@ -51,12 +56,12 @@ describe('frameOf', () => {
     const usage = ['in 1.2k · out 300', 'cache 50%', `${'x'.repeat(60)} tok/s`]
 
     // Act
-    const [rule] = frameOf(COLUMNS, bars({ usage })).bottom.map(line => stripVTControlCharacters(line))
+    const rule = stripVTControlCharacters(drawn(COLUMNS, { usage }).rows.at(-4)!)
 
     // Assert
     expect(rule).toContain('in 1.2k · out 300 · cache 50% ─')
     expect(rule).not.toContain('tok/s')
-    expect(displayWidth(rule)).toBe(COLUMNS - 1)
+    expect(displayWidth(rule)).toBe(COLUMNS)
   })
 
   it('should scroll a long input sideways, keeping the cursor in view', () => {
@@ -64,13 +69,40 @@ describe('frameOf', () => {
     const editing = { ...EMPTY_EDITING, before: `${'a'.repeat(200)}end` }
 
     // Act
-    const frame = frameOf(COLUMNS, bars({ editing }))
-    const input = stripVTControlCharacters(frame.bottom[2])
+    const screen = drawn(COLUMNS, { editing })
+    const input = stripVTControlCharacters(screen.rows.at(-2)!)
 
     // Assert
     expect(input).toMatch(/aend$/)
     expect(displayWidth(input)).toBeLessThan(COLUMNS)
-    expect(frame.cursor).toEqual({ row: 2, column: displayWidth(input) })
+    expect(screen.cursor).toEqual({ row: ROWS - 2, column: displayWidth(input) })
+  })
+
+  it('should hide the cursor while a question is open', () => {
+    // Act
+    const screen = drawn(COLUMNS, { replying: true, asking: true })
+
+    // Assert
+    expect(screen.cursor).toBeUndefined()
+  })
+
+  it('should give the conversation the rows the bars leave', () => {
+    // Arrange
+    const given: (number | undefined)[] = []
+    const content: Element = {
+      fill: true,
+      render: (_, height) => {
+        given.push(height)
+        return { rows: [] }
+      },
+    }
+
+    // Act
+    const screen = viewOf(bars({}), content).render(COLUMNS, ROWS)
+
+    // Assert
+    expect(given).toEqual([ROWS - 7])
+    expect(screen.rows).toHaveLength(ROWS)
   })
 })
 
@@ -96,10 +128,14 @@ function bars(changes: Partial<Bars>): Bars {
   }
 }
 
+function drawn(columns: number, changes: Partial<Bars>): Rendered {
+  return viewOf(bars(changes), CONTENT).render(columns, ROWS)
+}
+
 function titleOf(columns: number, changes: Partial<Bars>): string {
-  return stripVTControlCharacters(frameOf(columns, bars(changes)).top[1]).trim()
+  return stripVTControlCharacters(drawn(columns, changes).rows[1]).trim()
 }
 
 function statusOf(changes: Partial<Bars>): string {
-  return stripVTControlCharacters(frameOf(COLUMNS, bars(changes)).bottom[1])
+  return stripVTControlCharacters(drawn(COLUMNS, changes).rows.at(-3)!)
 }

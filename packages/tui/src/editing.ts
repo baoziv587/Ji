@@ -1,10 +1,8 @@
-// The line typed in a bar: applyKey(state, key) gives the next state, and renderInputLine draws it.
+// The line typed in a bar: applyKey(state, key) gives the next state, and createInputElement draws it. formatKeypress
+// names a key, for a switch over the ones a program handles.
 //
 //   ←/→ and Ctrl+A/E move · Backspace/Delete · Ctrl+U/K delete to the start/end · Ctrl+W deletes a word
 //   Enter is left to the caller, which sends the text; inside a paste it is a space, so a paste sends nothing
-
-import { styleText } from 'node:util'
-import { dimText, displayWidth, fitToWidth, tailToWidth } from './text.ts'
 
 export interface Editing {
   /** The text before the cursor. */
@@ -21,19 +19,7 @@ export interface Keypress {
   char?: string
   ctrl?: boolean
   meta?: boolean
-}
-
-/** The input line drawn: its row, and the cursor's column in it. */
-export interface InputLine {
-  line: string
-  column: number
-}
-
-export interface InputLineOptions {
-  /** Shown dim while nothing is typed. */
-  placeholder: string
-  /** The keys are something else's: the prompt is gray and the text dim. */
-  muted?: boolean
+  shift?: boolean
 }
 
 export const EMPTY_EDITING: Editing = { before: '', after: '', pasting: false }
@@ -86,30 +72,24 @@ export function applyKey(s: Editing, key: Keypress): Editing {
       return { ...s, after: after.slice(firstGrapheme(after).length) }
   }
 
-  const printable = key.char !== undefined && key.char !== '' && !/\p{Cc}/u.test(key.char)
-  return printable && key.meta !== true ? { ...s, before: before + key.char } : s
+  return isPrintable(key.char) && key.meta !== true ? { ...s, before: before + key.char } : s
 }
 
-/** The prompt, then the text around the cursor, scrolled sideways to keep the cursor in view. */
-export function renderInputLine(
-  editing: Editing,
-  width: number,
-  { placeholder, muted = false }: InputLineOptions,
-): InputLine {
-  const prompt = `${styleText(muted ? 'gray' : 'cyan', '›')} `
-  const space = width - 2
-  if (editingText(editing) === '') {
-    return { line: prompt + fitToWidth(dimText(placeholder), space), column: 2 }
+/** `ctrl+o`, `shift+tab`, `return`, `up`; a character typed without Ctrl or Alt is itself: `a`, `A`, `/`. */
+export function formatKeypress(key: Keypress): string {
+  if (isPrintable(key.char) && key.ctrl !== true && key.meta !== true) {
+    return key.char
   }
 
-  // At least the cursor's own cell stays free after the text before it
-  const left = tailToWidth(editing.before, space - 1)
-  const right = fitToWidth(editing.after, space - displayWidth(left))
-  const text = left + right
-  return { line: prompt + (muted ? dimText(text) : text), column: 2 + displayWidth(left) }
+  const modifiers = (['ctrl', 'meta', 'shift'] as const).filter(modifier => key[modifier] === true)
+  return [...modifiers, key.name ?? key.char ?? ''].join('+')
 }
 
 const graphemes = new Intl.Segmenter()
+
+function isPrintable(char: string | undefined): char is string {
+  return char !== undefined && char !== '' && !/\p{Cc}/u.test(char)
+}
 
 function firstGrapheme(text: string): string {
   return graphemes.segment(text)[Symbol.iterator]().next().value?.segment ?? ''

@@ -1,5 +1,4 @@
-// Fitting a line to the width it has: the first of several versions that fits, a path shortened from its start, a
-// rule with labels at its end; and a help screen of keys in columns.
+// A path shortened to fit, from its start, or with the home folder as `~`; and a help screen of keys in columns.
 
 import type { KeyHint } from './text.ts'
 import { homedir } from 'node:os'
@@ -10,14 +9,6 @@ import { dimText, displayWidth, paintKey } from './text.ts'
 export interface HelpSection {
   title: string
   rows: KeyHint[] | string
-}
-
-/** The narrowest a rule's lines run before its labels, for it to still read as a rule. */
-const MIN_RULE = 8
-
-/** The first of `lines`, longest first, that fits in `width` columns; undefined when none does. */
-export function pickFirstThatFits(width: number, lines: string[]): string | undefined {
-  return lines.find(line => displayWidth(line) <= width)
 }
 
 /** `~/a/b/c`, then `…/b/c`, then `…/c`: the path with its first folders left out, one at a time. */
@@ -37,18 +28,6 @@ export function abbreviateHomePath(path: string): string {
     return path
   }
   return `~${path.slice(home.length)}`
-}
-
-/** A dim rule `width` columns wide with as many of `labels` at its right end as fit, from the first. */
-export function drawRuleWithLabels(width: number, labels: string[]): string {
-  for (let shown = labels.length; shown > 0; shown--) {
-    const label = ` ${labels.slice(0, shown).join(' · ')} `
-    const left = width - displayWidth(label) - 1
-    if (left >= MIN_RULE) {
-      return dimText(`${'─'.repeat(left)}${label}─`)
-    }
-  }
-  return dimText('─'.repeat(width))
 }
 
 /** Each section under its title: keys in bold, lined up in one column across sections; text wrapped to `width`. */

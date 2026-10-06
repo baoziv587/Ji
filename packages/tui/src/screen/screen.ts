@@ -1,14 +1,13 @@
-// The whole terminal, taken over like a full-screen program (the alternate screen), in three parts:
-//
-//   top bar      fixed rows, drawn by the caller
-//   content      everything the program writes to stdout, kept by a headless terminal with its own scrollback and
-//                drawn a window at a time, with a scrollbar in the last column; the wheel and PgUp/PgDn scroll it
-//   bottom bar   fixed rows, drawn by the caller, with the cursor where it says
+// The whole terminal, taken over like a full-screen program (the alternate screen), and drawn from a tree of elements
+// the program builds again for every frame (RFC-0008). One of them is `content`: everything the program writes to
+// stdout, kept by a headless terminal with its own scrollback and drawn a window at a time, with a scrollbar in its last
+// column; the wheel and PgUp/PgDn scroll it. It is as big as the tree gives it room, and the headless terminal takes
+// that size, as on a resize of the terminal.
 //
 // To the program, stdout is the content area: its writes go to the headless terminal, and its columns and rows are
 // that terminal's, so clack wraps and redraws there as in any terminal of that size. Keys come from `keys`, which is
-// stdin without the mouse's reports and PgUp/PgDn, and emits readline's keypress events. On stop, or when the process
-// exits, the content is printed to the normal screen and stays in its scrollback.
+// stdin without the mouse's reports and PgUp/PgDn, and emits readline's keypress events; the screen is drawn again after
+// each. On stop, or when the process exits, the content is printed to the normal screen and stays in its scrollback.
 //
 // The content comes in two views, each its own headless terminal, and toggle() shows the other one. stdout writes
 // to both; `brief` and `full` write to one only, for what each view shows its own way. A prompt redraws in both
@@ -18,6 +17,7 @@
 // `live` keeps a few rows at the end of the content, in both views: every write goes in above them.
 
 import type { IBufferCell, IMarker, Terminal } from '@xterm/headless'
+import type { Element, Rendered } from '../elements/element.ts'
 import { Buffer } from 'node:buffer'
 import process from 'node:process'
 import { emitKeypressEvents } from 'node:readline'
@@ -26,14 +26,6 @@ import xterm from '@xterm/headless'
 import { Anchors } from './anchors.ts'
 import { lineOf, textOf } from './cells.ts'
 import { Live } from './live.ts'
-
-/** What the bars show: their lines, each narrower than the terminal, and the cursor in the bottom one. */
-export interface Frame {
-  top: string[]
-  bottom: string[]
-  /** Row and column in the bottom bar; without one the cursor is hidden. */
-  cursor?: { row: number; column: number }
-}
 
 /** brief leaves out what full shows in detail. */
 export type View = 'brief' | 'full'
@@ -86,7 +78,14 @@ export class Screen {
     () => ({ columns: process.stdout.columns, rows: process.stdout.rows }),
   )
 
-  private readonly frame: (columns: number) => Frame
+  /** The conversation's part of the screen: it fills, and takes the size it is given. */
+  readonly content: Element = {
+    fill: true,
+    render: (width, height) => ({ rows: this.contentRows(width, height) }),
+  }
+
+  /** The tree drawn over the whole terminal, built again for every frame. */
+  private readonly tree: () => Element
   private running: Running | undefined
   private shownView: View = 'brief'
   /** Where the two views hold the same content. */
@@ -97,7 +96,7 @@ export class Screen {
   /** What the real terminal shows, row by row, so a frame writes only the rows that changed. */
   private shown: string[] = []
   /**
-   * The content's rows as last read from the headless terminal: read again only after it changed, so the bars can
+   * The content's rows as last read from the headless terminal: read again only after it changed, so the rest can
    * redraw (a spinner's turn, a key) without going over every cell of the content.
    */
   private window: string[] = []
@@ -106,9 +105,11 @@ export class Screen {
   private size = { columns: 80, rows: 24 }
   private scheduled = false
 
-  constructor(frame: (columns: number) => Frame) {
-    this.frame = frame
+  constructor(tree: () => Element) {
+    this.tree = tree
     emitKeypressEvents(this.keys)
+    // A key changes what is on screen, or may: drawn once the program has handled it
+    this.keys.on('keypress', () => this.draw())
   }
 
   /** Whether the screen can take over: stdin and stdout are both a terminal. */
@@ -127,7 +128,7 @@ export class Screen {
     const view = (): Terminal =>
       new xterm.Terminal({
         cols: columns - 1,
-        rows: this.contentRows(columns, rows),
+        rows,
         scrollback: 10_000,
         convertEol: true,
         allowProposedApi: true,
@@ -168,6 +169,8 @@ export class Screen {
     }
 
     this.running = { terms, cell: terms.brief.buffer.active.getNullCell(), write, restore }
+    // The content takes its size before anything is written to it
+    this.layout()
     write(ENTER)
     this.changed()
   }
@@ -230,7 +233,7 @@ export class Screen {
 
   /**
    * Redraws on the next turn of the event loop, once for everything that changed until then. The content is drawn as
-   * it was, unless it changed itself: what changes the bars calls this.
+   * it was, unless it changed itself. Keys draw by themselves; what else changes the program's state calls this.
    */
   draw(): void {
     if (this.scheduled) {
@@ -280,13 +283,8 @@ export class Screen {
       return
     }
 
-    const { columns, rows } = this.size
-    const frame = this.frame(columns)
-    if (this.stale) {
-      this.window = this.content(this.running)
-      this.stale = false
-    }
-    const lines = [...frame.top, ...this.window, ...frame.bottom].slice(0, rows)
+    const frame = this.layout()
+    const lines = Array.from({ length: this.size.rows }, (_, y) => frame.rows[y] ?? '')
 
     let out = ''
     for (const [i, line] of lines.entries()) {
@@ -299,14 +297,45 @@ export class Screen {
     if (frame.cursor === undefined) {
       out += '\x1B[?25l'
     } else {
-      const row = rows - frame.bottom.length + 1 + frame.cursor.row
-      out += `\x1B[${row};${frame.cursor.column + 1}H\x1B[?25h`
+      out += `\x1B[${frame.cursor.row + 1};${frame.cursor.column + 1}H\x1B[?25h`
     }
     this.running.write(`${BEGIN}${out}${END}`)
   }
 
+  /** The tree drawn over the whole terminal; the content takes the size it is given in it. */
+  private layout(): Rendered {
+    const { columns, rows } = this.size
+    return this.tree().render(columns, rows)
+  }
+
+  /**
+   * The content's window, `width` columns with the scrollbar's: the headless terminals take its size first, reflowing
+   * as on a resize of the terminal.
+   */
+  private contentRows(width: number, height = this.size.rows): string[] {
+    if (this.running === undefined) {
+      return []
+    }
+
+    const { terms } = this.running
+    const columns = Math.max(1, width - 1)
+    const rows = Math.max(1, height)
+    if (terms.brief.cols !== columns || terms.brief.rows !== rows) {
+      for (const term of Object.values(terms)) {
+        term.resize(columns, rows)
+      }
+      this.stale = true
+    }
+
+    if (this.stale) {
+      this.window = this.readWindow(this.running)
+      this.stale = false
+    }
+    return this.window.slice(0, height)
+  }
+
   /** The window of the content, each row with its piece of the scrollbar. */
-  private content({ terms, cell }: Running): string[] {
+  private readWindow({ terms, cell }: Running): string[] {
     const term = terms[this.shownView]
     const buffer = term.buffer.active
     const top = Math.min(this.top ?? buffer.baseY, buffer.baseY)
@@ -318,11 +347,6 @@ export class Screen {
   private changed(): void {
     this.stale = true
     this.draw()
-  }
-
-  private contentRows(columns: number, rows: number): number {
-    const frame = this.frame(columns)
-    return Math.max(1, rows - frame.top.length - frame.bottom.length)
   }
 
   /** A stream into one view, for clack's `output`; it wraps at the content's width as stdout does. */
@@ -417,10 +441,8 @@ export class Screen {
       return
     }
 
-    const { columns, rows } = this.size
-    for (const term of Object.values(this.running.terms)) {
-      term.resize(columns - 1, this.contentRows(columns, rows))
-    }
+    // At once, before the program's own listeners read stdout's new size
+    this.layout()
     this.shown = []
     this.running.write('\x1B[2J')
     this.changed()

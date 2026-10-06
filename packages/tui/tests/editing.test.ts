@@ -1,10 +1,8 @@
 // What keys do to the input line, without a terminal, and how it is drawn
 import type { Editing, Keypress } from '../src/editing.ts'
-import { stripVTControlCharacters } from 'node:util'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { applyKey, editingText, EMPTY_EDITING, renderInputLine } from '../src/editing.ts'
-import { displayWidth } from '../src/text.ts'
+import { applyKey, editingText, EMPTY_EDITING, formatKeypress } from '../src/editing.ts'
 
 const MOVES: Keypress[] = [
   { name: 'left' },
@@ -85,26 +83,19 @@ describe('edit', () => {
   })
 })
 
-describe('renderInputLine', () => {
-  it('should show the placeholder while nothing is typed, with the cursor after the prompt', () => {
+describe('formatKeypress', () => {
+  it('should name a key by its modifiers and name, and a character typed by itself', () => {
     // Act
-    const { line, column } = renderInputLine(EMPTY_EDITING, 20, { placeholder: 'Ask anything' })
+    const names = [
+      { name: 'tab', shift: true },
+      { name: 'o', char: '\u000F', ctrl: true },
+      { name: 'return', char: '\r' },
+      { name: 'a', char: 'A', shift: true },
+      { char: '/' },
+      { name: 'b', char: 'b', meta: true },
+    ].map(formatKeypress)
 
     // Assert
-    expect(stripVTControlCharacters(line)).toBe('› Ask anything')
-    expect(column).toBe(2)
-  })
-
-  it('should scroll a long line sideways, keeping the cursor in view', () => {
-    // Arrange
-    const editing = { ...EMPTY_EDITING, before: `${'a'.repeat(50)}end`, after: 'more' }
-
-    // Act
-    const { line, column } = renderInputLine(editing, 20, { placeholder: '' })
-
-    // Assert
-    const shown = stripVTControlCharacters(line)
-    expect(shown.slice(0, column)).toMatch(/aend$/)
-    expect(displayWidth(shown)).toBeLessThanOrEqual(20)
+    expect(names).toEqual(['shift+tab', 'ctrl+o', 'return', 'A', '/', 'meta+b'])
   })
 })

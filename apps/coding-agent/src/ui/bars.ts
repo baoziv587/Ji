@@ -1,19 +1,21 @@
-// The two bars around the conversation. On top, the model and its settings; at the bottom, the session's usage, the
-// status line and the input line with the cursor in it. Both keep a blank row at the terminal's edge and a column on
-// each side of their text; only the rules run across.
+// The screen: the conversation between two bars. On top, the model and its settings; at the bottom, the session's
+// usage, the status line and the input line with the cursor in it. Both keep a blank row at the terminal's edge and a
+// column on each side of their text; only the rules run across.
 
-import type { Editing, Frame, KeyHint, View } from '@ji.dev/tui'
+import type { Editing, Element, KeyHint, View } from '@ji.dev/tui'
 import { styleText } from 'node:util'
 import {
+  createFirstThatFitsElement,
+  createInputElement,
+  createRuleElement,
+  createTextElement,
   dimText,
-  drawRuleWithLabels,
-  fitToWidth,
   formatKeyHint,
   formatKeyHints,
   leftTruncatedPaths,
+  padElement,
   paintKey,
-  pickFirstThatFits,
-  renderInputLine,
+  stackVertically,
 } from '@ji.dev/tui'
 
 /** What the bars show, read again for every draw. */
@@ -45,40 +47,35 @@ export interface Bars {
   allowed: string
 }
 
-export function frameOf(columns: number, bars: Bars): Frame {
-  // Short of the last column, so no line wraps
-  const width = columns - 1
-  const inner = width - 2
+/** The bars around `content`, which takes the rows they leave. */
+export function viewOf(bars: Bars, content: Element): Element {
+  return stackVertically([
+    createTextElement(''),
+    inset(createFirstThatFitsElement(titleVersions(bars))),
+    createRuleElement([]),
+    content,
+    createRuleElement(bars.usage),
+    inset(createTextElement(statusLine(bars))),
+    // Muted while a question is open, the cursor hidden: the keys are its own
+    inset(createInputElement(bars.editing, { placeholder: placeholder(bars), muted: bars.asking })),
+    createTextElement(''),
+  ])
+}
 
-  const heading = titleLine(inner, bars)
-  const rule = dimText('─'.repeat(width))
-
-  const usage = drawRuleWithLabels(width, bars.usage)
-  const status = fitToWidth(statusLine(bars), inner)
-  const input = renderInputLine(bars.editing, inner, { placeholder: placeholder(bars), muted: bars.asking })
-
-  return {
-    top: ['', ` ${heading}`, rule],
-    bottom: [usage, ` ${status}`, ` ${input.line}`, ''],
-    // Hidden while a question is open: the keys are its own
-    cursor: bars.asking ? undefined : { row: 2, column: input.column + 1 },
-  }
+/** A bar's text, a column in from each side. */
+function inset(element: Element): Element {
+  return padElement(element, { left: 1, right: 1 })
 }
 
 /**
  * The model and its thinking level always; then the workspace, its first folders left out until it fits, or none of it.
  * The provider goes last, before the model's own name is cut.
  */
-function titleLine(width: number, bars: Bars): string {
+function titleVersions(bars: Bars): string[] {
   const full = title(bars.model, bars.thinking)
   const withRoot = leftTruncatedPaths(bars.root).map(root => full + dimText(` · ${root}`))
-  const fitting = pickFirstThatFits(width, [...withRoot, full])
-  if (fitting !== undefined) {
-    return fitting
-  }
-
   const withoutProvider = bars.model.slice(bars.model.indexOf('/') + 1)
-  return fitToWidth(title(withoutProvider, bars.thinking), width)
+  return [...withRoot, full, title(withoutProvider, bars.thinking)]
 }
 
 /** `ji · deepseek/deepseek-v4-flash · high` */

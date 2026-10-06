@@ -64,7 +64,6 @@ export class Answering {
   switchMode(): void {
     this.permissions.switchMode()
     this.onModeSwitch?.()
-    this.screen.draw()
   }
 
   private async choose(q: Questions, signal: AbortSignal): Promise<Reply> {
