@@ -13,18 +13,18 @@ export interface CommandContext {
   /** Every tool the model can call, by name. */
   tools: string[]
   quit: () => void
-  /** The features' commands, after the built-in ones. */
-  extra?: Command[]
+  /** The features' commands, after the built-in ones; read every time, as they can change. */
+  extra?: () => Command[]
 }
 
-export function createCommandMenu({ conversation, tools, quit, extra = [] }: CommandContext): CommandMenu {
+export function createCommandMenu({ conversation, tools, quit, extra = () => [] }: CommandContext): CommandMenu {
   const levels = conversation.agent.model.thinkingLevels.join('|')
 
-  const menu: CommandMenu = new CommandMenu([
+  const menu: CommandMenu = new CommandMenu(() => [
     { name: '/think', arg: `<${levels}>`, hint: 'sets thinking', run: arg => think(conversation, arg) },
     { name: '/help', hint: 'lists keys, commands and tools', run: () => help(menu, tools) },
     { name: '/exit', hint: 'quits', run: quit },
-    ...extra,
+    ...extra(),
   ])
   return menu
 }

@@ -12,7 +12,8 @@ export interface Command {
   /** What it takes after its name, as the menu shows it; without one, the menu runs it at once. */
   arg?: string
   hint: string
-  run: (arg: string) => void
+  /** What it does in the terminal. Without one, the line goes to the model as typed: a plugin knows what it means. */
+  run?: (arg: string) => void
 }
 
 /** What a key of the menu's did: the input after it, and whether what is in it is to be sent. */
@@ -25,18 +26,19 @@ export interface MenuKey {
 const TYPING = /^\/\S*$/
 
 export class CommandMenu {
-  private readonly commands: Command[]
+  /** Read every time: a feature's commands can change while the coding agent runs. */
+  private readonly commands: () => readonly Command[]
   /** The command chosen, by its place among the ones that match; the first again as the text changes. */
   private selected = 0
   private typed = ''
 
-  constructor(commands: Command[]) {
+  constructor(commands: () => readonly Command[]) {
     this.commands = commands
   }
 
   /** `/think <level>` and what each does, for /help. */
   hints(): KeyHint[] {
-    return this.commands.map(hintOf)
+    return this.commands().map(hintOf)
   }
 
   /** The menu as the bars show it; none while no command is typed, or none matches. */
@@ -78,17 +80,23 @@ export class CommandMenu {
     return undefined
   }
 
-  /** Runs the command `message` names, with what follows it; false when the message is not a command. */
+  /**
+   * Runs the command `message` names, with what follows it; false when the message is not a command, or names one that
+   * has nothing to run here, so the message is sent as it is.
+   */
   run(message: string): boolean {
     if (!message.startsWith('/')) {
       return false
     }
 
     const [name, ...rest] = message.split(/\s+/)
-    const command = this.commands.find(c => c.name === name)
+    const command = this.commands().find(c => c.name === name)
     if (command === undefined) {
       log.warn(`No such command: ${name}. /help lists them.`)
       return true
+    }
+    if (command.run === undefined) {
+      return false
     }
 
     command.run(rest.join(' '))
@@ -106,7 +114,7 @@ export class CommandMenu {
       return undefined
     }
 
-    const matching = this.commands.filter(command => command.name.startsWith(typed))
+    const matching = this.commands().filter(command => command.name.startsWith(typed))
     return matching.length === 0 ? undefined : matching
   }
 }
