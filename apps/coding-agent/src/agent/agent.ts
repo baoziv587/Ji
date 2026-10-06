@@ -8,7 +8,6 @@ import process from 'node:process'
 import { createAgent } from '@ji.dev/llm'
 import { files, localWorkspace } from '@ji.dev/plugin-files'
 import { createLocalExecutor, createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
-import { calc, now } from '../plugins/tools.ts'
 
 /** The plugins the agent runs with, apart from the one that asks: what it asks about comes from their previews. */
 export interface Plugins {
@@ -38,14 +37,15 @@ export function startAgent(root: string, plugins: Plugins, asking: Plugin): Agen
     model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`,
     thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
     system: `You are a concise assistant running in a terminal. Use tools when they help. File paths are relative to ${root}.`,
-    tools: [calc, now],
     plugins: pluginList(plugins, asking),
   })
 }
 
 /** Every tool the agent can call, by name, for the help line. */
 export function toolNamesOf(plugins: Plugins, asking: Plugin): string[] {
-  return [calc, now, ...pluginList(plugins, asking).flatMap(p => p.tools ?? [])].map(t => t.name)
+  return pluginList(plugins, asking)
+    .flatMap(p => p.tools ?? [])
+    .map(t => t.name)
 }
 
 /** The shell's before the files plugin: a command runs after the edits the model wrote before it. */
