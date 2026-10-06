@@ -1,6 +1,8 @@
 import type { Agent } from '@ji.dev/llm'
 import type { Element } from '@ji.dev/tui'
 import type { Feature } from './features/feature.ts'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import process from 'node:process'
 import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
@@ -11,6 +13,7 @@ import { abbreviateHomePath, dimText, formatKeyHint, Screen, Status } from '@ji.
 import { createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
 import { Permissions } from './features/permissions.ts'
+import { createSkillsFeature } from './features/skills.ts'
 import { Answering } from './ui/answering.ts'
 import { viewOf } from './ui/bars.ts'
 import { createCommandMenu } from './ui/commands.ts'
@@ -25,6 +28,9 @@ const ROOT = process.env.INIT_CWD ?? process.cwd()
 /** The root as the top bar shows it. */
 const WORKSPACE = abbreviateHomePath(ROOT)
 
+/** Where skills are kept, the same place Claude Code reads them from. */
+const SKILLS = join(homedir(), '.agents', 'skills')
+
 const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
 
 /** The local machine: files anywhere on it, the permissions say which are asked about, and commands run in the root. */
@@ -38,12 +44,14 @@ const permissions = new Permissions(workspace, plugins.files, plugins.shell)
 
 /**
  * What the agent runs with: each plugin, and what the terminal asks before its calls. The shell's before the files
- * plugin: a command runs after the edits the model wrote before it. grep is read-only, so never asked about.
+ * plugin: a command runs after the edits the model wrote before it. grep is read-only, so never asked about. The
+ * skills are commands, one per folder, and a hook that hands the model their instructions.
  */
 const features: Feature[] = [
   { plugin: plugins.shell, approve: permissions.commandCalls },
   { plugin: plugins.search },
   { plugin: plugins.files, approve: permissions.fileCalls },
+  await createSkillsFeature(SKILLS),
 ]
 
 /** The bars around the conversation, built by buildView; stdout is the conversation between them. */
@@ -66,7 +74,12 @@ const conversation = new Conversation(startAgentOrQuit())
 
 const TOOLS = toolNamesOf(features, asking)
 
-const commands = createCommandMenu({ conversation, tools: TOOLS, quit, extra: features.flatMap(f => f.commands ?? []) })
+const commands = createCommandMenu({
+  conversation,
+  tools: TOOLS,
+  quit,
+  extra: () => features.flatMap(f => f.commands ?? []),
+})
 
 /** The input line and its keys; a reply shows on the stage, the conversation's part of the screen. */
 const input = new Input({
