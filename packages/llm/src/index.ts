@@ -12,6 +12,7 @@ export { callsOf, textOf, user } from './message.ts'
 export { after, before, type Cancellable, intercept, mapEvents, type Middleware } from './middleware.ts'
 export { findModel, listModels, type ModelInfo, UnknownModelError, UnsupportedThinkingError } from './models.ts'
 export {
+  type AnyPlugin,
   type CallOptions,
   type CompleteRequest,
   type DecideContext,
