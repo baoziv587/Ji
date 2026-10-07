@@ -81,6 +81,8 @@ const commands = createCommandMenu({
   conversation,
   tools: TOOLS,
   mode: () => permissions.describeMode(),
+  // eslint-disable-next-line ts/no-use-before-define -- runs on a keypress, once the input below exists
+  send: message => input.send(message),
   quit,
   extra: () => features.flatMap(f => f.commands ?? []),
 })

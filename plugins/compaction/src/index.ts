@@ -7,8 +7,11 @@
 //   A decide hook: it runs before a step's model call, so the call itself already sends the shorter history. The
 //   replacement goes through record as rewriteHistory, so it lands in AgentState and a restored session does not
 //   summarize again.
+//
+//   A user message of just `/compact` asks for it now: everything before the last reply becomes the summary, the
+//   message itself never enters the history, and the model is not called.
 
-import type { Api, Message, Model, Plugin } from '@ji.dev/llm'
+import type { AgentAction, Api, DecideContext, Message, Model, Payload, Plugin, Stream } from '@ji.dev/llm'
 import { callsOf, definePlugin, rewriteHistory, textOf, user } from '@ji.dev/llm'
 
 declare module '@ji.dev/llm' {
@@ -38,6 +41,9 @@ export interface CompactionState {
 
 export const SUMMARY_PREFIX = '[Summary of the earlier conversation]'
 
+/** Sent as a user message, on its own, it compacts the conversation at once instead of reaching the model. */
+export const COMPACT_COMMAND = '/compact'
+
 /** Tokens an image counts for; providers charge from about 1k to a few k, depending on its size. */
 const IMAGE_TOKENS = 1_500
 
@@ -61,7 +67,8 @@ An earlier summary may open the transcript: fold it in, do not drop it. Be conci
 
 /**
  * Context compaction. Before a step's model call, if the history is over maxTokens, the model summarizes the older
- * messages and the history becomes "summary + the latest messages".
+ * messages and the history becomes "summary + the latest messages". A step that delivers a COMPACT_COMMAND message
+ * compacts instead of delivering it: everything but the last reply is summarized, and the run ends as it would have.
  *
  * - The size is the provider's own count from the last assistant message's usage, plus an estimate for what came after
  *   it; without usage it is all an estimate. The estimate counts a non-ASCII character as a token, so CJK text is not
@@ -79,6 +86,43 @@ export function createCompactionPlugin({
   model,
   timeoutMs,
 }: CompactionOptions): Plugin<CompactionState> {
+  /**
+   * The summary of messages[0..cut) in place of them, with compaction:start and compaction:end around the model call;
+   * undefined, with the reason in compaction:end, when the history is to stay as it is.
+   */
+  async function* summarized(
+    messages: Message[],
+    cut: number,
+    before: number,
+    { complete, signal }: DecideContext<CompactionState>,
+  ): Stream<Payload, Message[] | undefined> {
+    yield { type: 'compaction:start', tokens: before }
+
+    const deadline = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs)
+    const earlier = transcript(messages.slice(0, cut))
+    const request = { model, systemPrompt: SUMMARIZE, messages: [user(earlier)] }
+    let summary: string
+    try {
+      summary = textOf(yield* complete(request, { signal: deadline })).trim()
+    } catch (error) {
+      // A cancelled step ends the run as usual; anything else is only this compaction failing
+      if (signal.aborted) {
+        throw error
+      }
+      yield { type: 'compaction:end', before, after: before, error: messageOf(error) }
+      return undefined
+    }
+
+    if (summary === '') {
+      yield { type: 'compaction:end', before, after: before, error: 'The summary came back empty' }
+      return undefined
+    }
+
+    const compacted = [user(`${SUMMARY_PREFIX}\n${summary}`), ...messages.slice(cut)]
+    yield { type: 'compaction:end', before, after: estimateTokens(compacted) }
+    return compacted
+  }
+
   return definePlugin({
     name: 'compaction',
 
@@ -87,48 +131,39 @@ export function createCompactionPlugin({
       reduce: (own, turn) => (turn.kind === 'rewrite' ? { freshFrom: turn.messages.length } : own),
     },
 
-    async *decide(state, next, { complete, signal, own }) {
+    async *decide(state, next, ctx) {
       const { messages } = state
-      if (isIdle(messages)) {
-        return yield* next(state)
-      }
-
       // Every step pays for this check, so it reads only what the provider has not counted
-      const before = contextTokens(messages, own.freshFrom)
-      if (before <= maxTokens) {
-        return yield* next(state)
-      }
+      const before = isIdle(messages) ? 0 : contextTokens(messages, ctx.own.freshFrom)
 
-      const cut = cutIndex(messages, keepRecentTokens)
-      if (!worthSummarizing(messages, cut)) {
-        return yield* next(state)
-      }
-
-      yield { type: 'compaction:start', tokens: before }
-
-      const deadline = timeoutMs === undefined ? undefined : AbortSignal.timeout(timeoutMs)
-      const earlier = transcript(messages.slice(0, cut))
-      const request = { model, systemPrompt: SUMMARIZE, messages: [user(earlier)] }
-      let summary: string
-      try {
-        summary = textOf(yield* complete(request, { signal: deadline })).trim()
-      } catch (error) {
-        // A cancelled step ends the run as usual; anything else is only this compaction failing
-        if (signal.aborted) {
-          throw error
+      if (before > maxTokens) {
+        const cut = cutIndex(messages, keepRecentTokens)
+        if (!worthSummarizing(messages, cut)) {
+          return yield* next(state)
         }
-        yield { type: 'compaction:end', before, after: before, error: messageOf(error) }
-        return yield* next(state)
+
+        const compacted = yield* summarized(messages, cut, before, ctx)
+        return compacted === undefined ? yield* next(state) : rewriteHistory(compacted)
       }
 
-      if (summary === '') {
-        yield { type: 'compaction:end', before, after: before, error: 'The summary came back empty' }
-        return yield* next(state)
+      // The step as it would be, unless it delivers a COMPACT_COMMAND: then the compaction takes its place
+      const step = yield* next(state)
+      const rest = step.tag === 'act' ? besidesCompactCommand(step.action) : undefined
+      if (rest === undefined) {
+        return step
       }
 
-      const compacted = [user(`${SUMMARY_PREFIX}\n${summary}`), ...messages.slice(cut)]
-      yield { type: 'compaction:end', before, after: estimateTokens(compacted) }
-      return rewriteHistory(compacted)
+      // Asked for: everything but the last reply is summarized, and the command itself is left out of the history
+      const cut = cutIndex(messages, 0)
+      const tokens = contextTokens(messages, ctx.own.freshFrom)
+      let compacted: Message[] | undefined
+      if (worthSummarizing(messages, cut)) {
+        compacted = yield* summarized(messages, cut, tokens, ctx)
+      } else {
+        yield { type: 'compaction:end', before: tokens, after: tokens, error: 'nothing new since the last summary' }
+      }
+
+      return rewriteHistory([...(compacted ?? messages), ...rest])
     },
   })
 }
@@ -260,6 +295,20 @@ function worthSummarizing(messages: Message[], cut: number): boolean {
 function isIdle(messages: Message[]): boolean {
   const last = messages.at(-1)
   return last === undefined || (last.role === 'assistant' && callsOf(last).length === 0)
+}
+
+/** The messages an input action delivers besides a COMPACT_COMMAND; undefined when it delivers no such command. */
+function besidesCompactCommand(action: AgentAction): Message[] | undefined {
+  if (!('kind' in action) || action.kind !== 'input') {
+    return undefined
+  }
+
+  const rest = action.messages.filter(m => !isCompactCommand(m))
+  return rest.length === action.messages.length ? undefined : rest
+}
+
+function isCompactCommand(m: Message): boolean {
+  return m.role === 'user' && textOfUser(m).trim() === COMPACT_COMMAND
 }
 
 function isSummary(m: Message): boolean {

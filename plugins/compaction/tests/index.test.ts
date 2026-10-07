@@ -3,7 +3,14 @@ import type { FauxResponseStep } from '@mariozechner/pi-ai'
 import { createAgent, createSession, textOf, tool, toolResult, Type, user } from '@ji.dev/llm'
 import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
-import { contextTokens, createCompactionPlugin, cutIndex, estimateTokens, SUMMARY_PREFIX } from '../src/index.ts'
+import {
+  COMPACT_COMMAND,
+  contextTokens,
+  createCompactionPlugin,
+  cutIndex,
+  estimateTokens,
+  SUMMARY_PREFIX,
+} from '../src/index.ts'
 
 const echo = tool({
   name: 'echo',
@@ -146,6 +153,45 @@ describe('createCompactionPlugin', () => {
     const r = createSession(createAgent({ model, tools: [echo], plugins: [plugin] })).send('go')
 
     expect((await r.summary).rewrites).toBe(0)
+  })
+
+  it('should summarize everything but the last reply on /compact, without calling the model for a reply', async () => {
+    // Arrange: a conversation well under the limit, then the summary
+    const model = fauxModel([callEcho('small'), fauxAssistantMessage('answer'), fauxAssistantMessage('the summary')])
+    const session = createSession(
+      createAgent({ model, tools: [echo], plugins: [createCompactionPlugin({ maxTokens: 10_000 })] }),
+    )
+    await session.send('go').result
+
+    // Act
+    const r = session.send(COMPACT_COMMAND)
+    const [events, state] = await Promise.all([collect(r), r.state])
+
+    // Assert: the summary replaces all but the answer, the command is gone, and the run ends on the answer kept
+    const answer = await r.result
+    expect(textOf(answer)).toBe('answer')
+    expect(state.messages).toHaveLength(2)
+    expect(state.messages[0]).toMatchObject({ role: 'user', content: `${SUMMARY_PREFIX}\nthe summary` })
+    expect(state.messages[1]).toBe(answer)
+    expect((await r.summary).rewrites).toBe(1)
+    expect(events.filter(e => e.type === 'model_start').map(e => e.by)).toEqual(['compaction'])
+  })
+
+  it('should say so on a /compact right after another', async () => {
+    // Arrange: compacted once already, so only the summary and the last reply are left
+    const model = fauxModel([fauxAssistantMessage('answer'), fauxAssistantMessage('the summary')])
+    const session = createSession(createAgent({ model, plugins: [createCompactionPlugin({ maxTokens: 10_000 })] }))
+    await session.send('go').result
+    await session.send(COMPACT_COMMAND).result
+
+    // Act
+    const r = session.send(COMPACT_COMMAND)
+    const [events, state] = await Promise.all([collect(r), r.state])
+
+    // Assert: the history stays, the command is not in it, and no model is called
+    expect(state.messages.map(m => m.role)).toEqual(['user', 'assistant'])
+    expect(events.find(e => e.type === 'compaction:end')).toMatchObject({ error: expect.stringContaining('nothing') })
+    expect(events.filter(e => e.type === 'model_start')).toHaveLength(0)
   })
 })
 
