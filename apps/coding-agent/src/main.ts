@@ -129,6 +129,7 @@ function buildView(): Element {
     {
       model: `${model.provider}/${model.id}`,
       thinking,
+      fast: conversation.fast,
       root: WORKSPACE,
       editing: input.editing,
       menu: input.menu,

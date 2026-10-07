@@ -3,6 +3,7 @@
 
 import type { Agent, AgentState, Run, Session, ThinkingLevel } from '@ji.dev/llm'
 import { createSession, RunError } from '@ji.dev/llm'
+import { requestFastTier } from './fast.ts'
 
 /** How a reply that did not finish ended, for the person to pick up from. */
 export interface Unfinished {
@@ -24,6 +25,7 @@ export class Conversation {
   /** The state before the reply in progress was sent, to go back to if it does not finish. */
   private before: AgentState | undefined
   private sent: string[] = []
+  private fastMode = false
 
   constructor(agent: Agent) {
     this.current = agent
@@ -37,6 +39,11 @@ export class Conversation {
 
   get agent(): Agent {
     return this.current
+  }
+
+  /** Every model call asks for the priority tier. */
+  get fast(): boolean {
+    return this.fastMode
   }
 
   get replying(): boolean {
@@ -74,6 +81,13 @@ export class Conversation {
   /** Same conversation, new setting: the next model call uses it, in a reply in progress too. */
   think(level: ThinkingLevel): void {
     this.current = this.current.with({ thinking: level })
+    this.session.use(this.current)
+  }
+
+  /** Same conversation, faster model calls or back to the standard ones; switched like think. */
+  useFastMode(on: boolean): void {
+    this.fastMode = on
+    this.current = this.current.with({ onPayload: on ? requestFastTier : undefined })
     this.session.use(this.current)
   }
 
