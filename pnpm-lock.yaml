@@ -239,27 +239,27 @@ importers:
         specifier: workspace:*
         version: link:../../packages/tui
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   apps/demo:
     dependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   apps/examples:
     dependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   apps/replay:
     dependencies:
@@ -269,9 +269,6 @@ importers:
       '@duckdb/node-api':
         specifier: 1.5.5-r.4
         version: 1.5.5-r.4
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
@@ -281,6 +278,9 @@ importers:
       '@ji.dev/plugin-otel':
         specifier: workspace:*
         version: link:../../plugins/otel
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   packages/kernel: {}
 
@@ -295,6 +295,20 @@ importers:
       '@ji.dev/utils':
         specifier: workspace:*
         version: link:../utils
+    devDependencies:
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../testing
+
+  packages/testing:
+    dependencies:
+      '@earendil-works/pi-ai':
+        specifier: ^1.0.4
+        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+    devDependencies:
+      '@ji.dev/llm':
+        specifier: workspace:*
+        version: link:../llm
 
   packages/tui:
     dependencies:
@@ -324,24 +338,24 @@ importers:
       '@clack/prompts':
         specifier: ^1.8.1
         version: 1.8.1
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
       fast-wrap-ansi:
         specifier: ^0.2.2
         version: 0.2.2
 
   plugins/compaction:
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   plugins/files:
     dependencies:
@@ -349,36 +363,33 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   plugins/jsonl:
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   plugins/otel:
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   plugins/shell:
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
@@ -388,6 +399,9 @@ importers:
       '@ji.dev/plugin-files':
         specifier: workspace:*
         version: link:../files
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   plugins/skills:
     devDependencies:
@@ -397,24 +411,24 @@ importers:
 
   plugins/throttle-updates:
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   plugins/truncate-tool-results:
     devDependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^1.0.4
-        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@ji.dev/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
 packages:
 

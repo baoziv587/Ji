@@ -1,22 +1,19 @@
 // Plugin hooks as RFC-0006 defines them: the list order, registration, ctx, ctx.complete, model attempts, observer
 // misuse, development checks and the error channels. Runs against pi-ai's faux provider.
+import type { FakeReply, FakeRequest } from '@ji.dev/testing'
 import type {
+  AgentState,
+  Api,
   AssistantMessage,
-  Context,
-  FauxResponseStep,
   Message,
-  SimpleStreamOptions,
-} from '@earendil-works/pi-ai/compat'
-import type { AgentState, Api, Model, Plugin, RunEvent, Session, UsageTotals } from '../src/index.ts'
+  Model,
+  Plugin,
+  RunEvent,
+  Session,
+  UsageTotals,
+} from '../src/index.ts'
 import process from 'node:process'
-import {
-  fauxAssistantMessage,
-  fauxToolCall,
-  getCurrentSystemPrompt,
-  getInitialSystemMessage,
-  registerFauxProvider,
-  Type,
-} from '@earendil-works/pi-ai/compat'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
@@ -31,6 +28,7 @@ import {
   textOf,
   tool,
   toolError,
+  Type,
   usageOf,
   user,
 } from '../src/index.ts'
@@ -42,10 +40,9 @@ const echo = tool({
   run: ({ x }) => x.toUpperCase(),
 })
 
-const callEcho = (x: string): AssistantMessage =>
-  fauxAssistantMessage([fauxToolCall('echo', { x })], { stopReason: 'toolUse' })
+const callEcho = (x: string): AssistantMessage => assistantMessage([toolUse('echo', { x })])
 
-const failed = (): AssistantMessage => fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })
+const failed = (): AssistantMessage => assistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })
 
 /** One call's attempts, true for a failure: some failures, then the success the retry is waiting for. */
 const attempts: fc.Arbitrary<boolean[]> = fc
@@ -68,7 +65,7 @@ describe('plugin order (§6)', () => {
         // Arrange
         const log: string[] = []
         const plugins = names.map(name => traced(name, log))
-        const model = fauxModel([callEcho('x'), fauxAssistantMessage('ok')])
+        const model = fauxModel([callEcho('x'), assistantMessage('ok')])
         const agent = createAgent({ model, tools: [echo], plugins, checkDeterminism: false })
 
         // Act
@@ -110,7 +107,7 @@ describe('plugin order (§6)', () => {
         return { ...req, systemPrompt: `${req.systemPrompt}B` }
       }),
     })
-    const model = fauxModel([ctx => fauxAssistantMessage(`prompt=${getCurrentSystemPrompt(ctx.messages)}`)])
+    const model = fauxModel([ctx => assistantMessage(`prompt=${ctx.system}`)])
 
     // Act
     const result = await createSession(createAgent({ model, plugins: [first, second] })).send('go').result
@@ -136,8 +133,8 @@ describe('registration (§6.1)', () => {
     let prompt: string | undefined
     const model = fauxModel([
       ctx => {
-        prompt = getCurrentSystemPrompt(ctx.messages)
-        return fauxAssistantMessage('ok')
+        prompt = ctx.system
+        return assistantMessage('ok')
       },
     ])
 
@@ -154,7 +151,7 @@ describe('registration (§6.1)', () => {
   it('should dedupe the same way through agent.with', async () => {
     // Arrange
     const counter = definePlugin({ name: 'counter', state: { init: 0, reduce: n => n + 1 } })
-    const agent = createAgent({ model: fauxModel([fauxAssistantMessage('ok')]) })
+    const agent = createAgent({ model: fauxModel([assistantMessage('ok')]) })
 
     // Act
     const state = await createSession(agent.with({ plugins: [[counter], counter] })).send('go').state
@@ -165,7 +162,7 @@ describe('registration (§6.1)', () => {
 
   it('should reject two different plugin objects sharing a name', () => {
     // Arrange
-    const model = registerFauxProvider().getModel()
+    const model = fauxModel([])
     const counter = definePlugin({ name: 'counter' })
     const another = definePlugin({ name: 'counter' })
 
@@ -211,7 +208,7 @@ describe('ctx (§3)', () => {
       },
     })
     chat.session = createSession(
-      createAgent({ model: fauxModel([callEcho('a'), fauxAssistantMessage('ok')]), tools: [echo], plugins: [watcher] }),
+      createAgent({ model: fauxModel([callEcho('a'), assistantMessage('ok')]), tools: [echo], plugins: [watcher] }),
     )
 
     // Act
@@ -357,7 +354,7 @@ describe('ctx.complete (§5)', () => {
         return yield* next(state)
       },
     })
-    const model = fauxModel([fauxAssistantMessage('summary'), fauxAssistantMessage('answer')])
+    const model = fauxModel([assistantMessage('summary'), assistantMessage('answer')])
     const r = createSession(createAgent({ model, plugins: [summarizer] })).send('go')
 
     // Act
@@ -380,7 +377,7 @@ describe('ctx.complete (§5)', () => {
         return yield* next(state)
       },
     })
-    const model = fauxModel([failed(), fauxAssistantMessage('summary'), fauxAssistantMessage('answer')])
+    const model = fauxModel([failed(), assistantMessage('summary'), assistantMessage('answer')])
     const agent = createAgent({ model, plugins: [retryModel(2), summarizer] })
 
     // Act
@@ -416,7 +413,7 @@ describe('ctx.complete (§5)', () => {
         return yield* next(state)
       },
     })
-    const model = fauxModel([blockedUntil(provider, 'summary'), fauxAssistantMessage('answer')])
+    const model = fauxModel([blockedUntil(provider, 'summary'), assistantMessage('answer')])
     const r = createSession(createAgent({ model, plugins: [summarizer] })).send('go')
     const events = collect(r)
 
@@ -448,10 +445,10 @@ describe('ctx.complete (§5)', () => {
     })
     let seen: AbortSignal | undefined
     const model = fauxModel([
-      async (_ctx, options) => {
-        seen = options?.signal
+      async request => {
+        seen = request.signal
         await provider.wait()
-        return fauxAssistantMessage('summary')
+        return assistantMessage('summary')
       },
     ])
     const r = createSession(createAgent({ model, plugins: [summarizer] })).send('go')
@@ -485,8 +482,8 @@ describe('ctx.complete (§5)', () => {
           return stop(state)
         },
       })
-      const model = fauxModel([fauxAssistantMessage('summary')])
-      const history = [user('q'), fauxAssistantMessage('a')]
+      const model = fauxModel([assistantMessage('summary')])
+      const history = [user('q'), assistantMessage('a')]
       const r = createSession(createAgent({ model, plugins: [summarizer] }), { state: history }).send('go')
 
       // Act
@@ -514,7 +511,7 @@ describe('model attempts (§5.4–§5.5, appendix A.6–A.7)', () => {
             return yield* next(state)
           },
         })
-        const script = [...aux, ...main].map(fail => (fail ? failed() : fauxAssistantMessage('ok')))
+        const script = [...aux, ...main].map(fail => (fail ? failed() : assistantMessage('ok')))
         const agent = createAgent({ model: fauxModel(script), plugins: [retryModel(Infinity), helper] })
 
         // Act
@@ -554,7 +551,7 @@ describe('observe misuse (§4.3)', () => {
 
     // Act
     const events = await collect(
-      createSession(createAgent({ model: fauxModel([fauxAssistantMessage('ok')]), plugins })).send('go'),
+      createSession(createAgent({ model: fauxModel([assistantMessage('ok')]), plugins })).send('go'),
     )
     await new Promise(resolve => setTimeout(resolve, 0))
     process.off('unhandledRejection', unhandled)
@@ -574,7 +571,7 @@ describe('development checks (§8)', () => {
     // Arrange
     let sequence = 0
     const unstable = definePlugin({ name: 'unstable', state: { init: 0, reduce: () => ++sequence } })
-    const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
+    const model = fauxModel([callEcho('a'), assistantMessage('ok')])
 
     // Act
     const agent = createAgent({ model, tools: [echo], plugins: [unstable], checkDeterminism: true })
@@ -588,7 +585,7 @@ describe('development checks (§8)', () => {
   it('should neither warn about nor double a pure reducer', async () => {
     // Arrange
     const counter = definePlugin({ name: 'counter', state: { init: 0, reduce: (n: number) => n + 1 } })
-    const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
+    const model = fauxModel([callEcho('a'), assistantMessage('ok')])
 
     // Act
     const agent = createAgent({ model, tools: [echo], plugins: [counter], checkDeterminism: true })
@@ -610,7 +607,7 @@ describe('development checks (§8)', () => {
           return messages
         },
       })
-      const model = fauxModel([fauxAssistantMessage('ok')])
+      const model = fauxModel([assistantMessage('ok')])
       const agent = createAgent({ model, plugins: [counter], checkDeterminism })
 
       // Act
@@ -633,8 +630,8 @@ describe('development checks (§8)', () => {
 
   it('should freeze the state a session starts from, at its first run', async () => {
     // Arrange
-    const history: Message[] = [user('earlier'), fauxAssistantMessage('reply')]
-    const model = fauxModel([fauxAssistantMessage('ok')])
+    const history: Message[] = [user('earlier'), assistantMessage('reply')]
+    const model = fauxModel([assistantMessage('ok')])
     const chat = createSession(createAgent({ model, checkDeterminism: true }), { state: history })
 
     // Act
@@ -672,10 +669,7 @@ describe('errors and retries (§4.2)', () => {
       }),
     })
     const refused = tool({ ...flaky, name: 'refused', run: () => 'never' })
-    const model = fauxModel([
-      fauxAssistantMessage([fauxToolCall('flaky', {}), fauxToolCall('refused', {})], { stopReason: 'toolUse' }),
-      fauxAssistantMessage('ok'),
-    ])
+    const model = fauxModel([assistantMessage([toolUse('flaky', {}), toolUse('refused', {})]), assistantMessage('ok')])
     const agent = createAgent({ model, tools: [flaky, refused], plugins: [retryTool(3), refusing] })
 
     // Act
@@ -703,7 +697,7 @@ describe('errors and retries (§4.2)', () => {
         })
       },
     })
-    const model = fauxModel([fauxAssistantMessage([fauxToolCall('hang', {})], { stopReason: 'toolUse' })])
+    const model = fauxModel([assistantMessage([toolUse('hang', {})])])
     const r = createSession(createAgent({ model, tools: [hang], plugins: [retryTool(5)] })).send('go')
 
     // Act
@@ -719,16 +713,15 @@ describe('errors and retries (§4.2)', () => {
 
 // Helpers
 
-const registrations: Array<{ unregister: () => void }> = []
+const registrations: Array<{ dispose: () => void }> = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
-function fauxModel(responses: FauxResponseStep[]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function fauxModel(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 /** Retries a failed model call until it works or `limit` attempts are used; never after the step is cancelled. */
@@ -853,13 +846,13 @@ function splitAt<T>(items: T[], starts: (item: T) => boolean): T[][] {
 function seeRequest(
   seen: Array<{ system?: string; tools: number }>,
   text: string,
-): (ctx: Context, options?: SimpleStreamOptions) => AssistantMessage {
-  return ctx => {
+): (request: FakeRequest) => AssistantMessage {
+  return request => {
     seen.push({
-      system: getCurrentSystemPrompt(ctx.messages),
-      tools: getInitialSystemMessage(ctx.messages)?.toolsAdded?.length ?? 0,
+      system: request.system,
+      tools: request.tools.length,
     })
-    return fauxAssistantMessage(text)
+    return assistantMessage(text)
   }
 }
 
@@ -879,7 +872,7 @@ function gate(): { wait: () => Promise<void>; open: () => void; started: Promise
 function blockedUntil(g: ReturnType<typeof gate>, text: string): () => Promise<AssistantMessage> {
   return async () => {
     await g.wait()
-    return fauxAssistantMessage(text)
+    return assistantMessage(text)
   }
 }
 

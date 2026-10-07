@@ -1,7 +1,8 @@
 import type { AgentTool, Api, Model, PluginList, RunEvent, Session } from '@ji.dev/llm'
+import type { FakeReply } from '@ji.dev/testing'
 import type { Attributes, MeterLike, SpanLike } from '../src/index.ts'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import { otel } from '../src/index.ts'
@@ -25,7 +26,7 @@ describe('otel', () => {
     // Assert
     const [root] = tracer.roots()
     expect(root.name).toBe('invoke_agent')
-    expect(tracer.childrenOf(root).map(s => s.name)).toEqual(['chat faux-1', 'execute_tool work', 'chat faux-1'])
+    expect(tracer.childrenOf(root).map(s => s.name)).toEqual(['chat faux', 'execute_tool work', 'chat faux'])
     expect(tracer.spans.every(s => s.ended === 1)).toBe(true)
   })
 
@@ -41,7 +42,7 @@ describe('otel', () => {
     const [model, toolSpan] = tracer.spans.slice(1)
     expect(model.attributes).toMatchObject({
       'gen_ai.operation.name': 'chat',
-      'gen_ai.request.model': 'faux-1',
+      'gen_ai.request.model': 'faux',
       'pi.thinking': 'off',
       'gen_ai.response.finish_reasons': ['toolUse'],
     })
@@ -56,7 +57,7 @@ describe('otel', () => {
   it('should mark a failed tool call and a failed run as errors', async () => {
     // Arrange
     const tracer = fakeTracer()
-    const model = faux([fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })])
+    const model = faux([assistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })])
     const failing = session([[true]], [otel({ tracer })])
     const broken = createSession(createAgent({ model, plugins: [otel({ tracer })] }))
 
@@ -118,9 +119,9 @@ describe('otel', () => {
       },
     })
     const model = faux([
-      fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' }),
-      fauxAssistantMessage('summary'),
-      fauxAssistantMessage('answer'),
+      assistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' }),
+      assistantMessage('summary'),
+      assistantMessage('answer'),
     ])
     const plugins = [fallback, compaction, otel({ tracer, context: tracer.context })]
 
@@ -133,7 +134,7 @@ describe('otel', () => {
     expect(tracer.childrenOf(span).map(s => s.attributes['pi.plugin'])).toEqual(['compaction', 'compaction'])
     expect(failed).toMatchObject({ ended: 1, status: { code: 2 }, attributes: { 'error.type': 'ModelCallError' } })
     expect(retried).toMatchObject({ ended: 1, status: undefined })
-    expect(tracer.childrenOf(tracer.roots()[0]).map(s => s.name)).toEqual(['compaction', 'chat faux-1'])
+    expect(tracer.childrenOf(tracer.roots()[0]).map(s => s.name)).toEqual(['compaction', 'chat faux'])
     expect(tracer.spans.every(s => s.ended === 1)).toBe(true)
   })
 
@@ -254,28 +255,24 @@ function fakeMeter(): MeterLike & { records: (name: string) => Array<{ value: nu
   }
 }
 
-const registrations: Array<{ unregister: () => void }> = []
+const registrations: Array<{ dispose: () => void }> = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
-function faux(responses: Parameters<ReturnType<typeof registerFauxProvider>['setResponses']>[0]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function faux(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 /** Each model turn calls `work` once per entry (true: that call fails); spare answers follow an interrupt. */
 function session(plan: boolean[][], plugins: PluginList, updates = 1): Session {
   const responses = [
     ...plan.map((calls, i) =>
-      fauxAssistantMessage(
-        calls.map((fail, j) => fauxToolCall('work', { fail }, { id: `c${i}.${j}` })),
-        { stopReason: 'toolUse' },
-      ),
+      assistantMessage(calls.map((fail, j) => toolUse('work', { fail }, { id: `c${i}.${j}` }))),
     ),
-    ...Array.from({ length: 3 }, () => fauxAssistantMessage('done')),
+    ...Array.from({ length: 3 }, () => assistantMessage('done')),
   ]
   return createSession(createAgent({ model: faux(responses), tools: [work(updates)], plugins }))
 }

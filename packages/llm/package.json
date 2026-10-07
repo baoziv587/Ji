@@ -14,5 +14,8 @@
     "@earendil-works/pi-ai": "^1.0.4",
     "@ji.dev/kernel": "workspace:*",
     "@ji.dev/utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@ji.dev/testing": "workspace:*"
   }
 }

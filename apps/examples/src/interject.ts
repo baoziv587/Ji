@@ -5,16 +5,11 @@
 //   chat.send(text, { when: 'now' })    interrupt: cancels the current step and inserts right away
 //
 // While the agent is working, all of these join the current run and return the same Run.
-import type { Context } from '@earendil-works/pi-ai/compat'
+import type { AssistantMessage } from '@ji.dev/llm'
+import type { FakeRequest } from '@ji.dev/testing'
 import { setTimeout as sleep } from 'node:timers/promises'
-import {
-  fauxAssistantMessage,
-  fauxText,
-  fauxToolCall,
-  Type,
-  withoutInitialSystemMessage,
-} from '@earendil-works/pi-ai/compat'
-import { createAgent, createSession, tool } from '@ji.dev/llm'
+import { createAgent, createSession, tool, Type } from '@ji.dev/llm'
+import { assistantMessage, textBlock, toolUse } from '@ji.dev/testing'
 import { pickModel, show } from './shared.ts'
 
 const runTests = tool({
@@ -27,19 +22,17 @@ const runTests = tool({
   },
 })
 
-function reply(ctx: Context): ReturnType<typeof fauxAssistantMessage> {
-  const last = withoutInitialSystemMessage(ctx.messages).findLast(m => m.role === 'user')
-  return fauxAssistantMessage(`OK: ${last?.content}.`)
+function reply({ messages }: FakeRequest): AssistantMessage {
+  const last = messages.findLast(m => m.role === 'user')
+  return assistantMessage(`OK: ${last?.content}.`)
 }
 
 const model = pickModel(
   [
-    fauxAssistantMessage([fauxText('Running the tests first.'), fauxToolCall('run_tests', { runner: 'jest' })], {
-      stopReason: 'toolUse',
-    }),
+    assistantMessage([textBlock('Running the tests first.'), toolUse('run_tests', { runner: 'jest' })]),
     reply, // sees the steer "Use vitest instead"
     // handles the follow-up "Then update the changelog"; interrupted halfway through
-    fauxAssistantMessage(`## Changelog\n${Array.from({ length: 40 }, (_, i) => `- Change ${i + 1}`).join('\n')}`),
+    assistantMessage(`## Changelog\n${Array.from({ length: 40 }, (_, i) => `- Change ${i + 1}`).join('\n')}`),
     reply, // sees the interrupt "Stop, outline it first"
   ],
   60,

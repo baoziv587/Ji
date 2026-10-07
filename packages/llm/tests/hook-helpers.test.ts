@@ -1,19 +1,24 @@
-import type { AssistantMessage, FauxResponseStep, Message, ToolResultMessage } from '@earendil-works/pi-ai/compat'
 // before / after / intercept / mapEvents on each of the four streaming hooks, inside a real agent (RFC-0006 §4).
 // middleware.test.ts checks the helpers' algebra against a hand-written next; this file checks what each helper
 // changes where it sits in the loop: history, the model's input, tools, events and usage. Runs against pi-ai's faux
 // provider.
 import type { Step } from '@ji.dev/kernel'
-import type { AgentAction, AgentState, Api, Model, Plugin, Run, RunEvent } from '../src/index.ts'
+import type { FakeReply } from '@ji.dev/testing'
+import type {
+  AgentAction,
+  AgentState,
+  Api,
+  AssistantMessage,
+  Message,
+  Model,
+  Plugin,
+  Run,
+  RunEvent,
+  ToolResultMessage,
+} from '../src/index.ts'
 import type { Cancellable, Middleware } from '../src/middleware.ts'
-import {
-  fauxAssistantMessage,
-  fauxToolCall,
-  registerFauxProvider,
-  Type,
-  withoutInitialSystemMessage,
-} from '@earendil-works/pi-ai/compat'
 import { act } from '@ji.dev/kernel'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -28,6 +33,7 @@ import {
   textOf,
   tool,
   toolError,
+  Type,
   user,
 } from '../src/index.ts'
 
@@ -54,8 +60,8 @@ describe('before', () => {
         })
         const model = fauxModel([
           ctx => {
-            seen.push(withoutInitialSystemMessage(ctx.messages))
-            return fauxAssistantMessage('ok')
+            seen.push(ctx.messages)
+            return assistantMessage('ok')
           },
         ])
 
@@ -82,7 +88,7 @@ describe('before', () => {
             ),
           })),
         })
-        const model = fauxModel([callEcho(args), fauxAssistantMessage('done')])
+        const model = fauxModel([callEcho(args), assistantMessage('done')])
 
         // Act
         const state = await createSession(createAgent({ model, tools: [echo], plugins: [append] })).send('go').state
@@ -121,7 +127,7 @@ describe('after', () => {
             isModelStep(step) ? act(withText(step.action, `${textOf(step.action)}${suffix}`)) : step,
           ),
         })
-        const model = fauxModel([fauxAssistantMessage(reply)])
+        const model = fauxModel([assistantMessage(reply)])
         const r = createSession(createAgent({ model, plugins: [amend] })).send('go')
 
         // Act
@@ -142,7 +148,7 @@ describe('after', () => {
           name: 'amend',
           request: after(message => withText(message, `${textOf(message)}${suffix}`)),
         })
-        const model = fauxModel([fauxAssistantMessage(reply)])
+        const model = fauxModel([assistantMessage(reply)])
         const r = createSession(createAgent({ model, plugins: [amend] })).send('go')
 
         // Act
@@ -163,7 +169,7 @@ describe('after', () => {
           name: 'tag',
           toolCalls: after(results => results.map(r => withResultText(r, `${prefix}${resultText(r)}`))),
         })
-        const model = fauxModel([callEcho(args), fauxAssistantMessage('done')])
+        const model = fauxModel([callEcho(args), assistantMessage('done')])
         const r = createSession(createAgent({ model, tools: [echo], plugins: [tag] })).send('go')
 
         // Act
@@ -185,7 +191,7 @@ describe('after', () => {
           name: 'tag',
           toolCall: after(result => withResultText(result, `${prefix}${resultText(result)}`)),
         })
-        const model = fauxModel([callEcho(args), fauxAssistantMessage('done')])
+        const model = fauxModel([callEcho(args), assistantMessage('done')])
         const r = createSession(createAgent({ model, tools: [echo], plugins: [tag] })).send('go')
 
         // Act
@@ -223,12 +229,12 @@ describe('intercept', () => {
         let modelCalls = 0
         const cached = definePlugin({
           name: 'cached',
-          request: intercept(() => fauxAssistantMessage(reply)),
+          request: intercept(() => assistantMessage(reply)),
         })
         const model = fauxModel([
           () => {
             modelCalls++
-            return fauxAssistantMessage('from the model')
+            return assistantMessage('from the model')
           },
         ])
         const r = createSession(createAgent({ model, plugins: [cached] })).send('go')
@@ -254,7 +260,7 @@ describe('intercept', () => {
           name: 'refuse',
           toolCalls: intercept(message => callsOf(message).map(call => toolError(call, 'refused'))),
         })
-        const model = fauxModel([callEcho(args), fauxAssistantMessage('done')])
+        const model = fauxModel([callEcho(args), assistantMessage('done')])
         const r = createSession(createAgent({ model, tools: [countingEcho(runs)], plugins: [refuse] })).send('go')
 
         // Act
@@ -280,7 +286,7 @@ describe('intercept', () => {
           name: 'refuse',
           toolCall: intercept(call => toolError(call, 'refused')),
         })
-        const model = fauxModel([callEcho(args), fauxAssistantMessage('done')])
+        const model = fauxModel([callEcho(args), assistantMessage('done')])
         const r = createSession(createAgent({ model, tools: [countingEcho(runs)], plugins: [refuse] })).send('go')
 
         // Act
@@ -319,7 +325,7 @@ describe('mapEvents', () => {
           name: 'shout',
           decide: mapEvents(e => (e.type === 'text' ? { ...e, delta: e.delta.toUpperCase() } : e)),
         })
-        const model = fauxModel([fauxAssistantMessage(reply)])
+        const model = fauxModel([assistantMessage(reply)])
         const r = createSession(createAgent({ model, plugins: [shout] })).send('go')
 
         // Act
@@ -342,7 +348,7 @@ describe('mapEvents', () => {
             e.type === 'tool_end' ? { ...e, result: withResultText(e.result, '[hidden]') } : e,
           ),
         })
-        const model = fauxModel([callEcho(args), fauxAssistantMessage('done')])
+        const model = fauxModel([callEcho(args), assistantMessage('done')])
         const r = createSession(createAgent({ model, tools: [echo], plugins: [hide] })).send('go')
 
         // Act
@@ -363,7 +369,7 @@ describe('mapEvents', () => {
           name: 'shout',
           toolCall: mapEvents(e => (e.type === 'tool_update' ? { ...e, data: String(e.data).toUpperCase() } : e)),
         })
-        const model = fauxModel([callEcho(['x']), fauxAssistantMessage('done')])
+        const model = fauxModel([callEcho(['x']), assistantMessage('done')])
         const r = createSession(createAgent({ model, tools: [reporter(updates)], plugins: [shout] })).send('go')
 
         // Act
@@ -405,16 +411,15 @@ interface Script {
   reply: string
 }
 
-const registrations: Array<{ unregister: () => void }> = []
+const registrations: Array<{ dispose: () => void }> = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
-function fauxModel(responses: FauxResponseStep[]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function fauxModel(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 function countingEcho(runs: { count: number }) {
@@ -439,8 +444,8 @@ function reporter(updates: string[]) {
 }
 
 function callEcho(args: string[]): AssistantMessage {
-  const calls = args.map((x, i) => fauxToolCall('echo', { x }, { id: `call-${i}` }))
-  return fauxAssistantMessage(calls, { stopReason: 'toolUse' })
+  const calls = args.map((x, i) => toolUse('echo', { x }, { id: `call-${i}` }))
+  return assistantMessage(calls)
 }
 
 function scenario(): fc.Arbitrary<Script> {
@@ -485,7 +490,7 @@ function probe(hook: StreamingHook, helper: ReturnType<typeof identity>): Plugin
 
 /** What a run shows from outside: its events (without timings), the history and the usage. */
 async function runScenario({ args, reply }: Script, plugins: Plugin[]) {
-  const script = args.length > 0 ? [callEcho(args), fauxAssistantMessage(reply)] : [fauxAssistantMessage(reply)]
+  const script = args.length > 0 ? [callEcho(args), assistantMessage(reply)] : [assistantMessage(reply)]
   const r = createSession(createAgent({ model: fauxModel(script), tools: [echo], plugins })).send('go')
   const [events, state, summary] = await Promise.all([collect(r), r.state, r.summary])
 

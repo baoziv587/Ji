@@ -9,21 +9,14 @@
 //
 // The model side checks the request because it is the one place that sees exactly what the loop sent.
 
-import type { Context } from '@earendil-works/pi-ai/compat'
 import type { Agent, AgentTool, AssistantMessage, PluginList, Run, Session } from '@ji.dev/llm'
+import type { FakeRequest } from '@ji.dev/testing'
 import type { Interjection, Interjections, Plan } from './plan.ts'
 import type { Probe } from './probe.ts'
 import type { ScriptTurn } from './script.ts'
 import { setTimeout as sleep } from 'node:timers/promises'
-import {
-  fauxAssistantMessage,
-  fauxText,
-  fauxToolCall,
-  getCurrentSystemPrompt,
-  registerFauxProvider,
-  withoutInitialSystemMessage,
-} from '@earendil-works/pi-ai/compat'
 import { createAgent, tool, Type } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, textBlock, toolUse } from '@ji.dev/testing'
 import { probe } from './probe.ts'
 
 export interface ReplayOptions {
@@ -53,11 +46,6 @@ export interface Replay {
 export function replay(plan: Plan, modelId: string, options: Omit<ReplayOptions, 'interject'>): Replay {
   const { script } = plan
   const modelViolations: string[] = []
-  const faux = registerFauxProvider({
-    provider: 'faux',
-    models: [{ id: modelId }],
-    tokensPerSecond: options.tokensPerSecond > 0 ? options.tokensPerSecond : undefined,
-  })
 
   let target: { session: Session; run: Run } | undefined
   const interject = ({ message, when }: Interjection): void => {
@@ -73,15 +61,15 @@ export function replay(plan: Plan, modelId: string, options: Omit<ReplayOptions,
   }
 
   const tools = replayTools(plan, options, interject)
-  faux.setResponses(
-    plan.attempts.map((attempt, k) => (context: Context) => {
-      const got = withoutInitialSystemMessage(context.messages)
+  const fake = createFakeModel(
+    plan.attempts.map((attempt, k) => (request: FakeRequest) => {
+      const got = request.messages
       if (got.length !== attempt.messages || got.at(-1)?.role !== attempt.lastRole) {
         modelViolations.push(
           `request ${k}: ${got.length} messages ending in ${got.at(-1)?.role}, expected ${attempt.messages} ending in ${attempt.lastRole}`,
         )
       }
-      if (getCurrentSystemPrompt(context.messages) !== script.system) {
+      if (request.system !== script.system) {
         modelViolations.push(`request ${k}: system prompt differs from the recording`)
       }
 
@@ -91,11 +79,16 @@ export function replay(plan: Plan, modelId: string, options: Omit<ReplayOptions,
       }
       return messageOf(attempt.turn)
     }),
+    {
+      provider: 'faux',
+      id: modelId,
+      tokensPerSecond: options.tokensPerSecond > 0 ? options.tokensPerSecond : undefined,
+    },
   )
 
   const p = probe()
   const agent = createAgent({
-    model: faux.getModel(),
+    model: fake.model,
     system: script.system,
     tools: tools.tools,
     plugins: [p.plugin, ...options.plugins],
@@ -106,18 +99,18 @@ export function replay(plan: Plan, modelId: string, options: Omit<ReplayOptions,
     agent,
     probe: p,
     modelViolations,
-    faux: () => ({ calls: faux.state.callCount, pending: faux.getPendingResponseCount() }),
+    faux: () => ({ calls: fake.calls(), pending: fake.pending() }),
     bind: (session, run) => {
       target = { session, run }
     },
-    dispose: () => faux.unregister(),
+    dispose: () => fake.dispose(),
   }
 }
 
 function messageOf(turn: ScriptTurn): AssistantMessage {
-  const calls = turn.calls.map(c => fauxToolCall(c.name, { cmd: c.cmd }, { id: c.id }))
-  const content = turn.text === '' ? calls : [fauxText(turn.text), ...calls]
-  return fauxAssistantMessage(content, { stopReason: calls.length > 0 ? 'toolUse' : 'stop' })
+  const calls = turn.calls.map(c => toolUse(c.name, { cmd: c.cmd }, { id: c.id }))
+  const content = turn.text === '' ? calls : [textBlock(turn.text), ...calls]
+  return assistantMessage(content, { stopReason: calls.length > 0 ? 'toolUse' : 'stop' })
 }
 
 interface ReplayTools {

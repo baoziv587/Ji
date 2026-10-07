@@ -4,8 +4,8 @@
 // and r.summary holds the totals for the whole run.
 import process from 'node:process'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@earendil-works/pi-ai/compat'
-import { createAgent, createSession, tool, usageOf } from '@ji.dev/llm'
+import { createAgent, createSession, tool, Type, usageOf } from '@ji.dev/llm'
+import { assistantMessage, textBlock, toolUse } from '@ji.dev/testing'
 import { pickModel } from './shared.ts'
 
 const search = tool({
@@ -19,15 +19,12 @@ const search = tool({
 })
 
 const model = pickModel([
-  fauxAssistantMessage(
-    [
-      fauxText('Searching both terms.'),
-      fauxToolCall('search', { query: 'pi-ai' }),
-      fauxToolCall('search', { query: 'agent kernel' }),
-    ],
-    { stopReason: 'toolUse' },
-  ),
-  fauxAssistantMessage('Each term has 3 results.'),
+  assistantMessage([
+    textBlock('Searching both terms.'),
+    toolUse('search', { query: 'pi-ai' }),
+    toolUse('search', { query: 'agent kernel' }),
+  ]),
+  assistantMessage('Each term has 3 results.'),
 ])
 
 const chat = createSession(createAgent({ model, tools: [search] }))

@@ -23,6 +23,6 @@
     "@ji.dev/tui": "workspace:*"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^1.0.4"
+    "@ji.dev/testing": "workspace:*"
   }
 }

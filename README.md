@@ -194,6 +194,7 @@ Find more offline scenarios in [apps/examples](apps/examples/README.md).
 - [Runnable examples](apps/examples/README.md) — start from a working scenario
 
 Use [`@ji.dev/llm`](packages/llm) for LLM agents, or the dependency-free [`@ji.dev/kernel`](packages/kernel) for your own decide → act → record loop.
+To test an agent or a plugin without a provider, [`@ji.dev/testing`](packages/testing) gives a model that replies as scripted.
 
 <br>
 

@@ -1,21 +1,7 @@
-import type {
-  Api,
-  AssistantMessage,
-  Context,
-  FauxResponseStep,
-  Message,
-  Model,
-  ToolCall,
-} from '@earendil-works/pi-ai/compat'
-import type { Turn, TurnEvent } from '@ji.dev/llm'
-import {
-  fauxAssistantMessage,
-  fauxToolCall,
-  registerFauxProvider,
-  Type,
-  withoutInitialSystemMessage,
-} from '@earendil-works/pi-ai/compat'
-import { callsOf, createAgent, createSession, textOf, tool, toolResult, user } from '@ji.dev/llm'
+import type { Api, AssistantMessage, Message, Model, ToolCall, Turn, TurnEvent } from '@ji.dev/llm'
+import type { FakeReply, FakeRequest } from '@ji.dev/testing'
+import { callsOf, createAgent, createSession, textOf, tool, toolResult, Type, user } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { budget } from '../src/plugins/budget.ts'
 import { compaction, cutIndex, SUMMARY_PREFIX } from '../src/plugins/compaction.ts'
@@ -23,11 +9,10 @@ import { keepGoing } from '../src/plugins/keep-going.ts'
 import { sequentialTools } from '../src/plugins/sequential-tools.ts'
 import { truncate, truncateToolResults } from '../src/plugins/truncate-tool-results.ts'
 
-function fauxModel(script: FauxResponseStep[]): Model<Api> {
-  const faux = registerFauxProvider()
-  faux.setResponses(script)
-  onTestFinished(() => faux.unregister())
-  return faux.getModel()
+function fauxModel(script: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(script)
+  onTestFinished(() => fake.dispose())
+  return fake.model
 }
 
 async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
@@ -46,10 +31,9 @@ const echo = tool({
   parameters: Type.Object({ text: Type.String() }),
   run: ({ text }) => text,
 })
-const callEcho = (text: string): AssistantMessage =>
-  fauxAssistantMessage([fauxToolCall('echo', { text })], { stopReason: 'toolUse' })
-const replyToLastUser = (ctx: Context): AssistantMessage =>
-  fauxAssistantMessage(`re:${withoutInitialSystemMessage(ctx.messages).findLast(m => m.role === 'user')?.content}`)
+const callEcho = (text: string): AssistantMessage => assistantMessage([toolUse('echo', { text })])
+const replyToLastUser = ({ messages }: FakeRequest): AssistantMessage =>
+  assistantMessage(`re:${messages.findLast(m => m.role === 'user')?.content}`)
 
 describe('compaction', () => {
   it('never cuts at a tool result', () => {
@@ -59,7 +43,7 @@ describe('compaction', () => {
       callEcho('a'),
       toolResult(call, 'a'),
       toolResult(call, 'b'),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ]
     expect(cutIndex(messages, 2)).toBe(1)
   })
@@ -68,12 +52,7 @@ describe('compaction', () => {
     const big = 'x'.repeat(2_000)
     // After the first tool round there are only 3 messages and the cut is 1, too few to compact;
     // compaction only kicks in after the second round
-    const model = fauxModel([
-      callEcho(big),
-      callEcho('b'),
-      fauxAssistantMessage('the summary'),
-      fauxAssistantMessage('answer'),
-    ])
+    const model = fauxModel([callEcho(big), callEcho('b'), assistantMessage('the summary'), assistantMessage('answer')])
     const agent = createAgent({
       model,
       tools: [echo],
@@ -102,12 +81,12 @@ describe('compaction', () => {
 
   it('keeps the long history for this step when the summary runs out of time', async () => {
     const big = 'x'.repeat(2_000)
-    const stalls: FauxResponseStep = async (_ctx, options) => {
-      await new Promise(resolve => options?.signal?.addEventListener('abort', resolve))
-      return fauxAssistantMessage('too late')
+    const stalls: FakeReply = async ({ signal }) => {
+      await new Promise(resolve => signal?.addEventListener('abort', resolve))
+      return assistantMessage('too late')
     }
     // The history stays long, so the idle step that ends the run tries (and times out) once more
-    const model = fauxModel([callEcho(big), callEcho('b'), stalls, fauxAssistantMessage('answer'), stalls])
+    const model = fauxModel([callEcho(big), callEcho('b'), stalls, assistantMessage('answer'), stalls])
     const agent = createAgent({
       model,
       tools: [echo],
@@ -124,7 +103,7 @@ describe('compaction', () => {
   })
 
   it('does not compact under the limit', async () => {
-    const model = fauxModel([callEcho('small'), fauxAssistantMessage('answer')])
+    const model = fauxModel([callEcho('small'), assistantMessage('answer')])
     const agent = createAgent({
       model,
       tools: [echo],
@@ -147,7 +126,7 @@ describe('truncateToolResults', () => {
   })
 
   it('truncates tool results over the limit and records the original length in details', async () => {
-    const model = fauxModel([callEcho('y'.repeat(5_000)), callEcho('ok'), fauxAssistantMessage('answer')])
+    const model = fauxModel([callEcho('y'.repeat(5_000)), callEcho('ok'), assistantMessage('answer')])
     const agent = createAgent({
       model,
       tools: [echo],
@@ -163,7 +142,7 @@ describe('truncateToolResults', () => {
 
 describe('keepGoing', () => {
   it('inserts "continue" when the agent is idle but the task is unfinished, stops when done', async () => {
-    const model = fauxModel([fauxAssistantMessage('step 1'), fauxAssistantMessage('step 2 DONE')])
+    const model = fauxModel([assistantMessage('step 1'), assistantMessage('step 2 DONE')])
     const plugin = keepGoing({
       isDone: s => s.messages.some(m => m.role === 'assistant' && textOf(m).includes('DONE')),
       prompt: 'continue',
@@ -190,7 +169,7 @@ describe('keepGoing', () => {
 
 describe('budget', () => {
   it('stops when total usage exceeds the limit, using the last assistant message as the result', async () => {
-    const model = fauxModel([callEcho('a'), callEcho('b'), fauxAssistantMessage('never reached')])
+    const model = fauxModel([callEcho('a'), callEcho('b'), assistantMessage('never reached')])
     const agent = createAgent({ model, tools: [echo], plugins: [budget({ maxTokens: 1 })] })
 
     const r = createSession(agent).send('go')
@@ -215,13 +194,11 @@ describe('sequentialTools', () => {
     })
   }
   const callBoth = (): AssistantMessage =>
-    fauxAssistantMessage([fauxToolCall('slow', { id: 'a' }), fauxToolCall('slow', { id: 'b' })], {
-      stopReason: 'toolUse',
-    })
+    assistantMessage([toolUse('slow', { id: 'a' }), toolUse('slow', { id: 'b' })])
 
   it('runs the calls of a turn in parallel without it', async () => {
     const log: string[] = []
-    const model = fauxModel([callBoth(), fauxAssistantMessage('answer')])
+    const model = fauxModel([callBoth(), assistantMessage('answer')])
 
     await createSession(createAgent({ model, tools: [slowTool(log)] })).send('go').result
     expect(log).toEqual(['start a', 'start b', 'end a', 'end b'])
@@ -229,7 +206,7 @@ describe('sequentialTools', () => {
 
   it('runs them one at a time, keeping the results in call order and the model message whole', async () => {
     const log: string[] = []
-    const model = fauxModel([callBoth(), fauxAssistantMessage('answer')])
+    const model = fauxModel([callBoth(), assistantMessage('answer')])
     const agent = createAgent({ model, tools: [slowTool(log)], plugins: [sequentialTools()] })
 
     const state = await createSession(agent).send('go').state

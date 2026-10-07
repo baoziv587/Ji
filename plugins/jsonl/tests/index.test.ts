@@ -1,6 +1,7 @@
 import type { Api, Model } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
+import type { FakeReply } from '@ji.dev/testing'
 import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { afterEach, describe, expect, it } from 'vitest'
 import { jsonl } from '../src/index.ts'
 
@@ -9,7 +10,7 @@ describe('jsonl', () => {
     // Arrange
     const lines: string[] = []
     const chat = createSession(
-      createAgent({ model: faux([fauxAssistantMessage('hello')]), plugins: [jsonl(l => lines.push(l))] }),
+      createAgent({ model: faux([assistantMessage('hello')]), plugins: [jsonl(l => lines.push(l))] }),
     )
 
     // Act
@@ -34,10 +35,7 @@ describe('jsonl', () => {
         return yield* next(state)
       },
     })
-    const model = faux([
-      fauxAssistantMessage('help'),
-      fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'down' }),
-    ])
+    const model = faux([assistantMessage('help'), assistantMessage('x', { stopReason: 'error', errorMessage: 'down' })])
     const agent = createAgent({ model, plugins: [helper, jsonl(l => lines.push(l))] })
 
     // Act
@@ -61,7 +59,7 @@ describe('jsonl', () => {
     // Arrange
     const [without, withState]: string[][] = [[], []]
     const agent = (write: (l: string) => void, state: boolean): ReturnType<typeof createAgent> =>
-      createAgent({ model: faux([fauxAssistantMessage('hello')]), plugins: [jsonl(write, { state })] })
+      createAgent({ model: faux([assistantMessage('hello')]), plugins: [jsonl(write, { state })] })
 
     // Act
     await createSession(agent(l => without.push(l), false)).send('go').result
@@ -77,7 +75,7 @@ describe('jsonl', () => {
   it('should write a failed run error as its name, message and kind', async () => {
     // Arrange
     const lines: string[] = []
-    const model = faux([fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })])
+    const model = faux([assistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })])
     const chat = createSession(createAgent({ model, plugins: [jsonl(l => lines.push(l))] }))
 
     // Act
@@ -102,10 +100,7 @@ describe('jsonl', () => {
         return 'done'
       },
     })
-    const model = faux([
-      fauxAssistantMessage([fauxToolCall('updating', {})], { stopReason: 'toolUse' }),
-      fauxAssistantMessage('ok'),
-    ])
+    const model = faux([assistantMessage([toolUse('updating', {})]), assistantMessage('ok')])
     const chat = createSession(createAgent({ model, tools: [updating], plugins: [jsonl(l => lines.push(l))] }))
 
     // Act
@@ -121,16 +116,15 @@ describe('jsonl', () => {
 
 // Helpers
 
-const registrations: Array<{ unregister: () => void }> = []
+const registrations: Array<{ dispose: () => void }> = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
-function faux(responses: Parameters<ReturnType<typeof registerFauxProvider>['setResponses']>[0]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function faux(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {

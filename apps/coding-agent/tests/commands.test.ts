@@ -1,8 +1,8 @@
 // The built-in commands: /compact sends the compaction plugin's command, once there is something to compact
 import type { Api, Model, Run } from '@ji.dev/llm'
-import { fauxAssistantMessage, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent } from '@ji.dev/llm'
 import { COMPACT_COMMAND } from '@ji.dev/plugin-compaction'
+import { assistantMessage, createFakeModel } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { Conversation } from '../src/agent/conversation.ts'
 import { createCommandMenu } from '../src/ui/commands.ts'
@@ -31,8 +31,7 @@ async function replied(run: Run): Promise<void> {
 }
 
 function faux(): Model<Api> {
-  const provider = registerFauxProvider({ models: [{ id: 'faux' }] })
-  provider.setResponses([fauxAssistantMessage('hi')])
-  onTestFinished(() => provider.unregister())
-  return provider.getModel()
+  const fake = createFakeModel([assistantMessage('hi')])
+  onTestFinished(() => fake.dispose())
+  return fake.model
 }

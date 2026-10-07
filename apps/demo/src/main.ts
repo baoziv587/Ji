@@ -3,8 +3,8 @@
 //   MODEL=anthropic/claude-sonnet-4-6 pnpm demo   real: any provider/model pi-ai supports, API key read from env
 import type { Api, Model, Plugin } from '@ji.dev/llm'
 import process from 'node:process'
-import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, findModel, textOf, tool, Type } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, textBlock, toolUse } from '@ji.dev/testing'
 
 const calc = tool({
   name: 'calc',
@@ -73,18 +73,13 @@ function pickModel(): Model<Api> {
     return findModel(spec)
   }
 
-  const faux = registerFauxProvider({ tokensPerSecond: 80 })
-  faux.setResponses([
-    fauxAssistantMessage([fauxText('Multiply first.'), fauxToolCall('calc', { expr: '17*23' })], {
-      stopReason: 'toolUse',
-    }),
-    fauxAssistantMessage([fauxText('Leaving out the argument on purpose.'), fauxToolCall('calc', {})], {
-      stopReason: 'toolUse',
-    }),
-    fauxAssistantMessage([fauxText('Now add 9.'), fauxToolCall('calc', { expr: '391+9' })], {
-      stopReason: 'toolUse',
-    }),
-    fauxAssistantMessage('17*23 = 391, plus 9 is 400.'),
-  ])
-  return faux.getModel()
+  return createFakeModel(
+    [
+      assistantMessage([textBlock('Multiply first.'), toolUse('calc', { expr: '17*23' })]),
+      assistantMessage([textBlock('Leaving out the argument on purpose.'), toolUse('calc', {})]),
+      assistantMessage([textBlock('Now add 9.'), toolUse('calc', { expr: '391+9' })]),
+      assistantMessage('17*23 = 391, plus 9 is 400.'),
+    ],
+    { tokensPerSecond: 80 },
+  ).model
 }

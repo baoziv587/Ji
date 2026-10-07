@@ -1,6 +1,6 @@
 import type { AgentTool, Api, JsonValue, Model, Plugin, PluginList, ToolResultMessage } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { createTruncateToolResultsPlugin, truncateText } from '../src/index.ts'
@@ -145,11 +145,7 @@ async function runOnce(t: AgentTool, plugins: PluginList): Promise<ToolResultMes
 }
 
 function faux(name: string): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses([
-    fauxAssistantMessage([fauxToolCall(name, {})], { stopReason: 'toolUse' }),
-    fauxAssistantMessage('ok'),
-  ])
-  onTestFinished(() => registration.unregister())
-  return registration.getModel()
+  const fake = createFakeModel([assistantMessage([toolUse(name, {})]), assistantMessage('ok')])
+  onTestFinished(() => fake.dispose())
+  return fake.model
 }

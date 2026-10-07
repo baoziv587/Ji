@@ -1,23 +1,21 @@
-import type { FauxResponseStep } from '@earendil-works/pi-ai/compat'
 // Shared by the examples: picking a model and displaying a run.
 import type { Api, Model, Run, RunSummary, Turn } from '@ji.dev/llm'
+import type { FakeReply } from '@ji.dev/testing'
 import process from 'node:process'
-import { registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { findModel } from '@ji.dev/llm'
+import { createFakeModel } from '@ji.dev/testing'
 
 /**
  * MODEL=anthropic/claude-sonnet-5 -> a real model (API key read from env).
  * Without MODEL -> pi-ai's faux provider replays `script` step by step, so the example runs offline.
  */
-export function pickModel(script: FauxResponseStep[], tokensPerSecond = 200): Model<Api> {
+export function pickModel(script: FakeReply[], tokensPerSecond = 200): Model<Api> {
   const spec = process.env.MODEL
   if (spec) {
     return findModel(spec)
   }
 
-  const faux = registerFauxProvider({ tokensPerSecond })
-  faux.setResponses(script)
-  return faux.getModel()
+  return createFakeModel(script, { tokensPerSecond }).model
 }
 
 /** Reads two streams at once: text as it streams, plus one line per finished step. Prints the totals at the end. */

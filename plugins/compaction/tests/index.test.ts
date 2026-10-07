@@ -1,7 +1,7 @@
-import type { FauxResponseStep } from '@earendil-works/pi-ai/compat'
 import type { Api, AssistantMessage, Message, Model, RunEvent, ToolCall, Usage } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
+import type { FakeReply } from '@ji.dev/testing'
 import { createAgent, createSession, textOf, tool, toolResult, Type, user } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import {
   COMPACT_COMMAND,
@@ -55,7 +55,7 @@ describe('cutIndex', () => {
       callEcho('a'),
       toolResult(call, 'a'),
       toolResult(call, 'b'),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ]
 
     // Act / Assert: only the last two fit, and 3 is a tool result
@@ -63,7 +63,7 @@ describe('cutIndex', () => {
   })
 
   it('should keep the last message even when it alone is over the budget', () => {
-    const messages = [user('q'), fauxAssistantMessage('x'.repeat(4_000))]
+    const messages = [user('q'), assistantMessage('x'.repeat(4_000))]
     expect(cutIndex(messages, 10)).toBe(1)
   })
 })
@@ -71,11 +71,7 @@ describe('cutIndex', () => {
 describe('createCompactionPlugin', () => {
   it('should replace the history with a summary plus the latest messages, then continue', async () => {
     // Arrange: the call and its result are over the limit, so compaction is due before the second model call
-    const model = fauxModel([
-      callEcho('x'.repeat(2_000)),
-      fauxAssistantMessage('the summary'),
-      fauxAssistantMessage('answer'),
-    ])
+    const model = fauxModel([callEcho('x'.repeat(2_000)), assistantMessage('the summary'), assistantMessage('answer')])
     const plugin = createCompactionPlugin({ maxTokens: 400, keepRecentTokens: 50 })
 
     // Act
@@ -97,8 +93,8 @@ describe('createCompactionPlugin', () => {
 
   it('should keep the history and go on when the summary fails', async () => {
     // Arrange
-    const fails: FauxResponseStep = () => fauxAssistantMessage('', { stopReason: 'error', errorMessage: 'overloaded' })
-    const model = fauxModel([callEcho('x'.repeat(2_000)), fails, fauxAssistantMessage('answer')])
+    const fails: FakeReply = () => assistantMessage('', { stopReason: 'error', errorMessage: 'overloaded' })
+    const model = fauxModel([callEcho('x'.repeat(2_000)), fails, assistantMessage('answer')])
     const plugin = createCompactionPlugin({ maxTokens: 400, keepRecentTokens: 50 })
 
     // Act
@@ -114,7 +110,7 @@ describe('createCompactionPlugin', () => {
 
   it('should keep the history when the summary comes back empty', async () => {
     // Arrange
-    const model = fauxModel([callEcho('x'.repeat(2_000)), fauxAssistantMessage(''), fauxAssistantMessage('answer')])
+    const model = fauxModel([callEcho('x'.repeat(2_000)), assistantMessage(''), assistantMessage('answer')])
     const plugin = createCompactionPlugin({ maxTokens: 400, keepRecentTokens: 50 })
 
     // Act
@@ -129,11 +125,11 @@ describe('createCompactionPlugin', () => {
 
   it('should keep the history for this step when the summary runs out of time', async () => {
     // Arrange
-    const stalls: FauxResponseStep = async (_ctx, options) => {
-      await new Promise(resolve => options?.signal?.addEventListener('abort', resolve))
-      return fauxAssistantMessage('too late')
+    const stalls: FakeReply = async ({ signal }) => {
+      await new Promise(resolve => signal?.addEventListener('abort', resolve))
+      return assistantMessage('too late')
     }
-    const model = fauxModel([callEcho('x'.repeat(2_000)), stalls, fauxAssistantMessage('answer')])
+    const model = fauxModel([callEcho('x'.repeat(2_000)), stalls, assistantMessage('answer')])
     const plugin = createCompactionPlugin({ maxTokens: 400, keepRecentTokens: 50, timeoutMs: 10 })
 
     // Act
@@ -147,7 +143,7 @@ describe('createCompactionPlugin', () => {
   })
 
   it('should not compact under the limit', async () => {
-    const model = fauxModel([callEcho('small'), fauxAssistantMessage('answer')])
+    const model = fauxModel([callEcho('small'), assistantMessage('answer')])
     const plugin = createCompactionPlugin({ maxTokens: 10_000 })
 
     const r = createSession(createAgent({ model, tools: [echo], plugins: [plugin] })).send('go')
@@ -157,7 +153,7 @@ describe('createCompactionPlugin', () => {
 
   it('should summarize everything but the last reply on /compact, without calling the model for a reply', async () => {
     // Arrange: a conversation well under the limit, then the summary
-    const model = fauxModel([callEcho('small'), fauxAssistantMessage('answer'), fauxAssistantMessage('the summary')])
+    const model = fauxModel([callEcho('small'), assistantMessage('answer'), assistantMessage('the summary')])
     const session = createSession(
       createAgent({ model, tools: [echo], plugins: [createCompactionPlugin({ maxTokens: 10_000 })] }),
     )
@@ -179,7 +175,7 @@ describe('createCompactionPlugin', () => {
 
   it('should say so on a /compact right after another', async () => {
     // Arrange: compacted once already, so only the summary and the last reply are left
-    const model = fauxModel([fauxAssistantMessage('answer'), fauxAssistantMessage('the summary')])
+    const model = fauxModel([assistantMessage('answer'), assistantMessage('the summary')])
     const session = createSession(createAgent({ model, plugins: [createCompactionPlugin({ maxTokens: 10_000 })] }))
     await session.send('go').result
     await session.send(COMPACT_COMMAND).result
@@ -196,7 +192,7 @@ describe('createCompactionPlugin', () => {
 })
 
 function callEcho(text: string): AssistantMessage {
-  return fauxAssistantMessage([fauxToolCall('echo', { text })], { stopReason: 'toolUse' })
+  return assistantMessage([toolUse('echo', { text })])
 }
 
 function withUsage(message: AssistantMessage, input: number): AssistantMessage {
@@ -204,11 +200,10 @@ function withUsage(message: AssistantMessage, input: number): AssistantMessage {
   return { ...message, usage }
 }
 
-function fauxModel(script: FauxResponseStep[]): Model<Api> {
-  const faux = registerFauxProvider()
-  faux.setResponses(script)
-  onTestFinished(() => faux.unregister())
-  return faux.getModel()
+function fauxModel(script: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(script)
+  onTestFinished(() => fake.dispose())
+  return fake.model
 }
 
 async function collect(source: AsyncIterable<RunEvent>): Promise<RunEvent[]> {

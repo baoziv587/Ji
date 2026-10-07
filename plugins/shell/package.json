@@ -14,9 +14,9 @@
     "@ji.dev/llm": "workspace:*"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^1.0.4",
     "@ji.dev/llm": "workspace:*",
     "@ji.dev/plugin-choices": "workspace:*",
-    "@ji.dev/plugin-files": "workspace:*"
+    "@ji.dev/plugin-files": "workspace:*",
+    "@ji.dev/testing": "workspace:*"
   }
 }

@@ -1,10 +1,10 @@
 // summaryReducer, usageOf and addUsage are pure, so they are tested with hand-built turns and exact numbers.
 // Timing and cost cannot be asserted exactly through the faux provider (timings vary, cost is always 0).
-import type { AssistantMessage, ToolCall, Usage } from '@earendil-works/pi-ai/compat'
+import type { AssistantMessage, ToolCall, Usage } from '../src/index.ts'
 import type { TimedTurn } from '../src/summary.ts'
 import type { RunSummary, UsageTotals } from '../src/types.ts'
-import { fauxAssistantMessage } from '@earendil-works/pi-ai/compat'
 import { resultOf } from '@ji.dev/kernel/reduce'
+import { assistantMessage } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { user } from '../src/message.ts'
@@ -13,7 +13,7 @@ import { toolError, toolResult } from '../src/tool.ts'
 
 function assistant(input: number, output: number, cost: number): AssistantMessage {
   return {
-    ...fauxAssistantMessage('reply'),
+    ...assistantMessage('reply'),
     usage: {
       input,
       output,

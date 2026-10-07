@@ -1,4 +1,3 @@
-import type { Api, Model } from '@earendil-works/pi-ai/compat'
 // Fine-grained hooks: pnpm --filter @ji.dev/examples hooks
 //
 //   input    keep going automatically while the agent is idle but the task is unfinished (keepGoing plugin)
@@ -8,9 +7,9 @@ import type { Api, Model } from '@earendil-works/pi-ai/compat'
 //
 // The list reads outside in: lowTemperature comes before fallback, so both the first try and the fallback run at
 // temperature 0.
-import type { AssistantMessage, ModelRequest, Plugin, RequestContext } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxText, withoutInitialSystemMessage } from '@earendil-works/pi-ai/compat'
+import type { Api, AssistantMessage, Model, ModelRequest, Plugin, RequestContext } from '@ji.dev/llm'
 import { before, createAgent, createSession, definePlugin, mapEvents, textOf, user } from '@ji.dev/llm'
+import { assistantMessage, textBlock } from '@ji.dev/testing'
 import { budget } from './plugins/budget.ts'
 import { keepGoing } from './plugins/keep-going.ts'
 import { pickModel, show } from './shared.ts'
@@ -61,14 +60,12 @@ const lowTemperature = definePlugin({
 })
 
 const main = pickModel([
-  fauxAssistantMessage([fauxText('')], { stopReason: 'error', errorMessage: 'overloaded' }),
-  ctx =>
-    fauxAssistantMessage(
-      `Step 1 done (the model sees ${withoutInitialSystemMessage(ctx.messages).length} messages, including the retrieval results).`,
-    ),
-  fauxAssistantMessage('Step 2 done. DONE'),
+  assistantMessage([textBlock('')], { stopReason: 'error', errorMessage: 'overloaded' }),
+  ({ messages }) =>
+    assistantMessage(`Step 1 done (the model sees ${messages.length} messages, including the retrieval results).`),
+  assistantMessage('Step 2 done. DONE'),
 ])
-const fallback = pickModel([fauxAssistantMessage('Fallback model: read the docs, starting step 1.')])
+const fallback = pickModel([assistantMessage('Fallback model: read the docs, starting step 1.')])
 
 const agent = createAgent({
   model: main,
