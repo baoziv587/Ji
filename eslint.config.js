@@ -7,6 +7,8 @@ export default antfu(
     typescript: true,
     // oxfmt owns formatting; ESLint only checks code quality
     stylistic: false,
+    // eval/ is a Python project with its own linter (ruff); its .venv ships JavaScript of its own
+    ignores: ['eval/**'],
   },
   ...createSlopConfig({
     cwd: import.meta.dirname,

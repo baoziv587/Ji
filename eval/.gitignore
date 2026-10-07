@@ -1,0 +1,5 @@
+.venv/
+jobs/
+.ruff_cache
+*.pyc
+**/*.pyc
