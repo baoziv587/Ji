@@ -1,6 +1,7 @@
 // What the model reads: a short line, then the diff or one line per error with what to do next (RFC §6.1).
 // Machine-readable fields go in details, which the model never sees.
 
+import type { JsonObject, JsonValue } from '@ji.dev/llm'
 import type { Applied, Prepared } from './commit.ts'
 import type { Result } from './core/result.ts'
 import type { EditError } from './transform.ts'
@@ -11,7 +12,7 @@ const MAX_DIFF_LINES = 200
 
 export interface Rendered {
   text: string
-  details: Record<string, unknown>
+  details: JsonObject
   isError: boolean
 }
 
@@ -24,7 +25,7 @@ export function render(result: Result<Applied, EditError[]>, shown: string): Ren
 
   const lines = result.error.map(e => explain(e, shown))
   const text = [`Edit failed; ${shown} is unchanged.`, ...lines, ...similar(result.error)].join('\n')
-  return { text, details: { errors: result.error }, isError: true }
+  return { text, details: { errors: asJson(result.error) }, isError: true }
 }
 
 /** Hunks without context lines, numbered as in the file before and after. */
@@ -111,4 +112,9 @@ function similar(errors: readonly EditError[]): string[] {
 /** A final line break does not start another line. */
 function lineCount(s: string): number {
   return (s.match(/\n/g)?.length ?? 0) + (s === '' || s.endsWith('\n') ? 0 : 1)
+}
+
+/** EditError is plain data; a round trip through JSON is what proves it to the types, on the error path only. */
+function asJson(errors: readonly EditError[]): JsonValue {
+  return JSON.parse(JSON.stringify(errors)) as JsonValue
 }

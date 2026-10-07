@@ -32,7 +32,7 @@ local checkout first (`source` uploads the working tree), then pin a pushed comm
 
 ```sh
 uv run harbor run -p /path/to/terminal-bench-2/fix-code-vulnerability \
-  -a ji_eval.harbor_agent:JiCodingAgent -m deepseek/deepseek-v4-flash \
+  -a ji_eval.harbor_agent:JiCodingAgent -m deepseek/deepseek-flash \
   --ak source=.. --ak thinking=high --ak timeout_sec=800 \
   -o jobs -y
 ```
@@ -43,13 +43,13 @@ gets its `run_end`). A custom endpoint goes through the provider's base URL vari
 
 ## A model the catalog lacks
 
-`-m provider/id` must be in pi-ai's catalog. For a newer model of a listed provider, name a catalog entry it shares
-the API and limits with (`like`) and its price (`cost`, USD per million tokens: in, out, cache read, cache write), or
-the cost is the entry's. Claude Sonnet 5.5 through OpenRouter, with `OPENROUTER_API_KEY` set:
+`-m provider/id` must be in pi-ai's catalog (Claude Sonnet 5.5 through OpenRouter is: `-m openrouter/anthropic/claude-sonnet-5.5`
+with `OPENROUTER_API_KEY` set). For a newer model of a listed provider, name a catalog entry it shares the API and limits
+with (`like`) and its price (`cost`, USD per million tokens: in, out, cache read, cache write), or the cost is the entry's:
 
 ```sh
-uv run harbor run -p <task> -a ji_eval.harbor_agent:JiCodingAgent -m openrouter/anthropic/claude-sonnet-5.5 \
-  --ak like=openrouter/anthropic/claude-sonnet-4.5 --ak cost=2,10,0.2,2.5 --ak thinking=high -o jobs -y
+uv run harbor run -p <task> -a ji_eval.harbor_agent:JiCodingAgent -m openrouter/anthropic/claude-sonnet-6 \
+  --ak like=openrouter/anthropic/claude-sonnet-5.5 --ak cost=2,10,0.2,2.5 --ak thinking=high -o jobs -y
 ```
 
 ## Terminal-Bench 4.0

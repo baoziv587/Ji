@@ -30,7 +30,7 @@ Leaving any stream loop early cancels the whole run; see [Cancellation](#cancell
 ```ts
 // stateless, reusable
 const agent = createAgent({
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-flash',
   thinking,
   system,
   tools,
@@ -157,7 +157,7 @@ The plugin list can change between save and restore. A plugin with no saved stat
 `model` is a `'provider/id'` from pi-ai's catalog, or a pi-ai `Model` object for anything else (a custom `baseUrl`, the faux provider). The agent knows what the model accepts, so you never need pi-ai to ask:
 
 ```ts
-const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'high' })
+const agent = createAgent({ model: 'deepseek/deepseek-flash', thinking: 'high' })
 agent.model.thinkingLevels // ['off', 'high', 'xhigh']
 agent.thinking // 'high'
 agent.model.hasEnvKey // is DEEPSEEK_API_KEY set right now?

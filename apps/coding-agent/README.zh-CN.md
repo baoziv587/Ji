@@ -38,6 +38,6 @@ pnpm coding-agent
 | `/help`         | 列出按键、命令和工具                         |
 | `/exit`         | 退出                                         |
 
-`DEEPSEEK_MODEL`（默认 `deepseek-v4-flash`）和 `DEEPSEEK_THINKING`（默认 `high`）设置模型和思考档位。鼠标滚轮用来滚动，选字要按住 Option；退出后整段对话会打印回终端。
+`DEEPSEEK_MODEL`（默认 `deepseek-flash`）和 `DEEPSEEK_THINKING`（默认 `high`）设置模型和思考档位。鼠标滚轮用来滚动，选字要按住 Option；退出后整段对话会打印回终端。
 
 [代码结构 →](docs/zh-CN/architecture.md)

@@ -1,8 +1,8 @@
 // Replies through the LLM layers (RFC-0007 §4, §9): Q1 for the hook helpers, Q6 for tools, and ctx.complete.
-import type { FauxResponseStep } from '@mariozechner/pi-ai'
+import type { FauxResponseStep } from '@earendil-works/pi-ai/compat'
 import type { Api, Model, Payload, Plugin, RunEvent, Stream, ToolCall } from '../src/index.ts'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { answerAll, recorder } from '@ji.dev/kernel/testing'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import {

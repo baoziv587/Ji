@@ -1,7 +1,7 @@
 import type { AgentTool, Api, Model, PluginList, RunEvent, Session } from '@ji.dev/llm'
 import type { Attributes, MeterLike, SpanLike } from '../src/index.ts'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import { otel } from '../src/index.ts'

@@ -4,11 +4,11 @@
 //   createAgent({ model, plugins: [otel({ tracer: trace.getTracer('agent'), context: { active: context.active, setSpan: trace.setSpan } })] })
 //
 //   invoke_agent                     first event of the run … run_end
-//   ├─ chat deepseek-v4-flash        model_start … model_end or model_error
+//   ├─ chat deepseek-flash        model_start … model_end or model_error
 //   ├─ execute_tool calc             tool_start … tool_end        (parallel calls overlap)
 //   ├─ compaction                    compaction:start … compaction:end   (any plugin's :start / :end pair)
-//   │  └─ chat deepseek-v4-flash     a model call the plugin made through ctx.complete (model_start by: 'compaction')
-//   └─ chat deepseek-v4-flash
+//   │  └─ chat deepseek-flash     a model call the plugin made through ctx.complete (model_start by: 'compaction')
+//   └─ chat deepseek-flash
 //
 // Only observe: it never changes the run and sees the same events whatever the plugin order. It depends on the shape
 // of the OpenTelemetry API, not the package, so any tracer with startSpan fits. Names follow the GenAI semantic

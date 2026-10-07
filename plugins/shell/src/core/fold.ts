@@ -18,7 +18,9 @@ export interface Chunk {
 /** How a process ended by itself, or by a signal. */
 export type Exit = { kind: 'exit'; code: number } | { kind: 'signal'; signal: string }
 
-export interface Timeout {
+/** A type alias, not an interface: tool details must be JSON, which the types can only see of an alias. */
+// eslint-disable-next-line ts/consistent-type-definitions -- an interface is not assignable to pi-ai's JsonValue
+export type Timeout = {
   kind: 'timeout'
   clock: 'total' | 'idle'
   ms: number

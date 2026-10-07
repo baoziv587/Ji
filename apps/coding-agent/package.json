@@ -23,6 +23,6 @@
     "@ji.dev/tui": "workspace:*"
   },
   "devDependencies": {
-    "@mariozechner/pi-ai": "^0.73.1"
+    "@earendil-works/pi-ai": "^1.0.4"
   }
 }

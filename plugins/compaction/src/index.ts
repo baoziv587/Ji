@@ -331,6 +331,11 @@ function transcriptEntry(m: Message): string {
     return [`Assistant: ${textOf(m)}`, ...calls].join('\n')
   }
 
+  if (m.role === 'system') {
+    // pi-ai's transcript form carries the prompt as a message; a history never holds one, so this is only for the types
+    return ''
+  }
+
   const text = m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
   return `Tool ${m.toolName}${m.isError ? ' (error)' : ''}: ${clip(text)}`
 }

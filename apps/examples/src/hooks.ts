@@ -1,3 +1,4 @@
+import type { Api, Model } from '@earendil-works/pi-ai/compat'
 // Fine-grained hooks: pnpm --filter @ji.dev/examples hooks
 //
 //   input    keep going automatically while the agent is idle but the task is unfinished (keepGoing plugin)
@@ -8,9 +9,8 @@
 // The list reads outside in: lowTemperature comes before fallback, so both the first try and the fallback run at
 // temperature 0.
 import type { AssistantMessage, ModelRequest, Plugin, RequestContext } from '@ji.dev/llm'
-import type { Api, Model } from '@mariozechner/pi-ai'
+import { fauxAssistantMessage, fauxText, withoutInitialSystemMessage } from '@earendil-works/pi-ai/compat'
 import { before, createAgent, createSession, definePlugin, mapEvents, textOf, user } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxText } from '@mariozechner/pi-ai'
 import { budget } from './plugins/budget.ts'
 import { keepGoing } from './plugins/keep-going.ts'
 import { pickModel, show } from './shared.ts'
@@ -64,7 +64,7 @@ const main = pickModel([
   fauxAssistantMessage([fauxText('')], { stopReason: 'error', errorMessage: 'overloaded' }),
   ctx =>
     fauxAssistantMessage(
-      `Step 1 done (the model sees ${ctx.messages.length} messages, including the retrieval results).`,
+      `Step 1 done (the model sees ${withoutInitialSystemMessage(ctx.messages).length} messages, including the retrieval results).`,
     ),
   fauxAssistantMessage('Step 2 done. DONE'),
 ])

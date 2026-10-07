@@ -11,7 +11,7 @@
 //   | tail  ~25%             |     | tail, from a line start|
 //   +------------------------+     +------------------------+
 
-import type { Plugin, ToolResultMessage } from '@ji.dev/llm'
+import type { JsonValue, Plugin, ToolResultMessage } from '@ji.dev/llm'
 import { after, definePlugin } from '@ji.dev/llm'
 
 export interface TruncateToolResultsOptions {
@@ -66,7 +66,7 @@ function truncateResult(result: ToolResultMessage, maxChars: number): ToolResult
   return { ...result, content, details: withTruncated(result.details, text.length) }
 }
 
-function withTruncated(details: unknown, originalChars: number): unknown {
+function withTruncated(details: JsonValue | undefined, originalChars: number): JsonValue {
   if (details === undefined) {
     return { truncated: { originalChars } }
   }

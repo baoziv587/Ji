@@ -1,7 +1,7 @@
 // Turn helpers: how a step is recorded, converted to the kernel's (action, obs), and written into history.
-import type { ToolCall } from '@mariozechner/pi-ai'
+import type { ToolCall } from '@earendil-works/pi-ai/compat'
 import type { AgentState, Turn } from '../src/types.ts'
-import { fauxAssistantMessage, fauxToolCall } from '@mariozechner/pi-ai'
+import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai/compat'
 import { describe, expect, it } from 'vitest'
 import { isIdle, user } from '../src/message.ts'
 import { toolResult } from '../src/tool.ts'

@@ -1,5 +1,5 @@
 // What waits for a yes, and what a yes can allow from then on
-import type { ToolCall } from '@ji.dev/llm'
+import type { JsonObject, ToolCall } from '@ji.dev/llm'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -66,7 +66,7 @@ async function setup(): Promise<{ permissions: Permissions; outside: string }> {
   return { permissions: new Permissions(workspace, fileTools, shellTools), outside }
 }
 
-function call(name: string, args: Record<string, unknown>): ToolCall {
+function call(name: string, args: JsonObject): ToolCall {
   return { type: 'toolCall', id: 'c', name, arguments: args }
 }
 

@@ -1,7 +1,7 @@
-import type { Agent as KernelAgent, Stream } from '@ji.dev/kernel'
 import type {
   Api,
   AssistantMessage,
+  JsonValue,
   Message,
   Model,
   ModelThinkingLevel,
@@ -12,7 +12,8 @@ import type {
   ToolResultMessage,
   TSchema,
   Usage,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai/compat'
+import type { Agent as KernelAgent, Stream } from '@ji.dev/kernel'
 import type { RunError } from './errors.ts'
 
 /** `plugins` is keyed by plugin name. */
@@ -82,7 +83,7 @@ export type LLMAgent = KernelAgent<AgentState, AgentAction, ToolResultMessage[],
  * What a tool returns: its text for the model, or the text plus `details` for plugins and programs (the model never
  * sees them). `isError: true` reports an expected failure as a result, like toolError: a retry never sees it.
  */
-export type ToolOutput = string | { text: string; details?: unknown; isError?: boolean }
+export type ToolOutput = string | { text: string; details?: JsonValue; isError?: boolean }
 
 /**
  * A pi-ai Tool (TypeBox schema) plus `run`. `run` may be an async generator: every value it yields becomes a

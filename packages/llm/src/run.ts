@@ -1,4 +1,4 @@
-import type { AssistantMessage, ToolCall, ToolResultMessage } from '@mariozechner/pi-ai'
+import type { AssistantMessage, ToolCall, ToolResultMessage } from '@earendil-works/pi-ai/compat'
 import type { Agent, RunContext } from './agent.ts'
 import type {
   AgentAction,

@@ -1,8 +1,14 @@
+import {
+  fauxAssistantMessage,
+  fauxText,
+  fauxToolCall,
+  Type,
+  withoutInitialSystemMessage,
+} from '@earendil-works/pi-ai/compat'
 // Trimming oversized tool results: pnpm --filter @ji.dev/examples truncate
 //
 // fetch_page returns a 50,000-character page; truncateToolResults cuts it to 2,000 characters before the model sees it.
 import { createAgent, createSession, tool } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { truncateToolResults } from './plugins/truncate-tool-results.ts'
 import { pickModel, show } from './shared.ts'
 
@@ -18,7 +24,7 @@ const model = pickModel([
     stopReason: 'toolUse',
   }),
   ctx => {
-    const result = ctx.messages.at(-1)
+    const result = withoutInitialSystemMessage(ctx.messages).at(-1)
     const size = result?.role === 'toolResult' ? JSON.stringify(result.content).length : 0
     return fauxAssistantMessage(`The page content I received is about ${size} characters.`)
   },

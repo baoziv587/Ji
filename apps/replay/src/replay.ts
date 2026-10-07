@@ -9,14 +9,21 @@
 //
 // The model side checks the request because it is the one place that sees exactly what the loop sent.
 
+import type { Context } from '@earendil-works/pi-ai/compat'
 import type { Agent, AgentTool, AssistantMessage, PluginList, Run, Session } from '@ji.dev/llm'
-import type { Context } from '@mariozechner/pi-ai'
 import type { Interjection, Interjections, Plan } from './plan.ts'
 import type { Probe } from './probe.ts'
 import type { ScriptTurn } from './script.ts'
 import { setTimeout as sleep } from 'node:timers/promises'
+import {
+  fauxAssistantMessage,
+  fauxText,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+  registerFauxProvider,
+  withoutInitialSystemMessage,
+} from '@earendil-works/pi-ai/compat'
 import { createAgent, tool, Type } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { probe } from './probe.ts'
 
 export interface ReplayOptions {
@@ -68,13 +75,13 @@ export function replay(plan: Plan, modelId: string, options: Omit<ReplayOptions,
   const tools = replayTools(plan, options, interject)
   faux.setResponses(
     plan.attempts.map((attempt, k) => (context: Context) => {
-      const got = context.messages
+      const got = withoutInitialSystemMessage(context.messages)
       if (got.length !== attempt.messages || got.at(-1)?.role !== attempt.lastRole) {
         modelViolations.push(
           `request ${k}: ${got.length} messages ending in ${got.at(-1)?.role}, expected ${attempt.messages} ending in ${attempt.lastRole}`,
         )
       }
-      if ((context.systemPrompt ?? '') !== script.system) {
+      if (getCurrentSystemPrompt(context.messages) !== script.system) {
         modelViolations.push(`request ${k}: system prompt differs from the recording`)
       }
 

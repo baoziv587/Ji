@@ -1,5 +1,5 @@
 // A call and its result in the two views: one row each, however long, and a file read in color
-import type { ToolCall, ToolResultMessage } from '@ji.dev/llm'
+import type { JsonObject, ToolCall, ToolResultMessage } from '@ji.dev/llm'
 import process from 'node:process'
 import { stripVTControlCharacters } from 'node:util'
 import { toolError } from '@ji.dev/llm'
@@ -112,7 +112,7 @@ describe('describeResult', () => {
 
 // Helpers
 
-function call(name: string, args: Record<string, unknown>): ToolCall {
+function call(name: string, args: JsonObject): ToolCall {
   return { type: 'toolCall', id: 'c', name, arguments: args }
 }
 

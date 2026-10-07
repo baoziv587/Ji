@@ -1,5 +1,5 @@
+import type { Usage } from '@earendil-works/pi-ai/compat'
 import type { Reducer } from '@ji.dev/kernel/reduce'
-import type { Usage } from '@mariozechner/pi-ai'
 import type { AgentState, RunSummary, Turn, TurnTiming, UsageTotals } from './types.ts'
 import { combine, count, filterInput, sum } from '@ji.dev/kernel/reduce'
 import { isAssistant } from './message.ts'

@@ -1,9 +1,22 @@
 // Plugin hooks as RFC-0006 defines them: the list order, registration, ctx, ctx.complete, model attempts, observer
 // misuse, development checks and the error channels. Runs against pi-ai's faux provider.
-import type { AssistantMessage, Context, FauxResponseStep, Message, SimpleStreamOptions } from '@mariozechner/pi-ai'
+import type {
+  AssistantMessage,
+  Context,
+  FauxResponseStep,
+  Message,
+  SimpleStreamOptions,
+} from '@earendil-works/pi-ai/compat'
 import type { AgentState, Api, Model, Plugin, RunEvent, Session, UsageTotals } from '../src/index.ts'
 import process from 'node:process'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
+import {
+  fauxAssistantMessage,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+  getInitialSystemMessage,
+  registerFauxProvider,
+  Type,
+} from '@earendil-works/pi-ai/compat'
 import fc from 'fast-check'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
@@ -97,7 +110,7 @@ describe('plugin order (§6)', () => {
         return { ...req, systemPrompt: `${req.systemPrompt}B` }
       }),
     })
-    const model = fauxModel([ctx => fauxAssistantMessage(`prompt=${ctx.systemPrompt}`)])
+    const model = fauxModel([ctx => fauxAssistantMessage(`prompt=${getCurrentSystemPrompt(ctx.messages)}`)])
 
     // Act
     const result = await createSession(createAgent({ model, plugins: [first, second] })).send('go').result
@@ -123,7 +136,7 @@ describe('registration (§6.1)', () => {
     let prompt: string | undefined
     const model = fauxModel([
       ctx => {
-        prompt = ctx.systemPrompt
+        prompt = getCurrentSystemPrompt(ctx.messages)
         return fauxAssistantMessage('ok')
       },
     ])
@@ -322,7 +335,7 @@ describe('ctx.complete (§5)', () => {
     expect((await text).join('')).toBe('answer')
     expect(bys).toEqual(['summarizer', undefined])
     expect(requests).toEqual([
-      { system: undefined, tools: 0 },
+      { system: '', tools: 0 },
       { system: 'S', tools: 1 },
     ])
     expect(modelEvents(events)).toEqual([
@@ -842,7 +855,10 @@ function seeRequest(
   text: string,
 ): (ctx: Context, options?: SimpleStreamOptions) => AssistantMessage {
   return ctx => {
-    seen.push({ system: ctx.systemPrompt, tools: ctx.tools?.length ?? 0 })
+    seen.push({
+      system: getCurrentSystemPrompt(ctx.messages),
+      tools: getInitialSystemMessage(ctx.messages)?.toolsAdded?.length ?? 0,
+    })
     return fauxAssistantMessage(text)
   }
 }

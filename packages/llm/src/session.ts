@@ -1,4 +1,4 @@
-import type { Message } from '@mariozechner/pi-ai'
+import type { Message } from '@earendil-works/pi-ai/compat'
 import type { Agent } from './agent.ts'
 import type { Run, RunHost } from './run.ts'
 import type { AgentState, Boundary, PendingMessage, When } from './types.ts'

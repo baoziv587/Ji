@@ -23,7 +23,7 @@ import { choices } from '@ji.dev/plugin-choices'
 import { terminal } from '@ji.dev/plugin-choices/terminal'
 
 const agent = createAgent({
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-flash',
   plugins: [choices({ answer: terminal() })],
 })
 
@@ -64,7 +64,7 @@ const shell = createShellPlugin(createLocalExecutor({ cwd: root }))
 const fileTools = files(localWorkspace(root))
 
 const agent = createAgent({
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-flash',
   plugins: [
     shell,
     fileTools,

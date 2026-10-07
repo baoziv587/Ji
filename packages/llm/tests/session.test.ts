@@ -1,8 +1,8 @@
 // session.use: switching agents keeps the conversation, and a run in progress switches at the next step boundary.
 // session.id: new for each session unless a resumed one keeps its own.
-import type { Context, SimpleStreamOptions } from '@mariozechner/pi-ai'
+import type { Context, SimpleStreamOptions } from '@earendil-works/pi-ai/compat'
 import type { Api, AssistantMessage, Model, RunEvent } from '../src/index.ts'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { createAgent, createSession, tool, Type } from '../src/index.ts'
 

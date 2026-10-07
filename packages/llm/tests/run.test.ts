@@ -1,6 +1,6 @@
 // The run's event stream (RFC-0005 §3, appendix A): one stream, well formed whatever the timing, interrupts
 // and failures; r.text, r.turns and r.summary are projections of it; observe sees it all and changes nothing.
-import type { FauxResponseStep } from '@mariozechner/pi-ai'
+import type { FauxResponseStep, JsonObject } from '@earendil-works/pi-ai/compat'
 import type {
   AgentTool,
   Api,
@@ -21,7 +21,7 @@ import {
   registerApiProvider,
   registerFauxProvider,
   unregisterApiProviders,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai/compat'
 import fc from 'fast-check'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callsOf, createAgent, createSession, definePlugin, tool, toolError, Type } from '../src/index.ts'
@@ -592,7 +592,7 @@ function lateId(pieces: string[]): Model<Api> {
             // The stream hands on the same message: each piece is read before the next changes it, as over a network
             await new Promise(resolve => setTimeout(resolve))
           }
-          block.arguments = JSON.parse(pieces.join('')) as Record<string, unknown>
+          block.arguments = JSON.parse(pieces.join('')) as JsonObject
           stream.push({ type: 'toolcall_end', contentIndex: 0, toolCall: block, partial: message })
           stream.push({ type: 'done', reason: 'toolUse', message })
           stream.end(message)

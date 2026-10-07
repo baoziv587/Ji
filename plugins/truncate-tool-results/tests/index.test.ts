@@ -1,6 +1,6 @@
-import type { AgentTool, Api, Model, Plugin, PluginList, ToolResultMessage } from '@ji.dev/llm'
+import type { AgentTool, Api, JsonValue, Model, Plugin, PluginList, ToolResultMessage } from '@ji.dev/llm'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { createTruncateToolResultsPlugin, truncateText } from '../src/index.ts'
@@ -113,7 +113,7 @@ describe('createTruncateToolResultsPlugin', () => {
   })
 })
 
-function textTool(text: string, details?: unknown): AgentTool {
+function textTool(text: string, details?: JsonValue): AgentTool {
   return tool({
     name: 'dump',
     description: 'returns a lot of text',

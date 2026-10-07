@@ -1,8 +1,8 @@
-import type { ToolCall, ToolResultMessage, TSchema } from '@mariozechner/pi-ai'
+import type { JsonValue, ToolCall, ToolResultMessage, TSchema } from '@earendil-works/pi-ai/compat'
 import type { AgentTool, ToolRunner } from './types.ts'
+import { validateToolCall } from '@earendil-works/pi-ai/compat'
 import { mapYield } from '@ji.dev/kernel'
 import { errorMessage, isAsyncIterable } from '@ji.dev/utils'
-import { validateToolCall } from '@mariozechner/pi-ai'
 
 /** Identity; exists so `run`'s arguments are inferred from the schema. */
 export const tool = <T extends TSchema>(t: AgentTool<T>): AgentTool<T> => t
@@ -39,7 +39,7 @@ export function toolRunner(tools: AgentTool[], signal: AbortSignal): ToolRunner 
   }
 }
 
-function resultOf(call: ToolCall, text: string, isError: boolean, details?: unknown): ToolResultMessage {
+function resultOf(call: ToolCall, text: string, isError: boolean, details?: JsonValue): ToolResultMessage {
   return {
     role: 'toolResult',
     toolCallId: call.id,

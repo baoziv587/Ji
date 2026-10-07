@@ -30,7 +30,7 @@ console.log(await r.summary)
 ```ts
 // 无状态，可复用
 const agent = createAgent({
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-flash',
   thinking,
   system,
   tools,
@@ -157,7 +157,7 @@ createSession(agent, { state: messages })
 `model` 写成 pi-ai 目录里的 `'provider/id'`，其他情况（自定义 `baseUrl`、faux provider）传 pi-ai 的 `Model` 对象。模型支持什么，agent 自己知道，不需要再去问 pi-ai：
 
 ```ts
-const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'high' })
+const agent = createAgent({ model: 'deepseek/deepseek-flash', thinking: 'high' })
 agent.model.thinkingLevels // ['off', 'high', 'xhigh']
 agent.thinking // 'high'
 agent.model.hasEnvKey // 此刻是否设置了 DEEPSEEK_API_KEY

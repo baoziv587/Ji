@@ -5,10 +5,16 @@
 //   chat.send(text, { when: 'now' })    interrupt: cancels the current step and inserts right away
 //
 // While the agent is working, all of these join the current run and return the same Run.
-import type { Context } from '@mariozechner/pi-ai'
+import type { Context } from '@earendil-works/pi-ai/compat'
 import { setTimeout as sleep } from 'node:timers/promises'
+import {
+  fauxAssistantMessage,
+  fauxText,
+  fauxToolCall,
+  Type,
+  withoutInitialSystemMessage,
+} from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, tool } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { pickModel, show } from './shared.ts'
 
 const runTests = tool({
@@ -22,7 +28,7 @@ const runTests = tool({
 })
 
 function reply(ctx: Context): ReturnType<typeof fauxAssistantMessage> {
-  const last = ctx.messages.findLast(m => m.role === 'user')
+  const last = withoutInitialSystemMessage(ctx.messages).findLast(m => m.role === 'user')
   return fauxAssistantMessage(`OK: ${last?.content}.`)
 }
 
