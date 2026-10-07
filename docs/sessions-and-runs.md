@@ -160,14 +160,14 @@ The plugin list can change between save and restore. A plugin with no saved stat
 const agent = createAgent({ model: 'deepseek/deepseek-flash', thinking: 'high' })
 agent.model.thinkingLevels // ['off', 'high', 'xhigh']
 agent.thinking // 'high'
-agent.model.hasEnvKey // is DEEPSEEK_API_KEY set right now?
+await agent.model.hasKey() // is a DeepSeek key set right now, in the environment or stored?
 ```
 
 `thinking` is `'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`. It defaults to `'off'`, or to the lightest level for a model that always thinks. A level the model does not accept throws at `createAgent`; nothing is mapped silently. `findModel(spec)` and `listModels(provider?)` give the same information before you build an agent, for a model picker.
 
 - **Mid-conversation:** `chat.use(agent.with({ thinking: 'xhigh' }))`. `with` returns a new agent and leaves the old one as it is; `use` switches at the next step boundary and keeps the state, the queued messages and the run in progress.
 - **Per request:** a `request: before(req => ({ ...req, thinking: 'xhigh' }))` plugin. A plugin may also switch the model, so this level is mapped to the nearest one the request's model supports, and the level actually sent is reported in `model_start`.
-- **API key:** nothing checks it for you, since a key can also come from `apiKey` or a request plugin. Check `agent.model.hasEnvKey` when the user is about to send, not before.
+- **API key:** nothing checks it for you, since a key can also come from `apiKey` or a request plugin. Check `await agent.model.hasKey()` when the user is about to send, not before.
 
 <br>
 

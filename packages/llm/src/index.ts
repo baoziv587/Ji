@@ -30,6 +30,7 @@ export {
   type RequestContext,
   type ToolCallsRunner,
 } from './plugin.ts'
+export { registerProvider } from './registry.ts'
 export type { Run } from './run.ts'
 export { createSession, type Session, type SessionOptions } from './session.ts'
 export { usageOf } from './summary.ts'
@@ -62,7 +63,7 @@ export type {
   When,
 } from './types.ts'
 // What writing an agent needs from pi-ai, so tools, events and models come from one import
-export { Type } from '@earendil-works/pi-ai/compat'
+export { Type } from '@earendil-works/pi-ai'
 
 export type {
   Api,
@@ -71,9 +72,10 @@ export type {
   JsonValue,
   Message,
   Model,
+  Provider,
   ToolCall,
   ToolResultMessage,
   TSchema,
   Usage,
-} from '@earendil-works/pi-ai/compat'
+} from '@earendil-works/pi-ai'
 export type { Stream } from '@ji.dev/kernel'

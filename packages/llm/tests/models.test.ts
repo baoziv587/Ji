@@ -134,18 +134,18 @@ describe('listModels', () => {
     expect(models.map(m => m.id)).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
   })
 
-  it('should tell whether the provider key is in the environment when asked, not when listed', () => {
+  it('should tell whether the provider has a key when asked, not when listed', async () => {
     // Arrange
     vi.stubEnv('DEEPSEEK_API_KEY', '')
     const [model] = listModels('deepseek')
-    const before = model.hasEnvKey
+    const before = await model.hasKey()
 
     // Act
     vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test')
 
     // Assert
     expect(before).toBe(false)
-    expect(model.hasEnvKey).toBe(true)
+    expect(await model.hasKey()).toBe(true)
   })
 })
 

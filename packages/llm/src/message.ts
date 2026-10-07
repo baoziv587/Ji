@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, ToolCall } from '@earendil-works/pi-ai/compat'
+import type { AssistantMessage, Message, ToolCall } from '@earendil-works/pi-ai'
 import type { AgentState } from './types.ts'
 
 export const user = (text: string): Message => ({

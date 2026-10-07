@@ -1,7 +1,8 @@
-import type { Api, KnownProvider, Model } from '@earendil-works/pi-ai/compat'
+import type { Api, Model } from '@earendil-works/pi-ai'
 import type { ModelRef, ThinkingLevel } from './types.ts'
-import { getEnvApiKey, getModels, getProviders, getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat'
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { closest } from '@ji.dev/utils'
+import { models } from './registry.ts'
 
 /** A pi-ai Model plus what the agent already knows about it; still a Model, so pi-ai functions accept it. */
 export type ModelInfo = Model<Api> & {
@@ -11,10 +12,10 @@ export type ModelInfo = Model<Api> & {
    */
   readonly thinkingLevels: readonly ThinkingLevel[]
   /**
-   * Whether the provider's API key is set in the environment right now. Nothing checks it for you: a key can also
+   * Whether the provider has a key right now, in the environment or stored. Nothing checks it for you: a key can also
    * come from `apiKey` or a request plugin, so ask for one when the user is about to send, not up front.
    */
-  readonly hasEnvKey: boolean
+  readonly hasKey: () => Promise<boolean>
 }
 
 /** Thrown by findModel and createAgent; `available` and `suggestion` are ready for a model picker. */
@@ -54,16 +55,13 @@ export function modelInfo(model: Model<Api>): ModelInfo {
   return {
     ...model,
     thinkingLevels: getSupportedThinkingLevels(model),
-    get hasEnvKey() {
-      return getEnvApiKey(model.provider) !== undefined
-    },
+    hasKey: async () => (await models.checkAuth(model.provider)) !== undefined,
   }
 }
 
-/** Models from pi-ai's catalog, of one provider or of all. */
+/** Models from pi-ai's catalog and the registered providers, of one provider or of all. */
 export function listModels(provider?: string): ModelInfo[] {
-  const providers = provider === undefined ? getProviders() : [provider as KnownProvider]
-  return providers.flatMap(p => getModels(p).map(m => modelInfo(m as Model<Api>)))
+  return models.getModels(provider).map(modelInfo)
 }
 
 /**
@@ -76,7 +74,7 @@ export function findModel(spec: string): ModelInfo {
 }
 
 function findInProvider(spec: string, provider: string, id: string): ModelInfo {
-  const providers = getProviders() as string[]
+  const providers = models.getProviders().map(p => p.id)
   if (!providers.includes(provider)) {
     const match = closest(provider, providers)
     throw new UnknownModelError(spec, {
@@ -86,10 +84,10 @@ function findInProvider(spec: string, provider: string, id: string): ModelInfo {
     })
   }
 
-  const models = listModels(provider)
-  const found = models.find(m => m.id === id)
+  const offered = listModels(provider)
+  const found = offered.find(m => m.id === id)
   if (found === undefined) {
-    const specs = models.map(specOf)
+    const specs = offered.map(specOf)
     throw new UnknownModelError(spec, {
       reason: `Unknown model "${spec}"`,
       suggestion: closest(spec, specs),

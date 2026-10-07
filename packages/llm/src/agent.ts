@@ -6,7 +6,7 @@ import type {
   Model,
   ToolCall,
   ToolResultMessage,
-} from '@earendil-works/pi-ai/compat'
+} from '@earendil-works/pi-ai'
 import type { Stream } from '@ji.dev/kernel'
 import type { ModelInfo } from './models.ts'
 import type { AnyPlugin, CallOptions, CompleteRequest, HookContexts, PluginList } from './plugin.ts'
@@ -24,13 +24,14 @@ import type {
   ToolRunner,
 } from './types.ts'
 import { performance } from 'node:perf_hooks'
-import { clampThinkingLevel, streamSimple } from '@earendil-works/pi-ai/compat'
+import { clampThinkingLevel } from '@earendil-works/pi-ai'
 import { act, extend, merge } from '@ji.dev/kernel'
 import { errorMessage, isDevEnv, isThenable, warn } from '@ji.dev/utils'
 import { ModelCallError } from './errors.ts'
 import { callsOf, isIdle } from './message.ts'
 import { findModel, modelInfo, UnsupportedThinkingError } from './models.ts'
 import { assertNoConflicts, extensionOf, pluginsOf } from './plugin.ts'
+import { models } from './registry.ts'
 import { toolError, toolRunner } from './tool.ts'
 import { applyTurn, isModelAction, stop, turnOf } from './turn.ts'
 
@@ -314,7 +315,7 @@ async function* callModel(req: ModelRequest, { signal, by }: CallScope): Stream<
     messages,
     tools,
   }
-  const events = streamSimple(model, context, {
+  const events = models.streamSimple(model, context, {
     ...options,
     reasoning: level === 'off' ? undefined : level,
     signal: AbortSignal.any([signal, ctl.signal]),

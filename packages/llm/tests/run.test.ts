@@ -16,15 +16,20 @@ import type {
 } from '../src/index.ts'
 import process from 'node:process'
 // eslint-disable-next-line no-restricted-imports -- lateId is a hand-written pi-ai provider: a stream the fake cannot script
-import {
-  createAssistantMessageEventStream,
-  registerApiProvider,
-  unregisterApiProviders,
-} from '@earendil-works/pi-ai/compat'
+import { createAssistantMessageEventStream, createProvider } from '@earendil-works/pi-ai'
 import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { callsOf, createAgent, createSession, definePlugin, tool, toolError, Type } from '../src/index.ts'
+import {
+  callsOf,
+  createAgent,
+  createSession,
+  definePlugin,
+  registerProvider,
+  tool,
+  toolError,
+  Type,
+} from '../src/index.ts'
 
 // Plugin events are registered with declaration merging, through the package entry like any user would
 declare module '../src/index.ts' {
@@ -560,10 +565,13 @@ function faux(responses: FakeReply[]): Model<Api> {
 /** A model that calls `work` with `pieces` of arguments, its id coming with the second as some providers do; then answers. */
 function lateId(pieces: string[]): Model<Api> {
   const api = 'late-id'
+  const model: Model<Api> = { ...faux([]), api, provider: api }
   let calls = 0
-  registerApiProvider(
-    {
-      api,
+  const provider = createProvider({
+    id: api,
+    auth: { apiKey: { name: 'none', resolve: async () => ({ auth: {} }) } },
+    models: [model],
+    api: {
       stream: () => {
         throw new Error('streamSimple only')
       },
@@ -597,10 +605,9 @@ function lateId(pieces: string[]): Model<Api> {
         return stream
       },
     },
-    api,
-  )
-  registrations.push({ dispose: () => unregisterApiProviders(api) })
-  return { ...faux([]), api }
+  })
+  registrations.push({ dispose: registerProvider(provider) })
+  return model
 }
 
 function callsTo(name: string): AssistantMessage {
