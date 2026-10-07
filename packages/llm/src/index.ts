@@ -30,7 +30,7 @@ export {
   type RequestContext,
   type ToolCallsRunner,
 } from './plugin.ts'
-export { registerProvider } from './registry.ts'
+export { models, registerProvider, useCredentialStore } from './registry.ts'
 export type { Run } from './run.ts'
 export { createSession, type Session, type SessionOptions } from './session.ts'
 export { usageOf } from './summary.ts'
@@ -68,6 +68,13 @@ export { Type } from '@earendil-works/pi-ai'
 export type {
   Api,
   AssistantMessage,
+  AuthEvent,
+  AuthInteraction,
+  AuthPrompt,
+  AuthType,
+  Credential,
+  CredentialInfo,
+  CredentialStore,
   JsonObject,
   JsonValue,
   Message,

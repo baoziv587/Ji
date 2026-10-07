@@ -23,8 +23,10 @@ export interface InputContext {
   quit: () => void
 }
 
-export const MISSING_KEY =
-  'DEEPSEEK_API_KEY is not set. Quit with /exit, run `export DEEPSEEK_API_KEY=sk-...`, and start again.'
+/** The provider has no key in the environment and nothing stored. */
+export function missingKey(provider: string): string {
+  return `No credential for ${provider}: /login ${provider}, or set its API key in the environment and start again.`
+}
 
 export class Input {
   private readonly context: InputContext
@@ -112,8 +114,9 @@ export class Input {
 
   /** A message for the model needs the key; without one it stays in the input, to send once the key is set. */
   private async submitToModel(message: string): Promise<void> {
-    if (!(await this.context.conversation.agent.model.hasKey())) {
-      log.warn(MISSING_KEY)
+    const { model } = this.context.conversation.agent
+    if (!(await model.hasKey())) {
+      log.warn(missingKey(model.provider))
       return
     }
 

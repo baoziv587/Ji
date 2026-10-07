@@ -5,6 +5,7 @@
 import type { ToolCall } from '@ji.dev/llm'
 import type { Questions, Reply } from '@ji.dev/plugin-choices'
 import type { Screen, Status } from '@ji.dev/tui'
+import type { Readable } from 'node:stream'
 import type { Approval, Permissions } from '../features/permissions.ts'
 import { styleText } from 'node:util'
 import { terminal } from '@ji.dev/plugin-choices/terminal'
@@ -33,18 +34,27 @@ export class Answering {
    * For choices: Esc dismisses a question, and Ctrl+C stops the reply through the keypress listener. The live rows wait
    * while it is open: a question draws itself again by moving up over its own rows.
    */
-  readonly answer = (q: Questions, signal: AbortSignal): Promise<Reply> => {
+  readonly answer = (q: Questions, signal: AbortSignal): Promise<Reply> => this.hold(() => this.choose(q, signal))
+
+  /**
+   * Something else asks on the screen, a login's prompts say: `ask` reads the keys, and meanwhile the keys are its
+   * own and the live rows wait, as at a question.
+   */
+  hold<T>(ask: (keys: Readable) => Promise<T>): Promise<T> {
     this.screen.live.pause()
-    const reply = this.choose(q, signal)
     this.showing = true
-    this.question = reply
+    const pending = ask(this.screen.keys).finally(() => {
+      // A prompt pauses the keys when it closes
+      this.screen.keys.resume()
+    })
+    this.question = pending
       .catch(() => {})
       .finally(() => {
         this.showing = false
         this.screen.live.resume()
         this.screen.draw()
       })
-    return reply
+    return pending
   }
 
   /** While a question is on screen, the keys are its own, not the input line's. */

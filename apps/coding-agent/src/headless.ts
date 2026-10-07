@@ -5,7 +5,8 @@
 //   The task is the argument, or stdin without one. The answer goes to stdout, progress to stderr, and the exit code
 //   says how it went: 0 done, 1 the run failed (timed out, aborted, the provider, too many steps), 2 a bad invocation.
 //
-//   --model provider/id   pi-ai's catalog; the key comes from the provider's environment variable (default: deepseek)
+//   --model provider/id   pi-ai's catalog; the key comes from what /login kept in ~/.ji, or the provider's environment
+//                         variable (default: deepseek)
 //   --like provider/id    for a model the catalog lacks: the catalog entry whose API, endpoint and limits it shares
 //   --cost in,out,cacheRead,cacheWrite   USD per million tokens of a --like model (default: the --like entry's)
 //   --base-url url        send the model's calls to another endpoint, an OpenAI-compatible proxy say
@@ -19,9 +20,12 @@
 import type { AnyPlugin, Api, Model, ModelInfo, RunEvent, ThinkingLevel, ToolCall } from '@ji.dev/llm'
 import type { TaskOptions, TaskOutcome } from './headless/task.ts'
 import { closeSync, openSync, readFileSync, writeSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
-import { definePlugin, findModel, UnsupportedThinkingError } from '@ji.dev/llm'
+import { definePlugin, findModel, UnsupportedThinkingError, useCredentialStore } from '@ji.dev/llm'
+import { createFileCredentialStore } from '@ji.dev/plugin-auth'
 import { jsonl } from '@ji.dev/plugin-jsonl'
 import { runTask } from './headless/task.ts'
 
@@ -40,6 +44,8 @@ const options = {
   'max-steps': { type: 'string' },
   quiet: { type: 'boolean', default: false },
 } as const
+
+useCredentialStore(createFileCredentialStore(join(homedir(), '.ji', 'auth.json')))
 
 main(process.argv.slice(2)).then(code => {
   process.exitCode = code

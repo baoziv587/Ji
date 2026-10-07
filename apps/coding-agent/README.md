@@ -15,6 +15,10 @@ pnpm coding-agent
 
 Needs Node 24+. **It works in the directory you start it from.** To use it on another project, run `node <this repo>/apps/coding-agent/src/main.ts` there.
 
+## Signing in
+
+`/login openai` signs in with ChatGPT in the browser, so a Plus or Pro subscription answers instead of an API key; `/login deepseek` asks for the key and keeps it. Either goes to `~/.ji/auth.json`, readable by you only, and `/logout <provider>` forgets it. Pick the model with `pnpm coding-agent --model openai/gpt-5.5`; headless reads the same file.
+
 ## Safety
 
 - By default, every command, file read and file change waits for your yes. **Shift+Tab** switches to auto: reads and changes inside the workspace go ahead, commands are still asked about.

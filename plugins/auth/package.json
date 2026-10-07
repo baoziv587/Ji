@@ -1,0 +1,23 @@
+{
+  "name": "@ji.dev/plugin-auth",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Credentials kept in a file, one per provider, and logging in to a provider from there: in the browser, or with a key typed in",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@ji.dev/llm": "workspace:*"
+  },
+  "dependencies": {
+    "proper-lockfile": "^4.1.2"
+  },
+  "devDependencies": {
+    "@ji.dev/llm": "workspace:*",
+    "@types/proper-lockfile": "^4.1.4"
+  }
+}
