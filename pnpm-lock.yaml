@@ -226,6 +226,9 @@ importers:
       '@ji.dev/plugin-shell':
         specifier: workspace:*
         version: link:../../plugins/shell
+      '@ji.dev/plugin-skills':
+        specifier: workspace:*
+        version: link:../../plugins/skills
       '@ji.dev/plugin-truncate-tool-results':
         specifier: workspace:*
         version: link:../../plugins/truncate-tool-results
@@ -379,6 +382,15 @@ importers:
       '@ji.dev/plugin-files':
         specifier: workspace:*
         version: link:../files
+      '@mariozechner/pi-ai':
+        specifier: ^0.73.1
+        version: 0.73.1(ws@8.21.3)(zod@4.6.5)
+
+  plugins/skills:
+    devDependencies:
+      '@ji.dev/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@mariozechner/pi-ai':
         specifier: ^0.73.1
         version: 0.73.1(ws@8.21.3)(zod@4.6.5)

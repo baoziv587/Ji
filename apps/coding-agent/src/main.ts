@@ -161,7 +161,7 @@ screen.keys.on('keypress', input.onKey)
 screen.start()
 
 // The menu reads the commands as it draws: once the skills are in, a draw shows them
-skills.loading.then(
+skills.plugin.loading.then(
   () => screen.draw(),
   (error: unknown) => log.warn(`Skills: ${error instanceof Error ? error.message : String(error)}`),
 )

@@ -16,6 +16,7 @@
     "@ji.dev/plugin-compaction": "workspace:*",
     "@ji.dev/plugin-files": "workspace:*",
     "@ji.dev/plugin-shell": "workspace:*",
+    "@ji.dev/plugin-skills": "workspace:*",
     "@ji.dev/plugin-truncate-tool-results": "workspace:*",
     "@ji.dev/tui": "workspace:*"
   },

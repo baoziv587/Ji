@@ -5,6 +5,7 @@ import type { LiveRows, Screen, Status } from '@ji.dev/tui'
 import type { Meter } from '../usage.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
+import { commandLineOf, parseSkillCall } from '@ji.dev/plugin-skills'
 import { dimText, formatCount, OutputTail, paintRail } from '@ji.dev/tui'
 import {
   describeArguments,
@@ -256,10 +257,11 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
   }
 }
 
-/** A message's text; images and other parts by their type. */
+/** A message's text, a skill call as the line that was typed; images and other parts by their type. */
 function contentOf(m: Message): string {
   if (typeof m.content === 'string') {
-    return m.content
+    const call = parseSkillCall(m.content)
+    return call === undefined ? m.content : commandLineOf(call)
   }
   return m.content.map(c => (c.type === 'text' ? c.text : `[${c.type}]`)).join('')
 }
