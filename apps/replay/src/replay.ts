@@ -79,11 +79,8 @@ export function replay(plan: Plan, modelId: string, options: Omit<ReplayOptions,
       }
       return messageOf(attempt.turn)
     }),
-    {
-      provider: 'faux',
-      id: modelId,
-      tokensPerSecond: options.tokensPerSecond > 0 ? options.tokensPerSecond : undefined,
-    },
+    // Each case gets its own provider: cases run at once, and a shared name would mix their queues
+    { id: modelId, tokensPerSecond: options.tokensPerSecond > 0 ? options.tokensPerSecond : undefined },
   )
 
   const p = probe()

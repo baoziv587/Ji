@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, ToolCall, ToolResultMessage } from '@earendil-works/pi-ai/compat'
+import type { AssistantMessage, Message, ToolCall, ToolResultMessage } from '@earendil-works/pi-ai'
 import type { Extension, Step, Stream } from '@ji.dev/kernel'
 import type { Lens } from '@ji.dev/kernel/advanced'
 import type {

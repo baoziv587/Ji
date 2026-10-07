@@ -160,14 +160,14 @@ createSession(agent, { state: messages })
 const agent = createAgent({ model: 'deepseek/deepseek-flash', thinking: 'high' })
 agent.model.thinkingLevels // ['off', 'high', 'xhigh']
 agent.thinking // 'high'
-agent.model.hasEnvKey // 此刻是否设置了 DEEPSEEK_API_KEY
+await agent.model.hasKey() // 此刻是否有 DeepSeek 的 key，环境变量或存下来的都算
 ```
 
 `thinking` 取 `'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`，默认 `'off'`；对总是思考的模型，默认取它最轻的档位。模型不支持的档位在 `createAgent` 时就报错，不会被悄悄换掉。创建 agent 之前（比如做模型选择界面）用 `findModel(spec)`、`listModels(provider?)` 拿到同样的信息。
 
 - **对话中途换档**：`chat.use(agent.with({ thinking: 'xhigh' }))`。`with` 返回一个新 agent，原来的不变；`use` 在下一个步边界生效，状态、排队的消息和正在进行的运行都保留。
 - **按请求改**：写一个 `request: before(req => ({ ...req, thinking: 'xhigh' }))` 插件。插件也可能换了模型，所以这里的档位会映射到这次请求的模型支持的最近一档，实际发出的档位在 `model_start` 里报告。
-- **API key**：库不替你检查，因为 key 也可能来自 `apiKey` 或 request 插件。在用户准备发送时检查 `agent.model.hasEnvKey`，而不是一开始就拦住。
+- **API key**：库不替你检查，因为 key 也可能来自 `apiKey` 或 request 插件。在用户准备发送时检查 `await agent.model.hasKey()`，而不是一开始就拦住。
 
 <br>
 

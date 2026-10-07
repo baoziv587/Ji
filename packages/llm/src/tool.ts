@@ -1,6 +1,6 @@
-import type { JsonValue, ToolCall, ToolResultMessage, TSchema } from '@earendil-works/pi-ai/compat'
+import type { JsonValue, ToolCall, ToolResultMessage, TSchema } from '@earendil-works/pi-ai'
 import type { AgentTool, ToolRunner } from './types.ts'
-import { validateToolCall } from '@earendil-works/pi-ai/compat'
+import { validateToolCall } from '@earendil-works/pi-ai'
 import { mapYield } from '@ji.dev/kernel'
 import { errorMessage, isAsyncIterable } from '@ji.dev/utils'
 

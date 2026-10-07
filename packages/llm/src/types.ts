@@ -12,7 +12,7 @@ import type {
   ToolResultMessage,
   TSchema,
   Usage,
-} from '@earendil-works/pi-ai/compat'
+} from '@earendil-works/pi-ai'
 import type { Agent as KernelAgent, Stream } from '@ji.dev/kernel'
 import type { RunError } from './errors.ts'
 

@@ -93,21 +93,38 @@ export class Input {
 
   /** Enter: a command, a new reply, or a steer for the one in progress. */
   private submit(): void {
-    const { conversation, screen, commands } = this.context
     const message = editingText(this.state).trim()
-    if (message !== '' && !message.startsWith('/') && !conversation.agent.model.hasEnvKey) {
-      // The message stays in the input, to send once the key is set
+    if (message === '') {
+      this.clear()
+      return
+    }
+    if (message.startsWith('/')) {
+      this.clear()
+      // A slash message that is no command goes to the model like any other
+      if (!this.context.commands.run(message)) {
+        this.send(message)
+      }
+      return
+    }
+
+    void this.submitToModel(message)
+  }
+
+  /** A message for the model needs the key; without one it stays in the input, to send once the key is set. */
+  private async submitToModel(message: string): Promise<void> {
+    if (!(await this.context.conversation.agent.model.hasKey())) {
       log.warn(MISSING_KEY)
       return
     }
 
-    this.state = EMPTY_EDITING
-    screen.follow()
-    if (message === '' || commands.run(message)) {
-      return
-    }
-
+    this.clear()
     this.send(message)
+  }
+
+  /** Empties the input and lets the screen follow the conversation again. */
+  private clear(): void {
+    this.state = EMPTY_EDITING
+    this.context.screen.follow()
   }
 
   /** Sends a message, and shows the reply it starts; a steer shows once it reaches the model, as queued until then. */

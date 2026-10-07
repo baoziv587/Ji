@@ -12,17 +12,18 @@ import type {
   ThinkingLevel,
   ToolCall,
   TranscriptContext,
-} from '@earendil-works/pi-ai/compat'
+} from '@earendil-works/pi-ai'
 import {
   fauxAssistantMessage,
+  fauxProvider,
   fauxText,
   fauxThinking,
   fauxToolCall,
   getCurrentSystemPrompt,
   getInitialSystemMessage,
-  registerFauxProvider,
   withoutInitialSystemMessage,
-} from '@earendil-works/pi-ai/compat'
+} from '@earendil-works/pi-ai'
+import { registerProvider } from '@ji.dev/llm'
 
 /** What the model was asked, as a scripted reply sees it. */
 export interface FakeRequest {
@@ -47,7 +48,7 @@ export interface FakeModelOptions {
   reasoning?: boolean
   /** Streams this many tokens a second, yielding between them; unthrottled by default, in microtasks. */
   tokensPerSecond?: number
-  /** The provider name the model shows. */
+  /** The provider name the model shows; 'faux-1', 'faux-2', … by default, so fakes alive at once stay apart. */
   provider?: string
 }
 
@@ -64,10 +65,13 @@ export interface FakeModel {
   dispose: () => void
 }
 
+let fakes = 0
+
 /** A model that gives `replies` in order and fails once they run out. */
 export function createFakeModel(replies: FakeReply[] = [], options: FakeModelOptions = {}): FakeModel {
-  const { id = 'faux', reasoning = false, tokensPerSecond, provider } = options
-  const faux = registerFauxProvider({ models: [{ id, reasoning }], tokensPerSecond, provider })
+  const { id = 'faux', reasoning = false, tokensPerSecond, provider = `faux-${++fakes}` } = options
+  const faux = fauxProvider({ models: [{ id, reasoning }], tokensPerSecond, provider })
+  const unregister = registerProvider(faux.provider)
 
   const script = (...next: FakeReply[]): void => {
     faux.setResponses(next.map(reply => (typeof reply === 'function' ? asFactory(reply) : reply)))
@@ -79,7 +83,7 @@ export function createFakeModel(replies: FakeReply[] = [], options: FakeModelOpt
     script,
     calls: () => faux.state.callCount,
     pending: () => faux.getPendingResponseCount(),
-    dispose: () => faux.unregister(),
+    dispose: unregister,
   }
 }
 

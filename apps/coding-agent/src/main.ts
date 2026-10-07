@@ -182,7 +182,7 @@ const welcome = `${dimText(`${toolCount} ·`)} ${formatKeyHint('/help', 'lists k
 log.message(welcome, { spacing: 0 })
 
 // The key is only needed to send, so its absence is pointed out without blocking anything else
-if (!conversation.agent.model.hasEnvKey) {
+if (!(await conversation.agent.model.hasKey())) {
   log.warn(MISSING_KEY)
 }
 
