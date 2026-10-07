@@ -1,0 +1,20 @@
+{
+  "name": "@ji.dev/plugin-skills",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The SKILL.md folders of a directory as /name commands: the history keeps the call, the model gets the instructions",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@ji.dev/llm": "workspace:*"
+  },
+  "devDependencies": {
+    "@ji.dev/llm": "workspace:*",
+    "@mariozechner/pi-ai": "^0.73.1"
+  }
+}
