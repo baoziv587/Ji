@@ -1,5 +1,6 @@
 // What waits for a yes, and what a yes can allow from then on
 import type { JsonObject, ToolCall } from '@ji.dev/llm'
+import type { PermissionsOptions } from '../src/features/permissions.ts'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -50,11 +51,29 @@ describe('permissions', () => {
     expect(await asked(permissions, call('edit', { path: join(outside, 'a.txt'), content: 'x' }))).toBe(true)
     expect(permissions.describeAllowed()).toMatch(/^allows .+\/$/)
   })
+
+  it('should ask about nothing in yolo mode, outside the workspace included, and stay in it', async () => {
+    // Arrange
+    const { permissions, outside } = await setup({ yolo: true })
+
+    // Act
+    permissions.switchMode()
+    const askedAbout = await Promise.all([
+      asked(permissions, call('bash', { command: 'rm -rf build' })),
+      asked(permissions, call('edit', { path: join(outside, 'a.txt'), content: 'x' })),
+      asked(permissions, call('read', { path: 'README.md' })),
+    ])
+
+    // Assert
+    expect(permissions.mode).toBe('yolo')
+    expect(askedAbout).toEqual([false, false, false])
+    expect(permissions.describeMode()).toMatch(/^yolo:/)
+  })
 })
 
 // Helpers
 
-async function setup(): Promise<{ permissions: Permissions; outside: string }> {
+async function setup(options: PermissionsOptions = {}): Promise<{ permissions: Permissions; outside: string }> {
   const root = await mkdtemp(join(tmpdir(), 'ji-root-'))
   const outside = await mkdtemp(join(tmpdir(), 'ji-outside-'))
   await writeFile(join(outside, 'a.txt'), 'a\n')
@@ -63,7 +82,7 @@ async function setup(): Promise<{ permissions: Permissions; outside: string }> {
   const workspace = localWorkspace(root, { allow: () => true })
   const fileTools = files(workspace)
   const shellTools = createShellPlugin(createMemoryExecutor(() => ({})))
-  return { permissions: new Permissions(workspace, fileTools, shellTools), outside }
+  return { permissions: new Permissions(workspace, fileTools, shellTools, options), outside }
 }
 
 function call(name: string, args: JsonObject): ToolCall {

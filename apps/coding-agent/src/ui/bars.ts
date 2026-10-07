@@ -44,9 +44,9 @@ export interface Bars {
   view: View
   /** The lines below the screen, scrolled past. */
   below: number
-  /** `ask` or `auto`: what each asks about is in /help, so the status line keeps its room. */
+  /** `ask`, `auto` or `yolo`: what each asks about is in /help, so the status line keeps its room. */
   mode: string
-  /** The less careful mode, so it stands out in the warning color. */
+  /** A mode less careful than ask, so it stands out in the warning color. */
   auto: boolean
   /** What a yes allowed; empty while nothing is. */
   allowed: string
