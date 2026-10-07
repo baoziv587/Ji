@@ -38,8 +38,8 @@ uv run harbor run -p /path/to/terminal-bench-2/fix-code-vulnerability \
 ```
 
 Agent options (`--ak key=value`): `ref` (git ref, default `main`), `repo`, `source` (local checkout instead of a clone),
-`thinking`, `max_steps`, `timeout_sec` (JI's own wall-clock limit; keep it below the task's agent timeout so the log
-gets its `run_end`). A custom endpoint goes through the provider's base URL variable, `DEEPSEEK_BASE_URL` for DeepSeek.
+`thinking`, `timeout_sec` (JI's own wall-clock limit; keep it below the task's agent timeout so the log gets its
+`run_end`), `max_steps` (a step cap for smoke runs; a reported run has none, the task's timeout is its limit). A custom endpoint goes through the provider's base URL variable, `DEEPSEEK_BASE_URL` for DeepSeek.
 
 ## A model the catalog lacks
 
@@ -72,6 +72,6 @@ Auxiliary model calls (compaction) are in the totals.
 
 ## Rules of a reported run
 
-Fix the JI commit, the task set and its revision, the model, thinking level, timeouts and `max_steps`; a different model
+Fix the JI commit, the task set and its revision, the model, thinking level and timeouts, and set no `max_steps`; a different model
 is a different experiment. Report every attempt's tokens and cost, not just the successful ones, and never claim a
 full benchmark score from a subset.

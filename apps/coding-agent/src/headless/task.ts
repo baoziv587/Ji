@@ -17,7 +17,7 @@ export interface TaskOptions {
   thinking: ThinkingLevel
   /** Wall-clock, for the whole run: past it the run is aborted, and every command of its with it. */
   timeoutMs?: number
-  /** A task takes many more steps than a chat turn. Default 200. */
+  /** Steps before the run gives up. No limit by default: `timeoutMs` bounds a task, not a count of steps. */
   maxSteps?: number
   /** Run after the tools: a log of the events, a budget. */
   plugins?: AnyPlugin[]
@@ -32,7 +32,7 @@ export type TaskOutcome =
 
 /** Runs `task` in `root` and resolves once the run ends; it never rejects over the run itself. */
 export async function runTask(options: TaskOptions): Promise<TaskOutcome> {
-  const { root, task, model, thinking, timeoutMs, maxSteps = 200, plugins = [], signal } = options
+  const { root, task, model, thinking, timeoutMs, maxSteps = Number.POSITIVE_INFINITY, plugins = [], signal } = options
 
   const workspace = localWorkspace(root, { allow: () => true })
   const executor = createLocalExecutor({ cwd: root })

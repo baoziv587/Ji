@@ -67,7 +67,7 @@ class JiOptions(InstalledAgentOptions):
         default=None, description="Thinking level; the CLI's default (high) when omitted."
     )
     max_steps: int | None = Field(
-        default=None, ge=1, description="Steps before the run gives up; the CLI's default (200) when omitted."
+        default=None, ge=1, description="Steps before the run gives up; none when omitted: the timeouts bound the run."
     )
     timeout_sec: int | None = Field(
         default=None,
