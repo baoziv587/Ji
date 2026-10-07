@@ -76,6 +76,8 @@ export interface Agent {
 
 /** What belongs to one Run rather than to the Agent. */
 export interface RunContext {
+  /** The Session's id: every model call sends it as pi-ai's sessionId, which keeps the provider's prompt cache warm. */
+  session: string
   /** Fires on interrupt or abort, cancelling the current step. */
   signal: AbortSignal
   /** Queued messages deliverable at this boundary. */
@@ -183,7 +185,9 @@ interface Chains {
  * Builds the agent one Run segment runs. The state a step starts from is its snapshot: every hook of that step gets
  * a ctx made from it, so they all see the same state and own, whichever layer they sit in.
  */
-function compile(parts: Parts, rctx: RunContext): LLMAgent {
+function compile(agentParts: Parts, rctx: RunContext): LLMAgent {
+  // The session's id by default; an agent's own sessionId wins
+  const parts = { ...agentParts, streamOptions: { sessionId: rctx.session, ...agentParts.streamOptions } }
   const { plugins } = parts
   // Wrapping innermost first leaves the first plugin outermost
   const inward = plugins.toReversed()
