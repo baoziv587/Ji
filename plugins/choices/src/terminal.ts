@@ -68,16 +68,31 @@ export function terminal({ paint = detail => detail, input }: TerminalOptions = 
 }
 
 /** Where the prompt is: still open, or closed by sending, by Esc, or by the signal or Ctrl+C. */
-type Phase = 'open' | 'sent' | 'dismissed' | 'stopped'
+export type Phase = 'open' | 'sent' | 'dismissed' | 'stopped'
 
 interface Look {
   paint: (detail: string) => string
-  /** Wraps text to the terminal: `first` before the first line, `prefix` before the rest. */
-  wrap: (text: string, prefix: string, first: string) => string
+  /** Wraps text to the terminal. */
+  wrap: (text: string, at: Wrapping) => string
 }
 
-/** The whole frame: the symbol and a head, then lines on a rail; an open frame ends with the rail's end. */
-function draw(s: Choosing, phase: Phase, look: Look): string {
+interface Wrapping {
+  /** Before the first line. */
+  first: string
+  /** Before every other line. */
+  rest: string
+  /** Takes the spaces off each line's ends, so a line broken at a space does not start with one. Default: false. */
+  trim?: boolean
+}
+
+/** A line of the frame as it is, or an item: its lines after the first start under its text, past the mark. */
+type Row = string | { item: string }
+
+/** What an item's mark and the space after it take: where its other lines start. */
+const HANG = '  '
+
+/** The whole frame: the symbol and a head, then rows on a rail; an open frame ends with the rail's end. */
+export function draw(s: Choosing, phase: Phase, look: Look): string {
   const several = s.questions.length > 1
   const title = several ? headers(s).join(dim(' · ')) : s.questions[0].title
 
@@ -99,24 +114,31 @@ function draw(s: Choosing, phase: Phase, look: Look): string {
   return `${frame(head, [...body, footer], failed ? 'error' : 'active', color, look)}\n${styleText(color, S_BAR_END)}\n`
 }
 
-/** Every line wrapped to the terminal, so a redraw counts the lines right. */
-function frame(head: string, lines: string[], state: State, color: 'gray' | 'cyan' | 'yellow', look: Look): string {
+/** Every row wrapped to the terminal, so a redraw counts the lines right. */
+function frame(head: string, rows: Row[], state: State, color: 'gray' | 'cyan' | 'yellow', look: Look): string {
   const bar = `${styleText(color, S_BAR)}  `
   return [
     styleText('gray', S_BAR),
-    look.wrap(head, bar, `${symbol(state)}  `),
-    ...lines.map(line => look.wrap(line, bar, bar)),
+    look.wrap(head, { first: `${symbol(state)}  `, rest: bar }),
+    ...rows.map(row => wrapRow(row, bar, look)),
   ].join('\n')
+}
+
+function wrapRow(row: Row, bar: string, look: Look): string {
+  if (typeof row === 'string') {
+    return look.wrap(row, { first: bar, rest: bar })
+  }
+  return look.wrap(row.item, { first: bar, rest: `${bar}${HANG}`, trim: true })
 }
 
 /**
  * clack's wrapTextWithPrefix takes the prefix's length for its width, colors and all, so a colored rail wrapped every
- * line some ten columns early: this one measures what shows.
+ * line some ten columns early: this one measures what shows. The width is what `rest` leaves, on every line.
  */
-function wrapWithPrefix(columns: number, text: string, prefix: string, first: string): string {
-  const width = columns - stripVTControlCharacters(prefix).length
-  const lines = wrapAnsi(text, width, { hard: true, trim: false }).split('\n')
-  return lines.map((line, i) => (i === 0 ? first : prefix) + line).join('\n')
+export function wrapWithPrefix(columns: number, text: string, { first, rest, trim = false }: Wrapping): string {
+  const width = columns - stripVTControlCharacters(rest).length
+  const lines = wrapAnsi(text, width, { hard: true, trim }).split('\n')
+  return lines.map((line, i) => (i === 0 ? first : rest) + line).join('\n')
 }
 
 /** ← Storage  ✓ Auth  Send →, the current one inverted. */
@@ -128,38 +150,38 @@ function tabBar(s: Choosing): string {
   return `${dim('←')}${tabs.join('')}${dim('→')}`
 }
 
-/** A row per option and one for Other; with several questions, the question and its detail above them. */
-function options(s: Choosing, paint: (detail: string) => string): string[] {
+/** An item per option and one for Other; with several questions, the question and its detail above them. */
+function options(s: Choosing, paint: (detail: string) => string): Row[] {
   const question = s.questions[s.tab]
   const row = s.rows[s.tab]
   const picked = s.picked[s.tab]
 
-  const lines = question.options.map((o, j) => {
+  const items: Row[] = question.options.map((o, j) => {
     const hint = o.hint === undefined ? '' : ` ${dim(`(${o.hint})`)}`
     const label = j === row ? o.label : dim(o.label)
-    return `${mark(question, j === row, picked.includes(o.value))} ${label}${hint}`
+    return { item: `${mark(question, j === row, picked.includes(o.value))} ${label}${hint}` }
   })
   if (question.other === true) {
     const typed = s.typed[s.tab]
     const active = onOther(s)
     const text = typed === '' ? dim('Other: type an answer') : typed
     const cursor = active ? styleText('inverse', ' ') : ''
-    lines.push(`${mark(question, active, typed !== '')} ${text}${cursor}`)
+    items.push({ item: `${mark(question, active, typed !== '')} ${text}${cursor}` })
   }
 
   if (s.questions.length === 1) {
-    return lines
+    return items
   }
   const detail = question.detail === undefined ? [] : paint(question.detail).split('\n')
-  return [styleText('bold', question.title), ...detail, ...lines]
+  return [styleText('bold', question.title), ...detail, ...items]
 }
 
-/** The Send tab: every answer so far, and which are missing. */
-function review(s: Choosing): string[] {
+/** The Send tab: an item per question, its answer so far or that it has none. */
+function review(s: Choosing): Row[] {
   return s.questions.map((q, i) => {
     const done = s.answers[i] !== undefined
     const mark = done ? styleText('green', '✓') : styleText('yellow', '!')
-    return `${mark} ${q.title} ${dim(done ? describe(s, i) : 'not answered')}`
+    return { item: `${mark} ${q.title} ${dim(done ? describe(s, i) : 'not answered')}` }
   })
 }
 
@@ -237,7 +259,7 @@ class ChoicesPrompt extends Prompt<Answers> {
       false,
     )
     this.choosing = start(questions)
-    this.look = { paint, wrap: (text, prefix, first) => wrapWithPrefix(getColumns(this.output), text, prefix, first) }
+    this.look = { paint, wrap: (text, at) => wrapWithPrefix(getColumns(this.output), text, at) }
     this.signal = signal
 
     this.on('key', (char, key) => {
