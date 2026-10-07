@@ -1,6 +1,7 @@
 import type { Message, Plugin } from '@ji.dev/llm'
 import type { SkillCall } from './call.ts'
 import type { Skill } from './skill.ts'
+import { join } from 'node:path'
 import { before, definePlugin } from '@ji.dev/llm'
 import { formatSkillCall, parseCommandLine, parseSkillCall } from './call.ts'
 import { instructionsOf, loadSkills } from './skill.ts'
@@ -43,7 +44,11 @@ export function createSkillsPlugin(dir: string): SkillsPlugin {
     },
     request: before(async req => {
       await loaded()
-      return { ...req, messages: req.messages.map(m => mapUserText(m, text => instructionsFor(text, resolve))) }
+      return {
+        ...req,
+        systemPrompt: withSkillList(req.systemPrompt, current.values()),
+        messages: req.messages.map(m => mapUserText(m, text => instructionsFor(text, resolve))),
+      }
     }),
   })
 
@@ -58,6 +63,19 @@ export function createSkillsPlugin(dir: string): SkillsPlugin {
       return loading
     },
   }
+}
+
+/**
+ * The system prompt with the skills listed, each with where its SKILL.md is, so the model reads one when the task calls
+ * for it without anyone typing /name; the prompt as it is when there are none.
+ */
+function withSkillList(prompt: string, skills: Iterable<Skill>): string {
+  const lines = [...skills].map(skill => `- ${skill.name}: ${skill.description} (${join(skill.dir, 'SKILL.md')})`)
+  if (lines.length === 0) {
+    return prompt
+  }
+
+  return `${prompt}\n\nSkills, each a SKILL.md with instructions: read it and follow it when the task calls for that skill.\n${lines.join('\n')}`
 }
 
 /** `/name args` of a skill becomes the call as stored; any other text, `/usr/bin` or an unknown name say, stays. */

@@ -12,6 +12,9 @@
 //   earlier one meant. A call with a hash never loaded (a session resumed after the skill changed) takes the skill's
 //   current version; one with no skill of that name at all goes to the model as it is.
 //
+//   The model is told which skills there are, each with where its SKILL.md is, so it reads one when a task calls for
+//   that skill and nobody typed /name: the coding agent run without a terminal on a benchmark task, say.
+//
 //   plugin    createSkillsPlugin(dir): the input and request hooks, skills() and reload()
 //   call   the two text forms, `/name args` and `skill://name@hash args`
 //   skill     a SKILL.md folder read into a Skill, and the instructions the model gets for it

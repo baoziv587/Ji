@@ -22,6 +22,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Literal, override
 
+from harbor.agents.capabilities import AgentCapabilities
 from harbor.agents.installed.base import BaseInstalledAgent, with_prompt_template
 from harbor.agents.installed.node_install import nvm_node_install_snippet
 from harbor.agents.model_connection import ModelConnectionSpec
@@ -79,6 +80,8 @@ class JiOptions(InstalledAgentOptions):
 class JiCodingAgent(BaseInstalledAgent):
     """``@ji.dev/coding-agent`` run headless inside the task container."""
 
+    # A task's skills_dir goes to the CLI as --skills: the model is told what is there and reads a SKILL.md itself
+    capabilities = AgentCapabilities(skills=True)
     MODEL_CONNECTION = ModelConnectionSpec(passthrough=True)
 
     options_model = JiOptions
@@ -159,6 +162,8 @@ class JiCodingAgent(BaseInstalledAgent):
             flags.append(f"--max-steps {self.options.max_steps}")
         if self.options.timeout_sec is not None:
             flags.append(f"--timeout {self.options.timeout_sec}")
+        if self.skills_dir:
+            flags.append(f"--skills {shlex.quote(self.skills_dir)}")
 
         # Exit 1 is a run that failed (timed out, too many steps, the provider): the task may still be partly done, so
         # the trial goes on to the verifier and the code is kept for the context. Exit 2 is a bad invocation: raised.

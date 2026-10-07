@@ -39,7 +39,8 @@ uv run harbor run -p /path/to/terminal-bench-2/fix-code-vulnerability \
 
 Agent options (`--ak key=value`): `ref` (git ref, default `main`), `repo`, `source` (local checkout instead of a clone),
 `thinking`, `timeout_sec` (JI's own wall-clock limit; keep it below the task's agent timeout so the log gets its
-`run_end`), `max_steps` (a step cap for smoke runs; a reported run has none, the task's timeout is its limit). A custom endpoint goes through the provider's base URL variable, `DEEPSEEK_BASE_URL` for DeepSeek.
+`run_end`), `max_steps` (a step cap for smoke runs; a reported run has none, the task's timeout is its limit). A task
+with a `skills_dir` gets it as `--skills`: the model is told which skills are there and reads a SKILL.md itself. A custom endpoint goes through the provider's base URL variable, `DEEPSEEK_BASE_URL` for DeepSeek.
 
 ## A model the catalog lacks
 
