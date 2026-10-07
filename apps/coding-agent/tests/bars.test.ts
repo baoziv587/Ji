@@ -30,6 +30,16 @@ describe('viewOf', () => {
     expect(narrowest).toBe('ji · deepseek-flash · high')
   })
 
+  it('should say fast mode is on after the thinking level, and keep it when the provider goes', () => {
+    // Act
+    const full = titleOf(COLUMNS, { model: 'openai/gpt-6.1-sol', fast: true })
+    const narrow = titleOf(34, { model: 'openai/gpt-6.1-sol', fast: true })
+
+    // Assert
+    expect(full).toBe('ji · openai/gpt-6.1-sol · high · fast · /work')
+    expect(narrow).toBe('ji · gpt-6.1-sol · high · fast')
+  })
+
   it('should list only the keys that matter now', () => {
     // Act
     const idle = statusOf({})
@@ -126,6 +136,7 @@ function bars(changes: Partial<Bars>): Bars {
   return {
     model: 'deepseek/deepseek-flash',
     thinking: 'high',
+    fast: false,
     root: '/work',
     editing: EMPTY_EDITING,
     replying: false,

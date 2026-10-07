@@ -28,6 +28,8 @@ export interface Bars {
   /** `deepseek/deepseek-flash` */
   model: string
   thinking: string
+  /** Fast mode is on: the title says so after the thinking level. */
+  fast: boolean
   /** `~/projects/app`: the home folder as `~`. */
   root: string
   editing: Editing
@@ -111,15 +113,16 @@ function capped(element: Element, rows: number): Element {
  * The provider goes last, before the model's own name is cut.
  */
 function titleVersions(bars: Bars): string[] {
-  const full = title(bars.model, bars.thinking)
+  const settings = bars.fast ? `${bars.thinking} · fast` : bars.thinking
+  const full = title(bars.model, settings)
   const withRoot = leftTruncatedPaths(bars.root).map(root => full + dimText(` · ${root}`))
   const withoutProvider = bars.model.slice(bars.model.indexOf('/') + 1)
-  return [...withRoot, full, title(withoutProvider, bars.thinking)]
+  return [...withRoot, full, title(withoutProvider, settings)]
 }
 
-/** `ji · deepseek/deepseek-flash · high` */
-function title(model: string, thinking: string): string {
-  return `${styleText('bold', 'ji')} ${dimText('·')} ${model}${dimText(` · ${thinking}`)}`
+/** `ji · deepseek/deepseek-flash · high`, or `ji · openai/gpt-6.1-sol · high · fast` */
+function title(model: string, settings: string): string {
+  return `${styleText('bold', 'ji')} ${dimText('·')} ${model}${dimText(` · ${settings}`)}`
 }
 
 /**
