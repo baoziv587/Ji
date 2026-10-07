@@ -14,7 +14,7 @@
 //   --root dir            where the files are and commands run (default: the current directory)
 //   --log file            every event of the run, one JSON line each, appended
 //   --timeout seconds     wall-clock limit on the whole run
-//   --max-steps n         steps before the run gives up (default: 200)
+//   --max-steps n         steps before the run gives up (default: no limit; --timeout bounds the run)
 //   --quiet               no progress on stderr
 
 import type { AnyPlugin, Api, Model, ModelInfo, RunEvent, ThinkingLevel, ToolCall } from '@ji.dev/llm'
