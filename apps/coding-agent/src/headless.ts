@@ -6,6 +6,8 @@
 //   says how it went: 0 done, 1 the run failed (timed out, aborted, the provider, too many steps), 2 a bad invocation.
 //
 //   --model provider/id   pi-ai's catalog; the key comes from the provider's environment variable (default: deepseek)
+//   --like provider/id    for a model the catalog lacks: the catalog entry whose API, endpoint and limits it shares
+//   --cost in,out,cacheRead,cacheWrite   USD per million tokens of a --like model (default: the --like entry's)
 //   --base-url url        send the model's calls to another endpoint, an OpenAI-compatible proxy say
 //   --thinking level      off, minimal, low, medium, high, xhigh (default: high)
 //   --root dir            where the files are and commands run (default: the current directory)
@@ -14,7 +16,7 @@
 //   --max-steps n         steps before the run gives up (default: 200)
 //   --quiet               no progress on stderr
 
-import type { AnyPlugin, Api, Model, RunEvent, ThinkingLevel, ToolCall } from '@ji.dev/llm'
+import type { AnyPlugin, Api, Model, ModelInfo, RunEvent, ThinkingLevel, ToolCall } from '@ji.dev/llm'
 import type { TaskOptions, TaskOutcome } from './headless/task.ts'
 import { closeSync, openSync, readFileSync, writeSync } from 'node:fs'
 import process from 'node:process'
@@ -24,10 +26,12 @@ import { jsonl } from '@ji.dev/plugin-jsonl'
 import { runTask } from './headless/task.ts'
 
 const USAGE =
-  'usage: headless [--model provider/id] [--base-url url] [--thinking level] [--root dir] [--log file] [--timeout seconds] [--max-steps n] [--quiet] [task]'
+  'usage: headless [--model provider/id] [--like provider/id] [--cost in,out,cacheRead,cacheWrite] [--base-url url] [--thinking level] [--root dir] [--log file] [--timeout seconds] [--max-steps n] [--quiet] [task]'
 
 const options = {
   model: { type: 'string', default: 'deepseek/deepseek-v4-flash' },
+  like: { type: 'string' },
+  cost: { type: 'string' },
   'base-url': { type: 'string' },
   thinking: { type: 'string', default: 'high' },
   root: { type: 'string', default: process.env.INIT_CWD ?? process.cwd() },
@@ -82,9 +86,9 @@ function configure(argv: string[]): Config {
     throw new Error('the task is empty')
   }
 
-  const model = modelOf(values.model, values['base-url'])
+  const model = modelOf(values.model, values.like, values.cost, values['base-url'])
   const thinking = values.thinking as ThinkingLevel
-  checkModel(model, thinking)
+  checkThinking(findModel(values.like ?? values.model), thinking)
 
   const log = values.log === undefined ? undefined : openSync(values.log, 'a')
   const plugins: AnyPlugin[] = []
@@ -113,16 +117,56 @@ function configure(argv: string[]): Config {
   }
 }
 
-/** The catalog's model, sent elsewhere when a base URL is given. */
-function modelOf(spec: string, baseUrl: string | undefined): string | Model<Api> {
-  return baseUrl === undefined ? spec : { ...findModel(spec), baseUrl }
+/**
+ * The catalog's model; with `like`, an unlisted model of the same provider built from that entry; sent elsewhere when a
+ * base URL is given.
+ */
+function modelOf(
+  spec: string,
+  like: string | undefined,
+  cost: string | undefined,
+  baseUrl: string | undefined,
+): string | Model<Api> {
+  if (like === undefined && cost === undefined && baseUrl === undefined) {
+    return spec
+  }
+
+  const model: Model<Api> = like === undefined ? { ...findModel(spec) } : unlisted(spec, findModel(like))
+  if (cost !== undefined) {
+    model.cost = costOf(cost)
+  }
+  if (baseUrl !== undefined) {
+    model.baseUrl = baseUrl
+  }
+
+  return model
 }
 
-/** A typo in the model or the level stops the run before it starts, with the choices listed. */
-function checkModel(model: string | Model<Api>, thinking: ThinkingLevel): void {
-  const spec = typeof model === 'string' ? model : `${model.provider}/${model.id}`
-  const info = findModel(spec)
+/** `spec`'s id on `template`'s provider, with everything else of the template. */
+function unlisted(spec: string, template: Model<Api>): Model<Api> {
+  const slash = spec.indexOf('/')
+  if (slash === -1 || spec.slice(0, slash) !== template.provider) {
+    throw new Error(`--like must be a model of the same provider as --model: "${spec}" is not on ${template.provider}`)
+  }
 
+  const id = spec.slice(slash + 1)
+  return { ...template, id, name: id }
+}
+
+function costOf(value: string): Model<Api>['cost'] {
+  const parts = value.split(',').map(Number)
+  if (parts.length !== 4 || parts.some(n => !Number.isFinite(n) || n < 0)) {
+    throw new Error(
+      `--cost takes four non-negative numbers, USD per million tokens: in,out,cacheRead,cacheWrite, not "${value}"`,
+    )
+  }
+
+  const [input, output, cacheRead, cacheWrite] = parts as [number, number, number, number]
+  return { input, output, cacheRead, cacheWrite }
+}
+
+/** A typo in the level stops the run before it starts, with the choices listed. */
+function checkThinking(info: ModelInfo, thinking: ThinkingLevel): void {
   if (!info.thinkingLevels.includes(thinking)) {
     throw new UnsupportedThinkingError(info, thinking)
   }

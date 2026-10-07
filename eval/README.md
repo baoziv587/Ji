@@ -41,6 +41,24 @@ Agent options (`--ak key=value`): `ref` (git ref, default `main`), `repo`, `sour
 `thinking`, `max_steps`, `timeout_sec` (JI's own wall-clock limit; keep it below the task's agent timeout so the log
 gets its `run_end`). A custom endpoint goes through the provider's base URL variable, `DEEPSEEK_BASE_URL` for DeepSeek.
 
+## A model the catalog lacks
+
+`-m provider/id` must be in pi-ai's catalog. For a newer model of a listed provider, name a catalog entry it shares
+the API and limits with (`like`) and its price (`cost`, USD per million tokens: in, out, cache read, cache write), or
+the cost is the entry's. Claude Sonnet 5.5 through OpenRouter, with `OPENROUTER_API_KEY` set:
+
+```sh
+uv run harbor run -p <task> -a ji_eval.harbor_agent:JiCodingAgent -m openrouter/anthropic/claude-sonnet-5.5 \
+  --ak like=openrouter/anthropic/claude-sonnet-4.5 --ak cost=2,10,0.2,2.5 --ak thinking=high -o jobs -y
+```
+
+## Terminal-Bench 4.0
+
+The current set lives on Harbor Hub, not in the GitHub registry: `-d terminal-bench/terminal-bench@4.0.0` (66 tasks,
+3 of them need a GPU, every task has an 8-hour agent timeout, and the official runs use 5 trials per task, `-k 5`).
+`harbor dataset download terminal-bench/terminal-bench@4.0.0 -o <dir>` fetches the task directories to pick from with
+`-p`. Terminal-Bench 2.0 (`-d terminal-bench@2.0`, 89 tasks) is the one in the registry.
+
 ## What a trial leaves behind
 
 In `jobs/<job>/<trial>/agent/`:
