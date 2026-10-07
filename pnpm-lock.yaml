@@ -223,6 +223,9 @@ importers:
       '@ji.dev/plugin-files':
         specifier: workspace:*
         version: link:../../plugins/files
+      '@ji.dev/plugin-jsonl':
+        specifier: workspace:*
+        version: link:../../plugins/jsonl
       '@ji.dev/plugin-shell':
         specifier: workspace:*
         version: link:../../plugins/shell

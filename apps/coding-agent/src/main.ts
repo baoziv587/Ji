@@ -1,4 +1,4 @@
-import type { Agent } from '@ji.dev/llm'
+import type { Agent, ThinkingLevel } from '@ji.dev/llm'
 import type { Element } from '@ji.dev/tui'
 import type { Feature } from './features/feature.ts'
 import { homedir } from 'node:os'
@@ -131,10 +131,19 @@ function buildView(): Element {
 
 // Starting and quitting
 
-/** A typo in the model or the level stops the coding agent before the first prompt, with the choices listed. */
+/**
+ * The model comes from DEEPSEEK_MODEL and the level from DEEPSEEK_THINKING. A typo in either stops the coding agent
+ * before the first prompt, with the choices listed.
+ */
 function startAgentOrQuit(): Agent {
   try {
-    return startAgent(ROOT, features, asking)
+    return startAgent({
+      root: ROOT,
+      model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`,
+      thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
+      features,
+      asking,
+    })
   } catch (error) {
     if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
       cancel(error.message)
