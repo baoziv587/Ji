@@ -1,3 +1,4 @@
+ignoreWorkspaceCycles: true
 minimumReleaseAgeExcludePrune: true
 trustPolicy: no-downgrade
 shellEmulator: true
@@ -11,4 +12,3 @@ allowBuilds:
   '@google/genai': false
   lefthook: true
   protobufjs: false
-ignoreWorkspaceCycles: true
