@@ -8,7 +8,7 @@ import type {
   ToolResultMessage,
 } from '@earendil-works/pi-ai'
 import type { Stream } from '@ji.dev/kernel'
-import type { ModelInfo } from './models.ts'
+import type { ModelInfo } from '@ji.dev/models'
 import type { AnyPlugin, CallOptions, CompleteRequest, HookContexts, PluginList } from './plugin.ts'
 import type {
   AgentState,
@@ -26,12 +26,11 @@ import type {
 import { performance } from 'node:perf_hooks'
 import { clampThinkingLevel } from '@earendil-works/pi-ai'
 import { act, extend, merge } from '@ji.dev/kernel'
+import { findModel, modelInfo, models, UnsupportedThinkingError } from '@ji.dev/models'
 import { errorMessage, isDevEnv, isThenable, warn } from '@ji.dev/utils'
 import { ModelCallError } from './errors.ts'
 import { callsOf, isIdle } from './message.ts'
-import { findModel, modelInfo, UnsupportedThinkingError } from './models.ts'
 import { assertNoConflicts, extensionOf, pluginsOf } from './plugin.ts'
-import { models } from './registry.ts'
 import { toolError, toolRunner } from './tool.ts'
 import { applyTurn, isModelAction, stop, turnOf } from './turn.ts'
 

@@ -23,7 +23,7 @@ import {
   getInitialSystemMessage,
   withoutInitialSystemMessage,
 } from '@earendil-works/pi-ai'
-import { registerProvider } from '@ji.dev/llm'
+import { registerProvider } from '@ji.dev/models'
 
 /** What the model was asked, as a scripted reply sees it. */
 export interface FakeRequest {

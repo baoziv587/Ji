@@ -1,9 +1,9 @@
 {
-  "name": "@ji.dev/testing",
+  "name": "@ji.dev/models",
   "type": "module",
   "version": "0.0.0",
   "private": true,
-  "description": "测试和离线示例用的脚本化模型：pi-ai 的 faux provider 收在一个小接口后面",
+  "description": "pi-ai 的模型目录：唯一的注册表、按 provider/id 查模型、凭证放在哪",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -12,6 +12,6 @@
   },
   "dependencies": {
     "@earendil-works/pi-ai": "^1.0.4",
-    "@ji.dev/models": "workspace:*"
+    "@ji.dev/utils": "workspace:*"
   }
 }

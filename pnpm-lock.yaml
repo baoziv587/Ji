@@ -295,6 +295,9 @@ importers:
       '@ji.dev/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@ji.dev/models':
+        specifier: workspace:*
+        version: link:../models
       '@ji.dev/utils':
         specifier: workspace:*
         version: link:../utils
@@ -303,14 +306,23 @@ importers:
         specifier: workspace:*
         version: link:../testing
 
+  packages/models:
+    dependencies:
+      '@earendil-works/pi-ai':
+        specifier: ^1.0.4
+        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
+      '@ji.dev/utils':
+        specifier: workspace:*
+        version: link:../utils
+
   packages/testing:
     dependencies:
       '@earendil-works/pi-ai':
         specifier: ^1.0.4
         version: 1.0.4(@aws-sdk/credential-provider-node@3.972.84)(@smithy/signature-v4@5.7.3)(undici@7.29.1)(ws@8.21.3)(zod@4.6.5)
-      '@ji.dev/llm':
+      '@ji.dev/models':
         specifier: workspace:*
-        version: link:../llm
+        version: link:../models
 
   packages/tui:
     dependencies:

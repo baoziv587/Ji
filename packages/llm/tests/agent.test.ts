@@ -1,9 +1,9 @@
 // createAgent: the model and thinking level are checked where they are chosen (RFC-0005 §6, laws C1 and C2).
 import type { ThinkingLevel } from '../src/types.ts'
+import { listModels, UnknownModelError, UnsupportedThinkingError } from '@ji.dev/models'
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { createAgent } from '../src/agent.ts'
-import { listModels, UnknownModelError, UnsupportedThinkingError } from '../src/models.ts'
 
 const levels: ThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh']
 const catalog = fc.constantFrom(...listModels())

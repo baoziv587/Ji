@@ -13,6 +13,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "^1.0.4",
     "@ji.dev/kernel": "workspace:*",
+    "@ji.dev/models": "workspace:*",
     "@ji.dev/utils": "workspace:*"
   },
   "devDependencies": {

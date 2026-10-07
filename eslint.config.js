@@ -8,8 +8,8 @@ import { createSlopConfig } from 'eslint-plugin-slop'
 const NO_PLUGINS = { group: ['@ji.dev/plugin-*', '**/plugins/**'], message: 'packages/ must not depend on plugins/.' }
 
 /**
- * pi-ai is reached through two packages only: @ji.dev/llm runs it and @ji.dev/testing fakes it (RFC-0005 promise 9).
- * An upgrade then touches those two and no test, plugin or app.
+ * pi-ai is reached through three packages only: @ji.dev/models keeps its catalog, @ji.dev/llm runs it and
+ * @ji.dev/testing fakes it (RFC-0005 promise 9). An upgrade then touches those three and no test, plugin or app.
  */
 const NO_PI_AI = {
   group: ['@earendil-works/pi-ai', '@earendil-works/pi-ai/*'],
@@ -17,7 +17,7 @@ const NO_PI_AI = {
 }
 
 /** Where pi-ai is allowed. */
-const PI_AI_USERS = ['packages/llm/src/**', 'packages/testing/src/**']
+const PI_AI_USERS = ['packages/models/src/**', 'packages/llm/src/**', 'packages/testing/src/**']
 
 export default antfu(
   {
