@@ -56,6 +56,13 @@ class JiOptions(InstalledAgentOptions):
         default=None,
         description="A checkout on the host to upload instead of cloning: what git sees, nothing ignored",
     )
+    like: str | None = Field(
+        default=None,
+        description="For a model pi-ai's catalog lacks: the catalog entry (provider/id) it shares API and limits with",
+    )
+    cost: str | None = Field(
+        default=None, description="USD per million tokens of a `like` model: in,out,cacheRead,cacheWrite"
+    )
     thinking: Literal["off", "minimal", "low", "medium", "high", "xhigh"] | None = Field(
         default=None, description="Thinking level; the CLI's default (high) when omitted."
     )
@@ -142,6 +149,10 @@ class JiCodingAgent(BaseInstalledAgent):
         flags = [f"--model {shlex.quote(self.model_name)}", f"--log {shlex.quote(str(logs / LOG_FILENAME))}"]
         if access.configured_base_url is not None:
             flags.append(f"--base-url {shlex.quote(access.configured_base_url)}")
+        if self.options.like is not None:
+            flags.append(f"--like {shlex.quote(self.options.like)}")
+        if self.options.cost is not None:
+            flags.append(f"--cost {shlex.quote(self.options.cost)}")
         if self.options.thinking is not None:
             flags.append(f"--thinking {self.options.thinking}")
         if self.options.max_steps is not None:
