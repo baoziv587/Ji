@@ -11,3 +11,4 @@ allowBuilds:
   '@google/genai': false
   lefthook: true
   protobufjs: false
+ignoreWorkspaceCycles: true
