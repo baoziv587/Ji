@@ -13,6 +13,7 @@
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
     "@ji.dev/llm": "workspace:*",
+    "@ji.dev/plugin-auth": "workspace:*",
     "@ji.dev/plugin-choices": "workspace:*",
     "@ji.dev/plugin-compaction": "workspace:*",
     "@ji.dev/plugin-files": "workspace:*",
