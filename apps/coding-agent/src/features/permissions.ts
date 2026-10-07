@@ -3,6 +3,8 @@
 //
 //   ask        before every command, file read and file change
 //   auto       approves file calls inside the workspace; commands, and any file call outside it, are still asked about
+//   yolo       nothing: every command and file call runs, outside the workspace too. Chosen at start (--yolo), for the
+//              whole session: Shift+Tab does not leave it
 //   shortcuts  a yes that also changes what is asked from now on: switch to auto, stop asking about reads, allow every
 //              command, or allow reads in the folder of a file outside. Switching back to ask takes the last two back
 
@@ -14,7 +16,12 @@ import { homedir } from 'node:os'
 import { dirname, sep } from 'node:path'
 import { DISMISSED } from '@ji.dev/plugin-choices'
 
-export type Mode = 'ask' | 'auto'
+export type Mode = 'ask' | 'auto' | 'yolo'
+
+export interface PermissionsOptions {
+  /** Starts in yolo mode, which nothing leaves. */
+  yolo?: boolean
+}
 
 /** A call about to be asked about, and what a reply to it does. */
 export interface Approval {
@@ -35,7 +42,7 @@ const SHORTCUTS = {
 }
 
 export class Permissions {
-  private current: Mode = 'ask'
+  private current: Mode
   /** In ask mode, until the person answers a read with "stop asking about reads". */
   private askReads = true
   /** What a yes said not to ask about again, in either mode: every command, and reads in these folders outside. */
@@ -50,7 +57,8 @@ export class Permissions {
   private top: Promise<string> | undefined
 
   /** `workspace` is the one the files plugin was given: it must reach every file, the root's or not. */
-  constructor(workspace: Resolver, fileTools: FilesPlugin, shellTools: ShellPlugin) {
+  constructor(workspace: Resolver, fileTools: FilesPlugin, shellTools: ShellPlugin, options: PermissionsOptions = {}) {
+    this.current = options.yolo === true ? 'yolo' : 'ask'
     this.workspace = workspace
     this.fileTools = fileTools
     this.shellTools = shellTools
@@ -62,8 +70,12 @@ export class Permissions {
     return this.current
   }
 
-  /** Back in ask mode, nothing is allowed that a yes allowed before: the way to take it back. */
+  /** Back in ask mode, nothing is allowed that a yes allowed before: the way to take it back. Yolo stays yolo. */
   switchMode(): void {
+    if (this.current === 'yolo') {
+      return
+    }
+
     this.current = this.current === 'ask' ? 'auto' : 'ask'
     if (this.current === 'ask') {
       this.allowed.commands = false
@@ -73,6 +85,9 @@ export class Permissions {
 
   /** In full, for /help: the status line shows only the mode's name. */
   describeMode(): string {
+    if (this.current === 'yolo') {
+      return 'yolo: runs every command and file call, outside the workspace too, and asks about none'
+    }
     if (this.current === 'auto') {
       return 'auto: approves file calls inside the workspace, asks about the rest'
     }
@@ -118,6 +133,10 @@ export class Permissions {
    * reaches past the root unseen, unless a yes allowed reads in the file's folder.
    */
   readonly fileCalls: Preview = async (call, signal) => {
+    if (this.current === 'yolo') {
+      return undefined
+    }
+
     const far = await this.outside(call)
     if (!far && (this.current === 'auto' || (call.name === 'read' && !this.askReads))) {
       return undefined
@@ -142,7 +161,9 @@ export class Permissions {
    */
   readonly commandCalls: Preview = call => {
     const proposal = this.shellTools.preview(call)
-    if (this.allowed.commands && proposal !== undefined && !('role' in proposal)) {
+    const unasked = this.current === 'yolo' || this.allowed.commands
+
+    if (unasked && proposal !== undefined && !('role' in proposal)) {
       return undefined
     }
     return proposal
@@ -189,7 +210,7 @@ export class Permissions {
       }
       return [{ ...SHORTCUTS.folder, label: `Yes, and allow reads in ${home(folder)}/ from now on` }]
     }
-    if (this.current === 'auto') {
+    if (this.current !== 'ask') {
       return []
     }
     return call.name === 'read' ? [SHORTCUTS.auto, SHORTCUTS.reads] : [SHORTCUTS.auto]

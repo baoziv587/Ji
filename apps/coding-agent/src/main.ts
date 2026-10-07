@@ -31,6 +31,9 @@ const WORKSPACE = abbreviateHomePath(ROOT)
 /** Where skills are kept, the same place Claude Code reads them from. */
 const SKILLS = join(homedir(), '.agents', 'skills')
 
+/** `--yolo`: nothing waits for a yes, for the whole session. For a sandbox or a throwaway checkout. */
+const YOLO = process.argv.includes('--yolo')
+
 const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
 
 /** The local machine: files anywhere on it, the permissions say which are asked about, and commands run in the root. */
@@ -39,8 +42,8 @@ const executor = createLocalExecutor({ cwd: ROOT })
 
 const plugins = createPlugins(workspace, executor)
 
-/** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. */
-const permissions = new Permissions(workspace, plugins.files, plugins.shell)
+/** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. Nothing does in yolo. */
+const permissions = new Permissions(workspace, plugins.files, plugins.shell, { yolo: YOLO })
 
 /** Read in the background: the screen comes up first, and the menu has them a moment later. */
 const skills = createSkillsFeature(SKILLS)
@@ -122,7 +125,7 @@ function buildView(): Element {
       view: screen.view,
       below: screen.below,
       mode: permissions.mode,
-      auto: permissions.mode === 'auto',
+      auto: permissions.mode !== 'ask',
       allowed: permissions.describeAllowed(),
     },
     screen.content,

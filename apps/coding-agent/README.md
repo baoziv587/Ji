@@ -20,6 +20,7 @@ Needs Node 24+. **It works in the directory you start it from.** To use it on an
 - By default, every command, file read and file change waits for your yes. **Shift+Tab** switches to auto: reads and changes inside the workspace go ahead, commands are still asked about.
 - **Files outside the workspace are always asked about**, in either mode, with No selected.
 - A yes can say not to ask again. What it allowed stays in the bottom bar; switching back to ask takes it all back.
+- `pnpm coding-agent --yolo` asks about nothing, outside the workspace included, for the whole session. For a sandbox or a checkout you can throw away.
 
 ## Stopping
 
@@ -32,7 +33,7 @@ Needs Node 24+. **It works in the directory you start it from.** To use it on an
 | Enter            | Sends; during a reply, steers it after the step in progress         |
 | Ctrl+C           | Stops the reply / clears the input / quits                          |
 | Esc              | Dismisses the question; an approval counts as No                    |
-| Shift+Tab        | Switches ask / auto                                                 |
+| Shift+Tab        | Switches ask / auto (not in yolo)                                   |
 | Ctrl+O           | Shows the details: full thinking, every call's arguments and result |
 | `/think <level>` | `off` / `high` / `xhigh`                                            |
 | `/help`          | Lists the keys, the commands and the tools                          |

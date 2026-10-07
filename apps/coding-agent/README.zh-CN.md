@@ -20,6 +20,7 @@ pnpm coding-agent
 - 默认每条命令、每次读写文件都先问你。**Shift+Tab** 切到 auto：工作区内的读写不再问，命令照样问。
 - **工作区外的文件无论哪种模式都要问**，默认选中 No。
 - 确认时可以选“以后不再问”；放行了什么一直写在底栏，切回 ask 全部收回。
+- `pnpm coding-agent --yolo` 整个会话什么都不问，工作区外也不问。只在沙箱或可以丢弃的检出里用。
 
 ## 叫停
 
@@ -32,7 +33,7 @@ pnpm coding-agent
 | Enter           | 发送；回答进行中是插话，当前这一步结束后送达 |
 | Ctrl+C          | 叫停回答 / 清空输入框 / 退出                 |
 | Esc             | 关掉眼前的问题，确认算 No                    |
-| Shift+Tab       | 切换 ask / auto                              |
+| Shift+Tab       | 切换 ask / auto（yolo 下无效）               |
 | Ctrl+O          | 详细视图：完整的思考、调用的参数和结果       |
 | `/think <档位>` | `off` / `high` / `xhigh`                     |
 | `/help`         | 列出按键、命令和工具                         |
