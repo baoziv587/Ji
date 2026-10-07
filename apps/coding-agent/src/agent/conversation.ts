@@ -43,6 +43,11 @@ export class Conversation {
     return this.reply !== undefined
   }
 
+  /** Nothing has been said yet. */
+  get empty(): boolean {
+    return this.session.state.messages.length === 0
+  }
+
   /** The steers sent to the reply in progress that have not reached the model yet. */
   get queued(): number {
     return this.reply === undefined ? 0 : this.session.pending.length

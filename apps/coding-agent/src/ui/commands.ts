@@ -1,10 +1,11 @@
-// The coding agent's commands: /think switches the thinking level, /help lists the commands, the keys by when they
-// work, the mode and the tools, /exit quits.
+// The coding agent's commands: /think switches the thinking level, /compact summarizes the conversation so far, /help
+// lists the commands, the keys by when they work, the mode and the tools, /exit quits.
 
 import type { HelpSection } from '@ji.dev/tui'
 import type { Conversation } from '../agent/conversation.ts'
 import type { Command } from './menu.ts'
 import { log } from '@clack/prompts'
+import { COMPACT_COMMAND } from '@ji.dev/plugin-compaction'
 import { formatHelpSections, widthBesideRail } from '@ji.dev/tui'
 import { CommandMenu } from './menu.ts'
 
@@ -14,16 +15,26 @@ export interface CommandContext {
   tools: string[]
   /** The mode now, in full: the status line shows only its name. */
   mode: () => string
+  /** Sends a message as if typed, and shows the reply. */
+  send: (message: string) => void
   quit: () => void
   /** The features' commands, after the built-in ones; read every time, as they can change. */
   extra?: () => Command[]
 }
 
-export function createCommandMenu({ conversation, tools, mode, quit, extra = () => [] }: CommandContext): CommandMenu {
+export function createCommandMenu({
+  conversation,
+  tools,
+  mode,
+  send,
+  quit,
+  extra = () => [],
+}: CommandContext): CommandMenu {
   const levels = conversation.agent.model.thinkingLevels.join('|')
 
   const menu: CommandMenu = new CommandMenu(() => [
     { name: '/think', arg: `<${levels}>`, hint: 'sets thinking', run: arg => think(conversation, arg) },
+    { name: '/compact', hint: 'summarizes the conversation so far', run: () => compact(conversation, send) },
     { name: '/help', hint: 'lists keys, commands and tools', run: () => help(menu, tools, mode()) },
     { name: '/exit', hint: 'quits', run: quit },
     ...extra(),
@@ -42,6 +53,19 @@ function think(conversation: Conversation, arg: string): void {
 
   conversation.think(level)
   log.success(`Thinking: ${conversation.agent.thinking}`)
+}
+
+/**
+ * The compaction plugin answers the command inside a reply: everything before the last reply becomes a summary. With
+ * nothing said yet there is no reply to end, so nothing is sent.
+ */
+function compact(conversation: Conversation, send: (message: string) => void): void {
+  if (conversation.empty) {
+    log.info('Nothing to compact yet.')
+    return
+  }
+
+  send(COMPACT_COMMAND)
 }
 
 function help(menu: CommandMenu, tools: string[], mode: string): void {

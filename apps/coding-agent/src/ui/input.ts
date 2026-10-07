@@ -107,8 +107,12 @@ export class Input {
       return
     }
 
-    // Undefined for a steer: it shows once it reaches the model, and is counted as queued until then
-    const run = conversation.send(message)
+    this.send(message)
+  }
+
+  /** Sends a message, and shows the reply it starts; a steer shows once it reaches the model, as queued until then. */
+  send(message: string): void {
+    const run = this.context.conversation.send(message)
     if (run !== undefined) {
       this.replying = this.converse(run)
     }
