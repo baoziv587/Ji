@@ -14,6 +14,7 @@ import type {
   Usage,
 } from '@earendil-works/pi-ai'
 import type { Agent as KernelAgent, Stream } from '@ji.dev/kernel'
+import type { ModelRef } from '@ji.dev/models'
 import type { RunError } from './errors.ts'
 
 /** `plugins` is keyed by plugin name. */
@@ -115,12 +116,6 @@ export interface TurnTiming {
   firstTokenMs?: number
   /** Model turns only: keyed by toolCall.id. */
   toolMs?: Record<string, number>
-}
-
-/** Which model a request went to. */
-export interface ModelRef {
-  provider: string
-  id: string
 }
 
 type Empty = Record<never, never>

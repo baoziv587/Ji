@@ -1,4 +1,6 @@
-import { createAgent, createSession } from '@ji.dev/llm'
+// createFakeModel: a model of the catalog that replies as scripted, called here the way @ji.dev/llm calls a model
+import type { FakeModel } from '../src/index.ts'
+import { models } from '@ji.dev/models'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { assistantMessage, createFakeModel, textBlock, toolUse } from '../src/index.ts'
 
@@ -7,11 +9,10 @@ describe('createFakeModel', () => {
     // Arrange
     const fake = createFakeModel([assistantMessage('one'), assistantMessage('two')])
     onTestFinished(fake.dispose)
-    const session = createSession(createAgent({ model: fake.model }))
 
     // Act
-    const first = await session.send('a').result
-    const second = await session.send('b').result
+    const first = await ask(fake, 'a')
+    const second = await ask(fake, 'b')
 
     // Assert
     expect(first.content).toEqual([textBlock('one')])
@@ -30,10 +31,9 @@ describe('createFakeModel', () => {
       },
     ])
     onTestFinished(fake.dispose)
-    const agent = createAgent({ model: fake.model, system: 'be brief' })
 
     // Act
-    await createSession(agent).send('go').result
+    await ask(fake, 'go', { system: 'be brief' })
 
     // Assert
     expect(seen).toEqual([{ messages: 1, system: 'be brief', tools: [] }])
@@ -52,8 +52,8 @@ describe('createFakeModel', () => {
     onTestFinished(plain.dispose)
 
     // Act
-    await createSession(createAgent({ model: thinker.model, thinking: 'high' })).send('go').result
-    await createSession(createAgent({ model: plain.model })).send('go').result
+    await ask(thinker, 'go', { reasoning: 'high' })
+    await ask(plain, 'go')
 
     // Assert
     expect(levels).toEqual(['high', undefined])
@@ -65,3 +65,12 @@ describe('createFakeModel', () => {
     expect(assistantMessage([toolUse('echo', {})], { stopReason: 'stop' }).stopReason).toBe('stop')
   })
 })
+
+// Helpers
+
+/** One call through the catalog, as the agent makes it: the system prompt apart, the level only when thinking. */
+async function ask(fake: FakeModel, text: string, options: { system?: string; reasoning?: 'high' } = {}) {
+  const messages = [{ role: 'user' as const, content: text, timestamp: 0 }]
+  const context = { systemPrompt: options.system, messages }
+  return models.completeSimple(fake.model, context, { reasoning: options.reasoning })
+}

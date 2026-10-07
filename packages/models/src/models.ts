@@ -1,5 +1,4 @@
-import type { Api, Model } from '@earendil-works/pi-ai'
-import type { ModelRef, ThinkingLevel } from './types.ts'
+import type { Api, Model, ModelThinkingLevel as ThinkingLevel } from '@earendil-works/pi-ai'
 import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { closest } from '@ji.dev/utils'
 import { models } from './registry.ts'
@@ -34,6 +33,12 @@ export class UnknownModelError extends Error {
   }
 }
 
+/** Which model a request went to. */
+export interface ModelRef {
+  provider: string
+  id: string
+}
+
 /** Thrown by createAgent and agent.with when the model does not accept the thinking level. */
 export class UnsupportedThinkingError extends Error {
   readonly model: ModelRef
@@ -51,6 +56,7 @@ export class UnsupportedThinkingError extends Error {
   }
 }
 
+/** Any pi-ai Model, a custom endpoint's or a fake's, with its thinking levels and a key check. */
 export function modelInfo(model: Model<Api>): ModelInfo {
   return {
     ...model,

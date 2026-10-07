@@ -10,7 +10,6 @@ export { type Agent, type AgentOptions, createAgent } from './agent.ts'
 export { RunError, type RunErrorKind } from './errors.ts'
 export { callsOf, textOf, user } from './message.ts'
 export { after, before, type Cancellable, intercept, mapEvents, type Middleware } from './middleware.ts'
-export { findModel, listModels, type ModelInfo, UnknownModelError, UnsupportedThinkingError } from './models.ts'
 export {
   type AnyPlugin,
   type CallOptions,
@@ -30,7 +29,6 @@ export {
   type RequestContext,
   type ToolCallsRunner,
 } from './plugin.ts'
-export { models, registerProvider, useCredentialStore } from './registry.ts'
 export type { Run } from './run.ts'
 export { createSession, type Session, type SessionOptions } from './session.ts'
 export { usageOf } from './summary.ts'
@@ -44,7 +42,6 @@ export type {
   Events,
   InputAction,
   ModelCall,
-  ModelRef,
   ModelRequest,
   Payload,
   PendingMessage,
@@ -64,7 +61,6 @@ export type {
 } from './types.ts'
 // What writing an agent needs from pi-ai, so tools, events and models come from one import
 export { Type } from '@earendil-works/pi-ai'
-
 export type {
   Api,
   AssistantMessage,
@@ -86,3 +82,16 @@ export type {
   Usage,
 } from '@earendil-works/pi-ai'
 export type { Stream } from '@ji.dev/kernel'
+
+// The model catalog lives in @ji.dev/models, below this package and @ji.dev/testing; an agent reaches it from here too
+export {
+  findModel,
+  listModels,
+  type ModelInfo,
+  type ModelRef,
+  models,
+  registerProvider,
+  UnknownModelError,
+  UnsupportedThinkingError,
+  useCredentialStore,
+} from '@ji.dev/models'
