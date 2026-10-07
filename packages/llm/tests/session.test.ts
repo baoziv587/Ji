@@ -1,10 +1,10 @@
 // session.use: switching agents keeps the conversation, and a run in progress switches at the next step boundary.
-// session.id: new for each session unless a resumed one keeps its own.
+// session.id: new for each session unless a resumed one keeps its own; every model call sends it as the sessionId.
 import type { FakeRequest } from '@ji.dev/testing'
 import type { Api, AssistantMessage, Model, RunEvent } from '../src/index.ts'
 import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
-import { createAgent, createSession, tool, Type } from '../src/index.ts'
+import { before, createAgent, createSession, definePlugin, tool, Type } from '../src/index.ts'
 
 describe('session.use', () => {
   it('should run the next send with the new agent', async () => {
@@ -83,6 +83,29 @@ describe('session.id', () => {
     // Assert
     expect(a.id).not.toBe(b.id)
     expect(resumed.id).toBe(a.id)
+  })
+
+  it('should go with every model call as the sessionId, unless the agent sets its own', async () => {
+    // Arrange
+    const sent: Array<string | undefined> = []
+    const watch = definePlugin({
+      name: 'watch',
+      request: before(req => {
+        sent.push(req.options.sessionId)
+        return req
+      }),
+    })
+    const agent = createAgent({ model: thinker([], [answer, answer, answer]), plugins: [watch] })
+    const chat = createSession(agent)
+
+    // Act
+    await chat.send('first').result
+    await chat.send('second').result
+    chat.use(agent.with({ sessionId: 'mine' }))
+    await chat.send('third').result
+
+    // Assert
+    expect(sent).toEqual([chat.id, chat.id, 'mine'])
   })
 })
 

@@ -45,7 +45,7 @@ export interface Run extends AsyncIterable<RunEvent> {
 export interface RunHost {
   /** The session's agent; session.use may change it, and the Run switches at the next step boundary. */
   readonly agent: Agent
-  /** Session id, reported to observers. */
+  /** Session id, reported to observers and sent with every model call. */
   readonly id: string
   readonly maxSteps: number
   /** Last committed state; the Run updates it after every step. */
@@ -213,6 +213,7 @@ export class AgentRun implements Run {
 
     const agent = this.host.agent
     const ctx: RunContext = {
+      session: this.host.id,
       signal: controller.signal,
       offer: boundary => {
         this.offered = this.host.offer(boundary)
