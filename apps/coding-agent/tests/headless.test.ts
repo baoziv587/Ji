@@ -1,9 +1,10 @@
 // A task without a terminal: the tools run unasked, the outcome carries the answer or the failure, and a timeout
 // takes a running command down with the run
 import type { Api, AssistantMessage, Model } from '@ji.dev/llm'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { before, definePlugin } from '@ji.dev/llm'
 import { jsonl } from '@ji.dev/plugin-jsonl'
 import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
@@ -33,6 +34,30 @@ describe('runTask', () => {
     expect(outcome).toMatchObject({ text: 'written', summary: { turns: 2, tools: { bash: { calls: 1, errors: 0 } } } })
     expect(readFileSync(join(root, 'out.txt'), 'utf8')).toBe('hello\n')
     expect(lines.map(l => JSON.parse(l).type)).toContain('run_end')
+  })
+
+  it('should tell the model the skills of the folder given', async () => {
+    // Arrange
+    const root = scratch()
+    const skills = join(root, 'skills')
+    mkdirSync(join(skills, 'review'), { recursive: true })
+    writeFileSync(join(skills, 'review', 'SKILL.md'), '---\ndescription: Reviews a change.\n---\nLook at the diff.\n')
+    const model = faux([assistantMessage('ok')])
+    let systemPrompt = ''
+    const spy = definePlugin({
+      name: 'spy',
+      request: before(req => {
+        systemPrompt = req.systemPrompt
+        return req
+      }),
+    })
+
+    // Act
+    const outcome = await runTask({ root, task: 'hi', model, thinking: 'off', skills, plugins: [spy] })
+
+    // Assert
+    expect(outcome.outcome).toBe('done')
+    expect(systemPrompt).toContain(`- review: Reviews a change. (${join(skills, 'review', 'SKILL.md')})`)
   })
 
   it('should abort a run past its timeout, command included', async () => {

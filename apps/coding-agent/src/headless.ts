@@ -15,6 +15,8 @@
 //   --log file            every event of the run, one JSON line each, appended
 //   --timeout seconds     wall-clock limit on the whole run
 //   --max-steps n         steps before the run gives up (default: no limit; --timeout bounds the run)
+//   --skills dir          the skills, one SKILL.md folder each, the model is told about (default: ~/.agents/skills,
+//                         where the terminal reads them)
 //   --quiet               no progress on stderr
 
 import type { AnyPlugin, Api, Model, ModelInfo, RunEvent, ThinkingLevel, ToolCall } from '@ji.dev/llm'
@@ -30,7 +32,7 @@ import { jsonl } from '@ji.dev/plugin-jsonl'
 import { runTask } from './headless/task.ts'
 
 const USAGE =
-  'usage: headless [--model provider/id] [--like provider/id] [--cost in,out,cacheRead,cacheWrite] [--base-url url] [--thinking level] [--root dir] [--log file] [--timeout seconds] [--max-steps n] [--quiet] [task]'
+  'usage: headless [--model provider/id] [--like provider/id] [--cost in,out,cacheRead,cacheWrite] [--base-url url] [--thinking level] [--root dir] [--log file] [--timeout seconds] [--max-steps n] [--skills dir] [--quiet] [task]'
 
 const options = {
   model: { type: 'string', default: 'deepseek/deepseek-flash' },
@@ -42,6 +44,7 @@ const options = {
   log: { type: 'string' },
   timeout: { type: 'string' },
   'max-steps': { type: 'string' },
+  skills: { type: 'string', default: join(homedir(), '.agents', 'skills') },
   quiet: { type: 'boolean', default: false },
 } as const
 
@@ -113,6 +116,7 @@ function configure(argv: string[]): Config {
       thinking,
       timeoutMs: seconds(values.timeout, 'timeout'),
       maxSteps: integer(values['max-steps'], 'max-steps'),
+      skills: values.skills,
       plugins,
     },
     close: () => {

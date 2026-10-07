@@ -139,6 +139,23 @@ describe('createSkillsPlugin', () => {
     expect(instructionsOf(review)).not.toContain('ARGUMENTS')
   })
 
+  it('should list the skills in the system prompt, each with its SKILL.md, and leave the prompt alone with none', async () => {
+    // Arrange
+    const dir = await skillsDir({ review: REVIEW })
+    const plugin = createSkillsPlugin(dir)
+    const empty = createSkillsPlugin(await skillsDir({}))
+
+    // Act
+    const listed = await systemPromptBy(plugin, 'Be brief.')
+    const alone = await systemPromptBy(empty, 'Be brief.')
+
+    // Assert
+    expect(listed).toBe(
+      `Be brief.\n\nSkills, each a SKILL.md with instructions: read it and follow it when the task calls for that skill.\n- review: Reviews a change. Use it before a commit, e.g. on a branch. (${join(dir, 'review', 'SKILL.md')})`,
+    )
+    expect(alone).toBe('Be brief.')
+  })
+
   it('should keep an earlier call at its version when the skill changes and is reloaded', async () => {
     // Arrange
     const dir = await skillsDir({ review: REVIEW })
@@ -216,6 +233,23 @@ const ctx: InputContext = {
 /** What the input hook stores for the messages. */
 function inputTo(plugin: SkillsPlugin, messages: Message[]): Promise<Message[]> {
   return Promise.resolve(plugin.input!(messages, ctx))
+}
+
+/** The system prompt the request hook sends on. */
+async function systemPromptBy(plugin: SkillsPlugin, systemPrompt: string): Promise<string> {
+  let sent = ''
+  const next = async function* (req: ModelRequest): AsyncGenerator<never, AssistantMessage> {
+    sent = req.systemPrompt
+    return {} as AssistantMessage
+  }
+
+  const messages: Message[] = []
+  const stream = plugin.request!({ systemPrompt, messages } as ModelRequest, next, ctx)
+  let step = await stream.next()
+  while (!step.done) {
+    step = await stream.next()
+  }
+  return sent
 }
 
 /** The messages the request hook sends on, with `next` standing in for the model. */
