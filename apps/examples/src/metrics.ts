@@ -4,8 +4,8 @@
 // and r.summary holds the totals for the whole run.
 import process from 'node:process'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, tool, usageOf } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxText, fauxToolCall, Type } from '@mariozechner/pi-ai'
 import { pickModel } from './shared.ts'
 
 const search = tool({

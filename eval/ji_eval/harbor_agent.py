@@ -6,7 +6,7 @@ the run to the agent log directory, which Harbor syncs back to the host. ``popul
 log for the tokens, cost and outcome.
 
     cd eval && uv run harbor run -p <task dir> -a ji_eval.harbor_agent:JiCodingAgent \\
-        -m deepseek/deepseek-v4-flash --ak ref=<git commit> --ak thinking=high
+        -m deepseek/deepseek-flash --ak ref=<git commit> --ak thinking=high
 
 The repository is cloned at ``ref`` for a reproducible run, or uploaded from ``source``, a checkout on the host, to
 try changes that are not pushed yet. The model key comes from the provider's environment variable on the host
@@ -63,7 +63,7 @@ class JiOptions(InstalledAgentOptions):
     cost: str | None = Field(
         default=None, description="USD per million tokens of a `like` model: in,out,cacheRead,cacheWrite"
     )
-    thinking: Literal["off", "minimal", "low", "medium", "high", "xhigh"] | None = Field(
+    thinking: Literal["off", "minimal", "low", "medium", "high", "xhigh", "max"] | None = Field(
         default=None, description="Thinking level; the CLI's default (high) when omitted."
     )
     max_steps: int | None = Field(

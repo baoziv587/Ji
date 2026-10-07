@@ -9,7 +9,7 @@
 //   --like provider/id    for a model the catalog lacks: the catalog entry whose API, endpoint and limits it shares
 //   --cost in,out,cacheRead,cacheWrite   USD per million tokens of a --like model (default: the --like entry's)
 //   --base-url url        send the model's calls to another endpoint, an OpenAI-compatible proxy say
-//   --thinking level      off, minimal, low, medium, high, xhigh (default: high)
+//   --thinking level      off, minimal, low, medium, high, xhigh, max (default: high)
 //   --root dir            where the files are and commands run (default: the current directory)
 //   --log file            every event of the run, one JSON line each, appended
 //   --timeout seconds     wall-clock limit on the whole run
@@ -29,7 +29,7 @@ const USAGE =
   'usage: headless [--model provider/id] [--like provider/id] [--cost in,out,cacheRead,cacheWrite] [--base-url url] [--thinking level] [--root dir] [--log file] [--timeout seconds] [--max-steps n] [--quiet] [task]'
 
 const options = {
-  model: { type: 'string', default: 'deepseek/deepseek-v4-flash' },
+  model: { type: 'string', default: 'deepseek/deepseek-flash' },
   like: { type: 'string' },
   cost: { type: 'string' },
   'base-url': { type: 'string' },

@@ -1,6 +1,6 @@
 import type { Api, Model } from '@ji.dev/llm'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
 import { jsonl } from '../src/index.ts'
 

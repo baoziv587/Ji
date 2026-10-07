@@ -6,9 +6,12 @@ import type { Found } from './ripgrep.ts'
 import type { Clip } from './window.ts'
 import { omittedLines } from './window.ts'
 
+/** pi-ai's JsonValue, spelled out: the core imports only its own modules, and the shapes are the same. */
+type JsonValue = null | boolean | number | string | readonly JsonValue[] | { [key: string]: JsonValue }
+
 export interface Rendered {
   text: string
-  details: Record<string, unknown>
+  details: { [key: string]: JsonValue }
   isError: boolean
 }
 

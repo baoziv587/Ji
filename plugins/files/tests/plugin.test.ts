@@ -1,10 +1,10 @@
+import type { FauxResponseStep, JsonObject } from '@earendil-works/pi-ai/compat'
 // The files plugin against pi-ai's faux provider: the scenarios of RFC §2, as the model sees them
 import type { AgentState, Api, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
-import type { FauxResponseStep } from '@mariozechner/pi-ai'
 import type { ChangePreview, FilesOptions, FilesPlugin, MemWorkspace } from '../src/index.ts'
 import { posix } from 'node:path'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, toolError, Type } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { afterEach, describe, expect, it } from 'vitest'
 import { editTool, files, fileTool, memWorkspace, ok } from '../src/index.ts'
 
@@ -396,7 +396,7 @@ function faux(responses: FauxResponseStep[]): Model<Api> {
 }
 
 /** One assistant message with these tool calls. */
-function calls(...list: [name: string, args: Record<string, unknown>][]): ReturnType<typeof fauxAssistantMessage> {
+function calls(...list: [name: string, args: JsonObject][]): ReturnType<typeof fauxAssistantMessage> {
   return fauxAssistantMessage(
     list.map(([name, args]) => fauxToolCall(name, args)),
     { stopReason: 'toolUse' },

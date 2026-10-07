@@ -118,6 +118,10 @@ function transcript(messages: Message[]): string {
         return [`Assistant: ${textOf(m)}`, ...calls].join('\n')
       }
 
+      if (m.role === 'system') {
+        return ''
+      }
+
       const text = m.content.flatMap(c => (c.type === 'text' ? [c.text] : [])).join('')
       return `Tool ${m.toolName}${m.isError ? ' (error)' : ''}: ${text.slice(0, 2_000)}`
     })

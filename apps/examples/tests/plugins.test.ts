@@ -1,7 +1,21 @@
+import type {
+  Api,
+  AssistantMessage,
+  Context,
+  FauxResponseStep,
+  Message,
+  Model,
+  ToolCall,
+} from '@earendil-works/pi-ai/compat'
 import type { Turn, TurnEvent } from '@ji.dev/llm'
-import type { Api, AssistantMessage, Context, FauxResponseStep, Message, Model, ToolCall } from '@mariozechner/pi-ai'
+import {
+  fauxAssistantMessage,
+  fauxToolCall,
+  registerFauxProvider,
+  Type,
+  withoutInitialSystemMessage,
+} from '@earendil-works/pi-ai/compat'
 import { callsOf, createAgent, createSession, textOf, tool, toolResult, user } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { budget } from '../src/plugins/budget.ts'
 import { compaction, cutIndex, SUMMARY_PREFIX } from '../src/plugins/compaction.ts'
@@ -35,7 +49,7 @@ const echo = tool({
 const callEcho = (text: string): AssistantMessage =>
   fauxAssistantMessage([fauxToolCall('echo', { text })], { stopReason: 'toolUse' })
 const replyToLastUser = (ctx: Context): AssistantMessage =>
-  fauxAssistantMessage(`re:${ctx.messages.findLast(m => m.role === 'user')?.content}`)
+  fauxAssistantMessage(`re:${withoutInitialSystemMessage(ctx.messages).findLast(m => m.role === 'user')?.content}`)
 
 describe('compaction', () => {
   it('never cuts at a tool result', () => {

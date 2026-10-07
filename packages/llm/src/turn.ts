@@ -1,5 +1,5 @@
+import type { AssistantMessage, Message, ToolResultMessage } from '@earendil-works/pi-ai/compat'
 import type { Step } from '@ji.dev/kernel'
-import type { AssistantMessage, Message, ToolResultMessage } from '@mariozechner/pi-ai'
 import type { AgentAction, AgentState, RewriteAction, Turn } from './types.ts'
 import { act, done } from '@ji.dev/kernel'
 import { lastAssistant } from './message.ts'

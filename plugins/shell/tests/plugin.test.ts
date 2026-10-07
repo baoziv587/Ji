@@ -1,11 +1,11 @@
+import type { FauxResponseStep, JsonObject } from '@earendil-works/pi-ai/compat'
 // The plugins against pi-ai's faux provider: bash's place in a turn (L7, scenario 2.7) and approval with choices (L8)
 import type { Api, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
 import type { Answer } from '@ji.dev/plugin-choices'
-import type { FauxResponseStep } from '@mariozechner/pi-ai'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession } from '@ji.dev/llm'
 import { choices } from '@ji.dev/plugin-choices'
 import { files, memWorkspace } from '@ji.dev/plugin-files'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createMemoryExecutor, createSearchPlugin, createShellPlugin, splitAtBarriers } from '../src/index.ts'
@@ -123,7 +123,7 @@ function faux(responses: FauxResponseStep[]): Model<Api> {
 }
 
 /** One assistant message with these tool calls. */
-function calls(...list: [name: string, args: Record<string, unknown>][]): ReturnType<typeof fauxAssistantMessage> {
+function calls(...list: [name: string, args: JsonObject][]): ReturnType<typeof fauxAssistantMessage> {
   return fauxAssistantMessage(
     list.map(([name, args]) => fauxToolCall(name, args)),
     { stopReason: 'toolUse' },

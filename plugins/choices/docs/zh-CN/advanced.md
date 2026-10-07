@@ -125,7 +125,7 @@ const chooseFormat = tool({
 })
 
 const agent = createAgent({
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-flash',
   tools: [chooseFormat],
   plugins: [choices({ answer: terminal() })],
 })
@@ -217,7 +217,7 @@ const tests = answerer({
 })
 
 const agent = createAgent({
-  model: 'deepseek/deepseek-v4-flash',
+  model: 'deepseek/deepseek-flash',
   plugins: [shell, choices({ answer: terminal(), approve: [shell.preview] }), tests],
 })
 ```

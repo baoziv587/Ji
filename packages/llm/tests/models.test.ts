@@ -10,11 +10,11 @@ afterEach(() => {
 describe('findModel', () => {
   it('should resolve provider/id to that model with the thinking levels it accepts', () => {
     // Act
-    const model = findModel('deepseek/deepseek-v4-flash')
+    const model = findModel('deepseek/deepseek-flash')
 
     // Assert
-    expect(model).toMatchObject({ provider: 'deepseek', id: 'deepseek-v4-flash' })
-    expect(model.thinkingLevels).toEqual(['off', 'high', 'xhigh'])
+    expect(model).toMatchObject({ provider: 'deepseek', id: 'deepseek-flash' })
+    expect(model.thinkingLevels).toEqual(['off', 'low', 'high', 'max'])
   })
 
   it('should suggest the closest model when the id has a typo', () => {
@@ -23,17 +23,17 @@ describe('findModel', () => {
 
     // Assert
     expect(failure).toBeInstanceOf(UnknownModelError)
-    expect(failure).toMatchObject({ suggestion: 'deepseek/deepseek-v4-flash' })
-    expect(failure.message).toContain('Did you mean "deepseek/deepseek-v4-flash"?')
+    expect(failure).toMatchObject({ suggestion: 'deepseek/deepseek-flash' })
+    expect(failure.message).toContain('Did you mean "deepseek/deepseek-flash"?')
     expect(failure.message).toContain('deepseek/deepseek-v4-pro')
   })
 
   it('should suggest the closest provider when the provider has a typo', () => {
     // Act
-    const failure = catchError(() => findModel('deepsek/deepseek-v4-flash'))
+    const failure = catchError(() => findModel('deepsek/deepseek-flash'))
 
     // Assert
-    expect(failure).toMatchObject({ suggestion: 'deepseek/deepseek-v4-flash' })
+    expect(failure).toMatchObject({ suggestion: 'deepseek/deepseek-flash' })
   })
 
   it('should not suggest anything for a name far from every model', () => {
@@ -131,7 +131,7 @@ describe('listModels', () => {
     const models = listModels('deepseek')
 
     // Assert
-    expect(models.map(m => m.id)).toEqual(['deepseek-v4-flash', 'deepseek-v4-pro'])
+    expect(models.map(m => m.id)).toEqual(['deepseek-flash', 'deepseek-v4-pro'])
   })
 
   it('should tell whether the provider key is in the environment when asked, not when listed', () => {

@@ -1,4 +1,3 @@
-import type { Stream } from '@ji.dev/kernel'
 import type {
   Api,
   AssistantMessage,
@@ -7,7 +6,8 @@ import type {
   Model,
   ToolCall,
   ToolResultMessage,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai/compat'
+import type { Stream } from '@ji.dev/kernel'
 import type { ModelInfo } from './models.ts'
 import type { AnyPlugin, CallOptions, CompleteRequest, HookContexts, PluginList } from './plugin.ts'
 import type {
@@ -24,9 +24,9 @@ import type {
   ToolRunner,
 } from './types.ts'
 import { performance } from 'node:perf_hooks'
+import { clampThinkingLevel, streamSimple } from '@earendil-works/pi-ai/compat'
 import { act, extend, merge } from '@ji.dev/kernel'
 import { errorMessage, isDevEnv, isThenable, warn } from '@ji.dev/utils'
-import { clampThinkingLevel, streamSimple } from '@mariozechner/pi-ai'
 import { ModelCallError } from './errors.ts'
 import { callsOf, isIdle } from './message.ts'
 import { findModel, modelInfo, UnsupportedThinkingError } from './models.ts'

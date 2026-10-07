@@ -1,7 +1,7 @@
+import type { FauxResponseStep } from '@earendil-works/pi-ai/compat'
 import type { Api, AssistantMessage, Message, Model, RunEvent, ToolCall, Usage } from '@ji.dev/llm'
-import type { FauxResponseStep } from '@mariozechner/pi-ai'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, textOf, tool, toolResult, Type, user } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import {
   COMPACT_COMMAND,

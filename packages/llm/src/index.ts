@@ -61,17 +61,19 @@ export type {
   UsageTotals,
   When,
 } from './types.ts'
-export type { Stream } from '@ji.dev/kernel'
-
 // What writing an agent needs from pi-ai, so tools, events and models come from one import
-export { Type } from '@mariozechner/pi-ai'
+export { Type } from '@earendil-works/pi-ai/compat'
+
 export type {
   Api,
   AssistantMessage,
+  JsonObject,
+  JsonValue,
   Message,
   Model,
   ToolCall,
   ToolResultMessage,
   TSchema,
   Usage,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai/compat'
+export type { Stream } from '@ji.dev/kernel'

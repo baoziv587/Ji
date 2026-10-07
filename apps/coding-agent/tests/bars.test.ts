@@ -24,10 +24,10 @@ describe('viewOf', () => {
     const narrowest = titleOf(35, { root })
 
     // Assert
-    expect(wide).toBe(`ji · deepseek/deepseek-v4-flash · high · ${root}`)
-    expect(narrower).toBe('ji · deepseek/deepseek-v4-flash · high · …/coding-agent')
-    expect(narrow).toBe('ji · deepseek/deepseek-v4-flash · high')
-    expect(narrowest).toBe('ji · deepseek-v4-flash · high')
+    expect(wide).toBe(`ji · deepseek/deepseek-flash · high · ${root}`)
+    expect(narrower).toBe('ji · deepseek/deepseek-flash · high · …/apps/coding-agent')
+    expect(narrow).toBe('ji · deepseek/deepseek-flash · high')
+    expect(narrowest).toBe('ji · deepseek-flash · high')
   })
 
   it('should list only the keys that matter now', () => {
@@ -124,7 +124,7 @@ describe('viewOf', () => {
 
 function bars(changes: Partial<Bars>): Bars {
   return {
-    model: 'deepseek/deepseek-v4-flash',
+    model: 'deepseek/deepseek-flash',
     thinking: 'high',
     root: '/work',
     editing: EMPTY_EDITING,

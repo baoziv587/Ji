@@ -56,7 +56,13 @@ export default antfu(
               message: 'Plugins do not import each other; depend on the event protocol instead (RFC-0005 §8.3).',
             },
             {
-              group: ['@ji.dev/llm/*', '@ji.dev/kernel', '@ji.dev/kernel/*', '@mariozechner/pi-ai', '**/packages/**'],
+              group: [
+                '@ji.dev/llm/*',
+                '@ji.dev/kernel',
+                '@ji.dev/kernel/*',
+                '@earendil-works/pi-ai/compat',
+                '**/packages/**',
+              ],
               message: 'Plugins use only the public entry of @ji.dev/llm.',
             },
           ],
@@ -90,7 +96,7 @@ export default antfu(
     rules: {
       'no-restricted-imports': [
         'error',
-        { paths: [{ name: '@mariozechner/pi-ai', message: 'Import it from @ji.dev/llm.' }] },
+        { paths: [{ name: '@earendil-works/pi-ai/compat', message: 'Import it from @ji.dev/llm.' }] },
       ],
     },
   },

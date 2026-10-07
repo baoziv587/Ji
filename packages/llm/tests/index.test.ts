@@ -8,11 +8,19 @@ import type {
   Model,
   SimpleStreamOptions,
   ToolResultMessage,
-} from '@mariozechner/pi-ai'
+} from '@earendil-works/pi-ai/compat'
 import type { AgentTool, PluginSpec, Run, RunEvent, Turn, TurnEvent } from '../src/index.ts'
 import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
-import { fauxAssistantMessage, fauxText, fauxToolCall, registerFauxProvider, Type } from '@mariozechner/pi-ai'
+import {
+  fauxAssistantMessage,
+  fauxText,
+  fauxToolCall,
+  getCurrentSystemPrompt,
+  registerFauxProvider,
+  Type,
+  withoutInitialSystemMessage,
+} from '@earendil-works/pi-ai/compat'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import {
   after,
@@ -51,7 +59,7 @@ function fauxModel(responses: FauxResponseStep[], options?: { tokensPerSecond: n
 
 /** Replies `re:<last user message>`. */
 function replyToLastUser(ctx: Context): AssistantMessage {
-  const last = ctx.messages.findLast(m => m.role === 'user')
+  const last = withoutInitialSystemMessage(ctx.messages).findLast(m => m.role === 'user')
   return fauxAssistantMessage(`re:${last?.content}`)
 }
 
@@ -104,7 +112,9 @@ describe('basic run', () => {
         stopReason: 'toolUse',
       }),
       ctx => {
-        const results = ctx.messages.filter((m): m is ToolResultMessage => m.role === 'toolResult')
+        const results = withoutInitialSystemMessage(ctx.messages).filter(
+          (m): m is ToolResultMessage => m.role === 'toolResult',
+        )
         expect(results.map(r => r.isError)).toEqual([false, true])
         return fauxAssistantMessage(`got ${contentOf(results[0])}`)
       },
@@ -198,7 +208,7 @@ describe('plugin middleware', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(ctx.messages.at(-1)).toMatchObject({ role: 'toolResult', isError: true })
+        expect(withoutInitialSystemMessage(ctx.messages).at(-1)).toMatchObject({ role: 'toolResult', isError: true })
         return fauxAssistantMessage('ok')
       },
     ])
@@ -217,7 +227,7 @@ describe('plugin middleware', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(ctx.messages.at(-1)).toMatchObject({
+        expect(withoutInitialSystemMessage(ctx.messages).at(-1)).toMatchObject({
           isError: true,
           content: [{ text: 'middleware failed' }],
         })
@@ -233,7 +243,7 @@ describe('plugin middleware', () => {
     let prompt: string | undefined
     const model = fauxModel([
       ctx => {
-        prompt = ctx.systemPrompt
+        prompt = getCurrentSystemPrompt(ctx.messages)
         return fauxAssistantMessage('ok')
       },
     ])
@@ -334,7 +344,7 @@ describe('hooks', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(ctx.messages.map(m => m.role)).toEqual(['toolResult'])
+        expect(withoutInitialSystemMessage(ctx.messages).map(m => m.role)).toEqual(['toolResult'])
         return fauxAssistantMessage('ok')
       },
     ])
@@ -352,7 +362,7 @@ describe('hooks', () => {
       name: 'outer',
       request: after(msg => ({ ...msg, content: [{ type: 'text', text: 'replaced' }] })),
     })
-    const model = fauxModel([ctx => fauxAssistantMessage(`prompt=${ctx.systemPrompt}`)])
+    const model = fauxModel([ctx => fauxAssistantMessage(`prompt=${getCurrentSystemPrompt(ctx.messages)}`)])
     const r = createSession(createAgent({ model, system: 'S', plugins: [plugin, outer] })).send('go')
 
     expect((await collect(r.text)).join('')).toBe('prompt=patched')
@@ -401,7 +411,7 @@ describe('hooks', () => {
     const model = fauxModel([
       callEcho('secret'),
       ctx => {
-        expect(contentOf(ctx.messages.at(-1)!)).toBe('***')
+        expect(contentOf(withoutInitialSystemMessage(ctx.messages).at(-1)!)).toBe('***')
         return fauxAssistantMessage('ok')
       },
     ])
@@ -505,7 +515,7 @@ describe('rewriteHistory', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(ctx.messages.map(contentOf)).toEqual(['summary'])
+        expect(withoutInitialSystemMessage(ctx.messages).map(contentOf)).toEqual(['summary'])
         return fauxAssistantMessage('ok')
       },
     ])
@@ -640,7 +650,12 @@ describe('sessions and interjections', () => {
     const model = fauxModel([
       callWait,
       ctx => {
-        expect(ctx.messages.map(m => m.role)).toEqual(['user', 'assistant', 'toolResult', 'user'])
+        expect(withoutInitialSystemMessage(ctx.messages).map(m => m.role)).toEqual([
+          'user',
+          'assistant',
+          'toolResult',
+          'user',
+        ])
         return replyToLastUser(ctx)
       },
       replyToLastUser,

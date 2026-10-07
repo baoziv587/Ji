@@ -1,8 +1,9 @@
+import type { JsonObject } from '@earendil-works/pi-ai/compat'
 // The choices plugin against pi-ai's faux provider, with tools that know nothing about it (RFC-0007 §5)
 import type { Api, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
 import type { Answer, Answers, ChoicesOptions, Question, Questions, Reply } from '../src/index.ts'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, tool, toolError, Type } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import { answerer, APPROVE, ask, ASK_USER, choices, DISMISSED, everyCall, named } from '../src/index.ts'
@@ -226,12 +227,12 @@ describe('approval, with choices', () => {
 })
 
 describe('ask_user', () => {
-  const which = {
+  const which: JsonObject = {
     question: 'Which database?',
     header: 'Storage',
     options: [{ label: 'Postgres (Recommended)', description: 'Runs as a service.' }, { label: 'SQLite' }],
   }
-  const auth = {
+  const auth: JsonObject = {
     question: 'Which sign-ins?',
     header: 'Auth',
     options: [{ label: 'OAuth' }, { label: 'SSO' }],
@@ -394,7 +395,7 @@ afterEach(() => {
   registrations.splice(0).forEach(r => r.unregister())
 })
 
-type Calls = [name: string, args: Record<string, unknown>][]
+type Calls = [name: string, args: JsonObject][]
 
 /** The reply to one yes-or-no question. */
 function pick(yes: boolean): Answers {

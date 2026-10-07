@@ -174,6 +174,9 @@ function shapeOf(m: Message): Shape {
         toolCallId: m.toolCallId,
         isError: m.isError,
       }
+    case 'system':
+      // pi-ai's Message union has it for transcripts; a run's history never holds one
+      throw new Error('a system message in the history')
   }
 }
 

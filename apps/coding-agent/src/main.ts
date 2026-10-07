@@ -139,7 +139,7 @@ function startAgentOrQuit(): Agent {
   try {
     return startAgent({
       root: ROOT,
-      model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-v4-flash'}`,
+      model: `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-flash'}`,
       thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
       features,
       asking,

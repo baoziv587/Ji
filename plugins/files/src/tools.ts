@@ -5,7 +5,7 @@
 //   is expected to be at, from what the model has read (withExpected); a call without it expects the file not to exist.
 //   The plugin's preview adds the text it showed (withApproved); the tool then writes that text and nothing else.
 
-import type { AgentTool, ToolCall, ToolOutput, TSchema } from '@ji.dev/llm'
+import type { AgentTool, JsonObject, ToolCall, ToolOutput, TSchema } from '@ji.dev/llm'
 import type { Hinter } from './hints.ts'
 import type { Transform } from './transform.ts'
 import type { Expected, Reader, Resolver, Workspace } from './workspace.ts'
@@ -88,7 +88,7 @@ export function agentTool(workspace: Workspace, spec: FileTool): AgentTool {
     description: spec.description,
     parameters: spec.parameters,
     run: async (args, signal) => {
-      const call = { arguments: args as Record<string, unknown> }
+      const call = { arguments: args as JsonObject }
       const path = String(call.arguments.path)
       const approved = approvedOf(call)
       const f = approved === undefined ? spec.transform(args) : writeTransform(approved)

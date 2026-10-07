@@ -11,11 +11,11 @@ const catalog = fc.constantFrom(...listModels())
 describe('createAgent', () => {
   it('should take a provider/id string and expose the resolved model and thinking level', () => {
     // Act
-    const agent = createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'high' })
+    const agent = createAgent({ model: 'deepseek/deepseek-flash', thinking: 'high' })
 
     // Assert
-    expect(agent.model).toMatchObject({ provider: 'deepseek', id: 'deepseek-v4-flash' })
-    expect(agent.model.thinkingLevels).toEqual(['off', 'high', 'xhigh'])
+    expect(agent.model).toMatchObject({ provider: 'deepseek', id: 'deepseek-flash' })
+    expect(agent.model.thinkingLevels).toEqual(['off', 'low', 'high', 'max'])
     expect(agent.thinking).toBe('high')
   })
 
@@ -29,11 +29,11 @@ describe('createAgent', () => {
 
   it('should reject a thinking level the model does not accept, naming the ones it does', () => {
     // Act
-    const create = (): unknown => createAgent({ model: 'deepseek/deepseek-v4-flash', thinking: 'medium' })
+    const create = (): unknown => createAgent({ model: 'deepseek/deepseek-flash', thinking: 'medium' })
 
     // Assert
     expect(create).toThrow(UnsupportedThinkingError)
-    expect(create).toThrow('deepseek/deepseek-v4-flash does not support thinking "medium". Supported: off, high, xhigh')
+    expect(create).toThrow('deepseek/deepseek-flash does not support thinking "medium". Supported: off, low, high, max')
   })
 
   it('should always accept a level exactly when the model lists it', () => {
@@ -69,23 +69,23 @@ describe('createAgent', () => {
 describe('agent.with', () => {
   it('should return a new agent with the patch applied and leave the original as it was', () => {
     // Arrange
-    const agent = createAgent({ model: 'deepseek/deepseek-v4-flash' })
+    const agent = createAgent({ model: 'deepseek/deepseek-flash' })
 
     // Act
-    const thinker = agent.with({ thinking: 'xhigh' })
+    const thinker = agent.with({ thinking: 'max' })
 
     // Assert
-    expect(thinker.thinking).toBe('xhigh')
+    expect(thinker.thinking).toBe('max')
     expect(agent.thinking).toBe('off')
     expect(thinker).not.toBe(agent)
   })
 
   it('should check the patch like createAgent does', () => {
     // Arrange
-    const agent = createAgent({ model: 'deepseek/deepseek-v4-flash' })
+    const agent = createAgent({ model: 'deepseek/deepseek-flash' })
 
     // Act
-    const patch = (): unknown => agent.with({ thinking: 'low' })
+    const patch = (): unknown => agent.with({ thinking: 'medium' })
 
     // Assert
     expect(patch).toThrow(UnsupportedThinkingError)

@@ -31,8 +31,8 @@
   "devDependencies": {
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
+    "@earendil-works/pi-ai": "^1.0.4",
     "@ji.dev/llm": "workspace:*",
-    "@mariozechner/pi-ai": "^0.73.1",
     "fast-wrap-ansi": "^0.2.2"
   }
 }

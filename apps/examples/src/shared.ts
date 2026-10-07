@@ -1,9 +1,9 @@
+import type { FauxResponseStep } from '@earendil-works/pi-ai/compat'
 // Shared by the examples: picking a model and displaying a run.
 import type { Api, Model, Run, RunSummary, Turn } from '@ji.dev/llm'
-import type { FauxResponseStep } from '@mariozechner/pi-ai'
 import process from 'node:process'
+import { registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { findModel } from '@ji.dev/llm'
-import { registerFauxProvider } from '@mariozechner/pi-ai'
 
 /**
  * MODEL=anthropic/claude-sonnet-5 -> a real model (API key read from env).

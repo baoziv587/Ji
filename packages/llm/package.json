@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "^1.0.4",
     "@ji.dev/kernel": "workspace:*",
-    "@ji.dev/utils": "workspace:*",
-    "@mariozechner/pi-ai": "^0.73.1"
+    "@ji.dev/utils": "workspace:*"
   }
 }

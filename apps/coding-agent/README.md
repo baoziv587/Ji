@@ -38,6 +38,6 @@ Needs Node 24+. **It works in the directory you start it from.** To use it on an
 | `/help`          | Lists the keys, the commands and the tools                          |
 | `/exit`          | Quits                                                               |
 
-`DEEPSEEK_MODEL` (default `deepseek-v4-flash`) and `DEEPSEEK_THINKING` (default `high`) set the model and thinking level. The mouse wheel scrolls, so hold Option to select text. On exit the conversation is printed back to the terminal.
+`DEEPSEEK_MODEL` (default `deepseek-flash`) and `DEEPSEEK_THINKING` (default `high`) set the model and thinking level. The mouse wheel scrolls, so hold Option to select text. On exit the conversation is printed back to the terminal.
 
 [Architecture →](docs/architecture.md)

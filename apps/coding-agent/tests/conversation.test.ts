@@ -1,8 +1,8 @@
+import type { AssistantMessage, Context } from '@earendil-works/pi-ai/compat'
 // A conversation: a reply that does not finish takes it back to before it was sent, and says what it was sent
 import type { Api, Model, Run } from '@ji.dev/llm'
-import type { AssistantMessage, Context } from '@mariozechner/pi-ai'
+import { fauxAssistantMessage, registerFauxProvider, withoutInitialSystemMessage } from '@earendil-works/pi-ai/compat'
 import { createAgent } from '@ji.dev/llm'
-import { fauxAssistantMessage, registerFauxProvider } from '@mariozechner/pi-ai'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { Conversation } from '../src/agent/conversation.ts'
 
@@ -50,7 +50,7 @@ function faux(seen: number[], replies: Array<() => AssistantMessage>): Model<Api
   const provider = registerFauxProvider({ models: [{ id: 'faux' }] })
   provider.setResponses(
     replies.map(reply => (context: Context) => {
-      seen.push(context.messages.length)
+      seen.push(withoutInitialSystemMessage(context.messages).length)
       return reply()
     }),
   )

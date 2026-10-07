@@ -1,7 +1,7 @@
 import type { AgentTool, Api, HookContext, Model, Payload, PluginList, RunEvent, ToolCall } from '@ji.dev/llm'
+import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { answerAll, expectedReplies, recorder } from '@ji.dev/kernel/testing'
 import { createAgent, createSession, tool, toolResult, Type } from '@ji.dev/llm'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@mariozechner/pi-ai'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import { throttleUpdates } from '../src/index.ts'

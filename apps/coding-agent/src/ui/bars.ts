@@ -25,7 +25,7 @@ import {
 
 /** What the bars show, read again for every draw. */
 export interface Bars {
-  /** `deepseek/deepseek-v4-flash` */
+  /** `deepseek/deepseek-flash` */
   model: string
   thinking: string
   /** `~/projects/app`: the home folder as `~`. */
@@ -117,7 +117,7 @@ function titleVersions(bars: Bars): string[] {
   return [...withRoot, full, title(withoutProvider, bars.thinking)]
 }
 
-/** `ji · deepseek/deepseek-v4-flash · high` */
+/** `ji · deepseek/deepseek-flash · high` */
 function title(model: string, thinking: string): string {
   return `${styleText('bold', 'ji')} ${dimText('·')} ${model}${dimText(` · ${thinking}`)}`
 }

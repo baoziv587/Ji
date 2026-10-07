@@ -1,7 +1,7 @@
-import type { Api, KnownProvider, Model } from '@mariozechner/pi-ai'
+import type { Api, KnownProvider, Model } from '@earendil-works/pi-ai/compat'
 import type { ModelRef, ThinkingLevel } from './types.ts'
+import { getEnvApiKey, getModels, getProviders, getSupportedThinkingLevels } from '@earendil-works/pi-ai/compat'
 import { closest } from '@ji.dev/utils'
-import { getEnvApiKey, getModels, getProviders, getSupportedThinkingLevels } from '@mariozechner/pi-ai'
 
 /** A pi-ai Model plus what the agent already knows about it; still a Model, so pi-ai functions accept it. */
 export type ModelInfo = Model<Api> & {

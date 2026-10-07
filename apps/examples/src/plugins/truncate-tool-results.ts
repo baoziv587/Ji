@@ -25,7 +25,7 @@ export function truncateToolResults({ maxChars = 8_000 }: TruncateOptions = {}):
       return {
         ...result,
         content: result.content.map(c => (c.type === 'text' ? { ...c, text: truncate(c.text, maxChars) } : c)),
-        details: { ...result.details, truncated: { originalChars } },
+        details: { ...(isObject(result.details) ? result.details : {}), truncated: { originalChars } },
       }
     }),
   })
@@ -41,4 +41,8 @@ export function truncate(text: string, maxChars: number): string {
   const tail = text.slice(-Math.floor(maxChars * 0.2))
   const omitted = text.length - head.length - tail.length
   return `${head}\n\n[... ${omitted} characters omitted ...]\n\n${tail}`
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
