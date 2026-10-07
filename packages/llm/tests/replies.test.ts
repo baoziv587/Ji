@@ -1,8 +1,8 @@
 // Replies through the LLM layers (RFC-0007 §4, §9): Q1 for the hook helpers, Q6 for tools, and ctx.complete.
-import type { FauxResponseStep } from '@earendil-works/pi-ai/compat'
+import type { FakeReply } from '@ji.dev/testing'
 import type { Api, Model, Payload, Plugin, RunEvent, Stream, ToolCall } from '../src/index.ts'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { answerAll, recorder } from '@ji.dev/kernel/testing'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -72,7 +72,7 @@ describe('hook helpers forward replies (Q1)', () => {
 describe('a tool yield gets the reply to its tool_update (Q6)', () => {
   it('should reach the tool when a toolCalls layer answers, and not reach the run', async () => {
     // Arrange
-    const model = fauxModel([fauxAssistantMessage([fauxToolCall('ask', {})], { stopReason: 'toolUse' }), 'ok'])
+    const model = fauxModel([assistantMessage([toolUse('ask', {})]), 'ok'])
     const agent = createAgent({ model, tools: [askingTool], plugins: [answerer(() => 'yes')] })
 
     // Act
@@ -85,7 +85,7 @@ describe('a tool yield gets the reply to its tool_update (Q6)', () => {
 
   it('should give undefined when no layer answers, as for await does', async () => {
     // Arrange
-    const model = fauxModel([fauxAssistantMessage([fauxToolCall('ask', {})], { stopReason: 'toolUse' }), 'ok'])
+    const model = fauxModel([assistantMessage([toolUse('ask', {})]), 'ok'])
     const agent = createAgent({ model, tools: [askingTool] })
 
     // Act
@@ -138,9 +138,9 @@ describe('ctx.complete forwards replies (A.2)', () => {
 
 // Helpers
 
-const registrations: Array<{ unregister: () => void }> = []
+const registrations: Array<{ dispose: () => void }> = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
 function asking(question: string): Payload {
@@ -205,11 +205,10 @@ async function* answering<T>(inner: Stream<Payload, T>, f: (e: Payload) => unkno
   }
 }
 
-function fauxModel(responses: Array<FauxResponseStep | string>): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses.map(r => (typeof r === 'string' ? fauxAssistantMessage(r) : r)))
-  registrations.push(registration)
-  return registration.getModel()
+function fauxModel(responses: Array<FakeReply | string>): Model<Api> {
+  const fake = createFakeModel(responses.map(r => (typeof r === 'string' ? assistantMessage(r) : r)))
+  registrations.push(fake)
+  return fake.model
 }
 
 function resultTexts(events: RunEvent[]): string[] {

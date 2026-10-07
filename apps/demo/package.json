@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^1.0.4",
-    "@ji.dev/llm": "workspace:*"
+    "@ji.dev/llm": "workspace:*",
+    "@ji.dev/testing": "workspace:*"
   }
 }

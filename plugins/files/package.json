@@ -17,7 +17,7 @@
     "diff": "^9.0.0"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^1.0.4",
-    "@ji.dev/llm": "workspace:*"
+    "@ji.dev/llm": "workspace:*",
+    "@ji.dev/testing": "workspace:*"
   }
 }

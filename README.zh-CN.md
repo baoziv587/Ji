@@ -192,6 +192,7 @@ demo 离线演示计算工具，无需 API key。
 - [可运行示例](apps/examples/README.md) — 从具体场景开始
 
 构建 LLM agent 用 [`@ji.dev/llm`](packages/llm)；需要自定义「决策 → 执行 → 记录」循环时，用零依赖的 [`@ji.dev/kernel`](packages/kernel)。
+测试 agent 或插件、不想连真实模型时，用 [`@ji.dev/testing`](packages/testing) 提供的按脚本回复的模型。
 
 <br>
 

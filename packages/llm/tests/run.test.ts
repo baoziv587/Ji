@@ -1,10 +1,11 @@
 // The run's event stream (RFC-0005 §3, appendix A): one stream, well formed whatever the timing, interrupts
 // and failures; r.text, r.turns and r.summary are projections of it; observe sees it all and changes nothing.
-import type { FauxResponseStep, JsonObject } from '@earendil-works/pi-ai/compat'
+import type { FakeReply } from '@ji.dev/testing'
 import type {
   AgentTool,
   Api,
   AssistantMessage,
+  JsonObject,
   Model,
   Plugin,
   PluginList,
@@ -14,14 +15,13 @@ import type {
   Session,
 } from '../src/index.ts'
 import process from 'node:process'
+// eslint-disable-next-line no-restricted-imports -- lateId is a hand-written pi-ai provider: a stream the fake cannot script
 import {
   createAssistantMessageEventStream,
-  fauxAssistantMessage,
-  fauxToolCall,
   registerApiProvider,
-  registerFauxProvider,
   unregisterApiProviders,
 } from '@earendil-works/pi-ai/compat'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { callsOf, createAgent, createSession, definePlugin, tool, toolError, Type } from '../src/index.ts'
@@ -163,9 +163,7 @@ describe('run events', () => {
       parameters: Type.Object({}),
       run: () => 'done',
     })
-    const chat = createSession(
-      createAgent({ model: faux([callsTo('plain'), fauxAssistantMessage('ok')]), tools: [plain] }),
-    )
+    const chat = createSession(createAgent({ model: faux([callsTo('plain'), assistantMessage('ok')]), tools: [plain] }))
 
     // Act
     const { events } = await read(chat.send('go'))
@@ -240,7 +238,7 @@ describe('run events', () => {
   it('should end a failed run with run_end carrying the RunError the promises reject with', async () => {
     // Arrange
     const chat = createSession(
-      createAgent({ model: faux([fauxAssistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })]) }),
+      createAgent({ model: faux([assistantMessage('x', { stopReason: 'error', errorMessage: 'overloaded' })]) }),
     )
     const r = chat.send('go')
 
@@ -425,7 +423,7 @@ describe('observe', () => {
     // Arrange
     const seen: Array<{ e: RunEvent; run: RunInfo }> = []
     const agent = createAgent({
-      model: faux(Array.from({ length: 2 }, () => fauxAssistantMessage('ok'))),
+      model: faux(Array.from({ length: 2 }, () => assistantMessage('ok'))),
       plugins: [observer('log', (e, run) => seen.push({ e, run }))],
     })
 
@@ -503,14 +501,14 @@ interface Timing {
 
 /** A session whose model makes the planned calls to `work`, then answers; spare answers follow an interrupt. */
 function session(p: Plan, plugins: PluginList = [], timing?: Timing): Session {
-  const responses: FauxResponseStep[] = [
+  const responses: FakeReply[] = [
     ...p.map((calls, i) =>
-      fauxAssistantMessage(
-        calls.map((call, j) => fauxToolCall('work', { ...call }, { id: `c${i}.${j}` })),
+      assistantMessage(
+        calls.map((call, j) => toolUse('work', { ...call }, { id: `c${i}.${j}` })),
         { stopReason: 'toolUse' },
       ),
     ),
-    ...Array.from({ length: 3 }, () => fauxAssistantMessage('done')),
+    ...Array.from({ length: 3 }, () => assistantMessage('done')),
   ]
   return createSession(createAgent({ model: faux(responses), tools: [work(timing)], plugins }))
 }
@@ -548,16 +546,15 @@ function work(timing: Timing | undefined): AgentTool {
   })
 }
 
-const registrations: Array<{ unregister: () => void }> = []
+const registrations: Array<{ dispose: () => void }> = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
-function faux(responses: FauxResponseStep[]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function faux(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 /** A model that calls `work` with `pieces` of arguments, its id coming with the second as some providers do; then answers. */
@@ -575,13 +572,13 @@ function lateId(pieces: string[]): Model<Api> {
         const first = calls++ === 0
         queueMicrotask(async () => {
           if (!first) {
-            const message = fauxAssistantMessage('done')
+            const message = assistantMessage('done')
             stream.push({ type: 'done', reason: 'stop', message })
             stream.end(message)
             return
           }
 
-          const message = fauxAssistantMessage([fauxToolCall('work', {}, { id: '' })], { stopReason: 'toolUse' })
+          const message = assistantMessage([toolUse('work', {}, { id: '' })])
           const [block] = callsOf(message)
           stream.push({ type: 'toolcall_start', contentIndex: 0, partial: message })
           for (const [i, delta] of pieces.entries()) {
@@ -602,12 +599,12 @@ function lateId(pieces: string[]): Model<Api> {
     },
     api,
   )
-  registrations.push({ unregister: () => unregisterApiProviders(api) })
+  registrations.push({ dispose: () => unregisterApiProviders(api) })
   return { ...faux([]), api }
 }
 
 function callsTo(name: string): AssistantMessage {
-  return fauxAssistantMessage([fauxToolCall(name, {}, { id: 'only' })], { stopReason: 'toolUse' })
+  return assistantMessage([toolUse(name, {}, { id: 'only' })])
 }
 
 function observer(name: string, observe: (e: RunEvent, run: RunInfo) => void): Plugin {

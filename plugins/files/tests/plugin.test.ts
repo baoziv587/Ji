@@ -1,10 +1,10 @@
-import type { FauxResponseStep, JsonObject } from '@earendil-works/pi-ai/compat'
 // The files plugin against pi-ai's faux provider: the scenarios of RFC §2, as the model sees them
-import type { AgentState, Api, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
+import type { AgentState, Api, AssistantMessage, JsonObject, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
+import type { FakeReply } from '@ji.dev/testing'
 import type { ChangePreview, FilesOptions, FilesPlugin, MemWorkspace } from '../src/index.ts'
 import { posix } from 'node:path'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, definePlugin, toolError, Type } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { afterEach, describe, expect, it } from 'vitest'
 import { editTool, files, fileTool, memWorkspace, ok } from '../src/index.ts'
 
@@ -29,7 +29,7 @@ describe('files', () => {
           ],
         },
       ]),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -46,7 +46,7 @@ describe('files', () => {
     const workspace = rooted({ '/w/a.ts': 'one' })
     const model = faux([
       calls(['edit', { path: 'a.ts', edits: [{ old_text: 'one', new_text: 'two' }], expected_version: 'm1' }]),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -70,7 +70,7 @@ describe('files', () => {
         workspace.set('/w/src/app.ts', 'import x from "x"\nrun()\n')
         return calls(['edit', { path: 'src/app.ts', edits: [{ old_text: 'run()', new_text: 'start()' }] }])
       },
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -96,7 +96,7 @@ describe('files', () => {
           { path: './src/a.ts', edits: [{ old_text: 'export function run()', new_text: 'export function start()' }] },
         ],
       ),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -116,7 +116,7 @@ describe('files', () => {
         ['edit', { path: '/w/src/a.ts', edits: [{ old_text: 'one', new_text: 'two' }] }],
         ['edit', { path: 'link/a.ts', edits: [{ old_text: 'two', new_text: 'three' }] }],
       ),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -132,7 +132,7 @@ describe('files', () => {
     const workspace = rooted({ '/w/a.ts': 'keep me' })
     const model = faux([
       calls(['edit', { path: 'new.ts', content: 'export {}\n' }], ['edit', { path: 'a.ts', content: 'gone' }]),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -149,11 +149,11 @@ describe('files', () => {
     const workspace = rooted({ '/w/a.ts': 'one\n' })
     const model = faux([
       calls(['read', { path: 'a.ts' }]),
-      fauxAssistantMessage('read it'),
+      assistantMessage('read it'),
       calls(['edit', { path: 'a.ts', edits: [{ old_text: 'one', new_text: 'two' }] }]),
-      fauxAssistantMessage('edited'),
+      assistantMessage('edited'),
       calls(['edit', { path: 'a.ts', edits: [{ old_text: 'one', new_text: 'three' }] }]),
-      fauxAssistantMessage('tried'),
+      assistantMessage('tried'),
     ])
     const plugin = files(workspace)
     const agent = createAgent({ model, plugins: [plugin] })
@@ -178,7 +178,7 @@ describe('hints', () => {
   const wrongIndent = [
     calls(['read', { path: 'server.go' }]),
     calls(['edit', { path: 'server.go', edits: [{ old_text: '    return err', new_text: '    return wrap(err)' }] }]),
-    fauxAssistantMessage('done'),
+    assistantMessage('done'),
   ]
 
   it('should show where similar text is when old_text is not found, without applying it (scenario 2.5)', async () => {
@@ -228,7 +228,7 @@ describe('fileTool', () => {
       calls(['read', { path: 'log.txt' }]),
       calls(['append', { path: 'log.txt', text: 'two\n' }]),
       calls(['edit', { path: 'log.txt', edits: [{ old_text: 'two', new_text: 'three' }] }]),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -248,7 +248,7 @@ describe('preview, with a plugin that asks before a change', () => {
   it('should show the change before anything is written, and leave the file alone when it is refused (scenario 2.10)', async () => {
     // Arrange
     const workspace = rooted({ '/w/a.ts': 'one\n' })
-    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
+    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), assistantMessage('done')])
     const asked: Shown[] = []
 
     // Act
@@ -272,7 +272,7 @@ describe('preview, with a plugin that asks before a change', () => {
     const model = faux([
       calls(['read', { path: 'a.ts' }]),
       calls([...editOne], ['edit', { path: 'new.ts', content: 'a\nb\n' }]),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
     const titles: string[] = []
 
@@ -297,7 +297,7 @@ describe('preview, with a plugin that asks before a change', () => {
       calls(['edit', { path: 'a.ts', edits: [{ old_text: 'missing', new_text: 'x' }] }]),
       calls(['edit', { path: 'a.ts', edits: 'not a list' }]),
       calls(['edit', { edits: [{ old_text: 'one', new_text: 'two' }] }]),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
     let asked = 0
 
@@ -326,7 +326,7 @@ describe('preview, with a plugin that asks before a change', () => {
       transform: () => () => ok(`run ${++runs}\n`),
     })
     const workspace = rooted({})
-    const model = faux([calls(['stamp', { path: 'n.txt' }]), fauxAssistantMessage('done')])
+    const model = faux([calls(['stamp', { path: 'n.txt' }]), assistantMessage('done')])
     const shown: (string | undefined)[] = []
 
     // Act
@@ -348,7 +348,7 @@ describe('preview, with a plugin that asks before a change', () => {
   it('should write nothing when the file changes while the person is deciding', async () => {
     // Arrange
     const workspace = rooted({ '/w/a.ts': 'one\n' })
-    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
+    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), assistantMessage('done')])
 
     // Act
     const results = await approving(workspace, model, () => {
@@ -364,7 +364,7 @@ describe('preview, with a plugin that asks before a change', () => {
   it('should ask the same whichever of the two plugins comes first', async () => {
     // Arrange
     const workspace = rooted({ '/w/a.ts': 'one\n' })
-    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), fauxAssistantMessage('done')])
+    const model = faux([calls(['read', { path: 'a.ts' }]), calls([...editOne]), assistantMessage('done')])
     const fileTools = files(workspace)
     const titles: string[] = []
     const asking = approver(fileTools, ({ title }) => {
@@ -383,24 +383,20 @@ describe('preview, with a plugin that asks before a change', () => {
 
 // Helpers
 
-const registrations: { unregister: () => void }[] = []
+const registrations: { dispose: () => void }[] = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
-function faux(responses: FauxResponseStep[]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function faux(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 /** One assistant message with these tool calls. */
-function calls(...list: [name: string, args: JsonObject][]): ReturnType<typeof fauxAssistantMessage> {
-  return fauxAssistantMessage(
-    list.map(([name, args]) => fauxToolCall(name, args)),
-    { stopReason: 'toolUse' },
-  )
+function calls(...list: [name: string, args: JsonObject][]): AssistantMessage {
+  return assistantMessage(list.map(([name, args]) => toolUse(name, args)))
 }
 
 /** A workspace whose relative paths resolve against /w, with /w/link an alias of /w/src. */

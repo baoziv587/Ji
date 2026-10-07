@@ -1,8 +1,8 @@
-import type { AssistantMessage, Context } from '@earendil-works/pi-ai/compat'
 // A conversation: a reply that does not finish takes it back to before it was sent, and says what it was sent
-import type { Api, Model, Run } from '@ji.dev/llm'
-import { fauxAssistantMessage, registerFauxProvider, withoutInitialSystemMessage } from '@earendil-works/pi-ai/compat'
+import type { Api, AssistantMessage, Model, Run } from '@ji.dev/llm'
+import type { FakeRequest } from '@ji.dev/testing'
 import { createAgent } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { Conversation } from '../src/agent/conversation.ts'
 
@@ -47,19 +47,18 @@ describe('conversation', () => {
 
 /** A model that answers with `replies` in turn, noting how many messages each call was sent. */
 function faux(seen: number[], replies: Array<() => AssistantMessage>): Model<Api> {
-  const provider = registerFauxProvider({ models: [{ id: 'faux' }] })
-  provider.setResponses(
-    replies.map(reply => (context: Context) => {
-      seen.push(withoutInitialSystemMessage(context.messages).length)
+  const fake = createFakeModel(
+    replies.map(reply => ({ messages }: FakeRequest) => {
+      seen.push(messages.length)
       return reply()
     }),
   )
-  onTestFinished(() => provider.unregister())
-  return provider.getModel()
+  onTestFinished(() => fake.dispose())
+  return fake.model
 }
 
 function answer(): AssistantMessage {
-  return fauxAssistantMessage('ok')
+  return assistantMessage('ok')
 }
 
 async function readAll(run: Run): Promise<void> {

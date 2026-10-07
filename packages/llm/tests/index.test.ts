@@ -1,26 +1,21 @@
 // Verifies RFC-0003 / RFC-0004 against pi-ai's faux provider: hooks, plugin state, Run, sessions and interjections
+import type { FakeReply, FakeRequest } from '@ji.dev/testing'
 import type {
+  AgentTool,
   Api,
   AssistantMessage,
-  Context,
-  FauxResponseStep,
   Message,
   Model,
-  SimpleStreamOptions,
+  PluginSpec,
+  Run,
+  RunEvent,
   ToolResultMessage,
-} from '@earendil-works/pi-ai/compat'
-import type { AgentTool, PluginSpec, Run, RunEvent, Turn, TurnEvent } from '../src/index.ts'
+  Turn,
+  TurnEvent,
+} from '../src/index.ts'
 import { setFlagsFromString } from 'node:v8'
 import { runInNewContext } from 'node:vm'
-import {
-  fauxAssistantMessage,
-  fauxText,
-  fauxToolCall,
-  getCurrentSystemPrompt,
-  registerFauxProvider,
-  Type,
-  withoutInitialSystemMessage,
-} from '@earendil-works/pi-ai/compat'
+import { assistantMessage, createFakeModel, textBlock, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import {
   after,
@@ -35,6 +30,7 @@ import {
   textOf,
   tool,
   toolError,
+  Type,
   UnsupportedThinkingError,
   usageOf,
   user,
@@ -47,20 +43,18 @@ const echo = tool({
   run: ({ x }) => x.toUpperCase(),
 })
 
-const callEcho = (x: string): AssistantMessage =>
-  fauxAssistantMessage([fauxToolCall('echo', { x })], { stopReason: 'toolUse' })
+const callEcho = (x: string): AssistantMessage => assistantMessage([toolUse('echo', { x })])
 
-function fauxModel(responses: FauxResponseStep[], options?: { tokensPerSecond: number }): Model<Api> {
-  const faux = registerFauxProvider(options)
-  faux.setResponses(responses)
-  onTestFinished(() => faux.unregister())
-  return faux.getModel()
+function fauxModel(responses: FakeReply[], options?: { tokensPerSecond: number }): Model<Api> {
+  const fake = createFakeModel(responses, options)
+  onTestFinished(() => fake.dispose())
+  return fake.model
 }
 
 /** Replies `re:<last user message>`. */
-function replyToLastUser(ctx: Context): AssistantMessage {
-  const last = withoutInitialSystemMessage(ctx.messages).findLast(m => m.role === 'user')
-  return fauxAssistantMessage(`re:${last?.content}`)
+function replyToLastUser(ctx: FakeRequest): AssistantMessage {
+  const last = ctx.messages.findLast(m => m.role === 'user')
+  return assistantMessage(`re:${last?.content}`)
 }
 
 async function collect<T>(source: AsyncIterable<T>): Promise<T[]> {
@@ -108,15 +102,11 @@ function tracer(name: string, log: string[]): PluginSpec {
 describe('basic run', () => {
   it('runs tools in parallel; schema validation failures go back to the model as isError results', async () => {
     const model = fauxModel([
-      fauxAssistantMessage([fauxToolCall('echo', { x: 'hi' }), fauxToolCall('echo', { y: 1 })], {
-        stopReason: 'toolUse',
-      }),
+      assistantMessage([toolUse('echo', { x: 'hi' }), toolUse('echo', { y: 1 })]),
       ctx => {
-        const results = withoutInitialSystemMessage(ctx.messages).filter(
-          (m): m is ToolResultMessage => m.role === 'toolResult',
-        )
+        const results = ctx.messages.filter((m): m is ToolResultMessage => m.role === 'toolResult')
         expect(results.map(r => r.isError)).toEqual([false, true])
-        return fauxAssistantMessage(`got ${contentOf(results[0])}`)
+        return assistantMessage(`got ${contentOf(results[0])}`)
       },
     ])
     const final = await createSession(createAgent({ model, tools: [echo] })).send('go').result
@@ -124,14 +114,12 @@ describe('basic run', () => {
   })
 
   it('writes the final answer into state (S8)', async () => {
-    const r = createSession(createAgent({ model: fauxModel([fauxAssistantMessage('ok')]) })).send('go')
+    const r = createSession(createAgent({ model: fauxModel([assistantMessage('ok')]) })).send('go')
     expect((await r.state).messages.at(-1)).toBe(await r.result)
   })
 
   it('on stopReason=error, result and summary reject and turns throws, all with a provider RunError', async () => {
-    const model = fauxModel([
-      fauxAssistantMessage([fauxText('partial')], { stopReason: 'error', errorMessage: 'boom' }),
-    ])
+    const model = fauxModel([assistantMessage([textBlock('partial')], { stopReason: 'error', errorMessage: 'boom' })])
     const r = createSession(createAgent({ model })).send('go')
 
     await expect(r.result).rejects.toThrow(/boom/)
@@ -145,9 +133,9 @@ describe('basic run', () => {
     let seen: AbortSignal | undefined
     const model = fauxModel(
       [
-        (_ctx, opts) => {
-          seen = opts?.signal
-          return fauxAssistantMessage('a long long long long answer')
+        request => {
+          seen = request.signal
+          return assistantMessage('a long long long long answer')
         },
       ],
       { tokensPerSecond: 20 },
@@ -166,7 +154,7 @@ describe('basic run', () => {
   })
 
   it('reading the run gives every event in order, one type per event', async () => {
-    const r = createSession(createAgent({ model: fauxModel([fauxAssistantMessage('ok')]) })).send('go')
+    const r = createSession(createAgent({ model: fauxModel([assistantMessage('ok')]) })).send('go')
     const types = (await collect(r)).map(e => e.type)
     expect(types.filter(t => t !== 'text')).toEqual([
       'step_start',
@@ -183,7 +171,7 @@ describe('basic run', () => {
 describe('plugin middleware', () => {
   it('earlier plugins in the array wrap later ones', async () => {
     const log: string[] = []
-    const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
+    const model = fauxModel([callEcho('a'), assistantMessage('ok')])
     const plugins = [definePlugin(tracer('outer', log)), definePlugin(tracer('inner', log))]
 
     await createSession(createAgent({ model, tools: [echo], plugins })).send('go').result
@@ -208,8 +196,8 @@ describe('plugin middleware', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(withoutInitialSystemMessage(ctx.messages).at(-1)).toMatchObject({ role: 'toolResult', isError: true })
-        return fauxAssistantMessage('ok')
+        expect(ctx.messages.at(-1)).toMatchObject({ role: 'toolResult', isError: true })
+        return assistantMessage('ok')
       },
     ])
 
@@ -227,11 +215,11 @@ describe('plugin middleware', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(withoutInitialSystemMessage(ctx.messages).at(-1)).toMatchObject({
+        expect(ctx.messages.at(-1)).toMatchObject({
           isError: true,
           content: [{ text: 'middleware failed' }],
         })
-        return fauxAssistantMessage('recovered')
+        return assistantMessage('recovered')
       },
     ])
 
@@ -243,8 +231,8 @@ describe('plugin middleware', () => {
     let prompt: string | undefined
     const model = fauxModel([
       ctx => {
-        prompt = getCurrentSystemPrompt(ctx.messages)
-        return fauxAssistantMessage('ok')
+        prompt = ctx.system
+        return assistantMessage('ok')
       },
     ])
     const a = definePlugin({ name: 'a', system: s => `${s}+A` })
@@ -261,7 +249,7 @@ describe('plugin middleware', () => {
       const log: string[] = []
       const [a, b, c] = ['a', 'b', 'c'].map(n => definePlugin(tracer(n, log)))
       const plugins = shape === 'left' ? [[a, b], c] : [a, [b, c]]
-      const model = fauxModel([callEcho('x'), fauxAssistantMessage('ok')])
+      const model = fauxModel([callEcho('x'), assistantMessage('ok')])
 
       await createSession(createAgent({ model, tools: [echo], plugins })).send('go').result
       orders.push(log)
@@ -271,7 +259,7 @@ describe('plugin middleware', () => {
 })
 
 describe('conflict checks', () => {
-  const model = registerFauxProvider().getModel()
+  const model = createFakeModel().model
   const echo2 = tool({ ...echo })
 
   it('reports all name conflicts at once (guarantee 3)', () => {
@@ -299,7 +287,7 @@ describe('plugin state', () => {
   })
 
   it('calls reduce on every step including the final answer; select returns init before any write', async () => {
-    const model = fauxModel([callEcho('a'), callEcho('b'), fauxAssistantMessage('ok')])
+    const model = fauxModel([callEcho('a'), callEcho('b'), assistantMessage('ok')])
     const state = await createSession(createAgent({ model, tools: [echo], plugins: [modelTurns] })).send('go').state
 
     expect(modelTurns.select(state)).toBe(3)
@@ -308,10 +296,10 @@ describe('plugin state', () => {
 
   it('hot swap: a new plugin list continues from the same state, new plugins start from init (guarantee 4)', async () => {
     const first = await createSession(
-      createAgent({ model: fauxModel([callEcho('a'), fauxAssistantMessage('ok')]), tools: [echo] }),
+      createAgent({ model: fauxModel([callEcho('a'), assistantMessage('ok')]), tools: [echo] }),
     ).send('go').state
 
-    const model = fauxModel([fauxAssistantMessage('again')])
+    const model = fauxModel([assistantMessage('again')])
     const second = await createSession(createAgent({ model, plugins: [modelTurns] }), {
       state: first,
     }).send('again').state
@@ -344,8 +332,8 @@ describe('hooks', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(withoutInitialSystemMessage(ctx.messages).map(m => m.role)).toEqual(['toolResult'])
-        return fauxAssistantMessage('ok')
+        expect(ctx.messages.map(m => m.role)).toEqual(['toolResult'])
+        return assistantMessage('ok')
       },
     ])
 
@@ -362,7 +350,7 @@ describe('hooks', () => {
       name: 'outer',
       request: after(msg => ({ ...msg, content: [{ type: 'text', text: 'replaced' }] })),
     })
-    const model = fauxModel([ctx => fauxAssistantMessage(`prompt=${getCurrentSystemPrompt(ctx.messages)}`)])
+    const model = fauxModel([ctx => assistantMessage(`prompt=${ctx.system}`)])
     const r = createSession(createAgent({ model, system: 'S', plugins: [plugin, outer] })).send('go')
 
     expect((await collect(r.text)).join('')).toBe('prompt=patched')
@@ -374,7 +362,7 @@ describe('hooks', () => {
       name: 'shout',
       request: mapEvents(e => (e.type === 'text' ? { ...e, delta: e.delta.toUpperCase() } : e)),
     })
-    const model = fauxModel([fauxAssistantMessage('quiet reply')])
+    const model = fauxModel([assistantMessage('quiet reply')])
     const r = createSession(createAgent({ model, plugins: [shout] })).send('go')
 
     expect((await collect(r.text)).join('')).toBe('QUIET REPLY')
@@ -385,9 +373,9 @@ describe('hooks', () => {
     let seen: AbortSignal | undefined
     const model = fauxModel(
       [
-        (_ctx, opts) => {
-          seen = opts?.signal
-          return fauxAssistantMessage('a long long long long answer')
+        request => {
+          seen = request.signal
+          return assistantMessage('a long long long long answer')
         },
       ],
       { tokensPerSecond: 20 },
@@ -411,8 +399,8 @@ describe('hooks', () => {
     const model = fauxModel([
       callEcho('secret'),
       ctx => {
-        expect(contentOf(withoutInitialSystemMessage(ctx.messages).at(-1)!)).toBe('***')
-        return fauxAssistantMessage('ok')
+        expect(contentOf(ctx.messages.at(-1)!)).toBe('***')
+        return assistantMessage('ok')
       },
     ])
 
@@ -428,7 +416,7 @@ describe('hooks', () => {
         return next(input)
       },
     })
-    const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
+    const model = fauxModel([callEcho('a'), assistantMessage('ok')])
 
     await createSession(createAgent({ model, tools: [echo], plugins: [spy] })).send('go').result
     expect(seen).toEqual(['input', 'model', 'model'])
@@ -438,16 +426,16 @@ describe('hooks', () => {
 describe('thinking levels', () => {
   /** Like DeepSeek, supports only off, high and xhigh; records the reasoning each request actually carries. */
   function thinker(seen: unknown[], { reasoning = true, calls = 1 } = {}): Model<Api> {
-    const faux = registerFauxProvider({ models: [{ id: 'thinker', reasoning }] })
-    faux.setResponses(
-      Array.from({ length: calls }, () => (_ctx: Context, options: SimpleStreamOptions | undefined) => {
-        seen.push(options?.reasoning)
-        return fauxAssistantMessage('ok')
+    const fake = createFakeModel(
+      Array.from({ length: calls }, () => (request: FakeRequest) => {
+        seen.push(request.thinking)
+        return assistantMessage('ok')
       }),
+      { id: 'thinker', reasoning },
     )
-    onTestFinished(() => faux.unregister())
+    onTestFinished(() => fake.dispose())
     return {
-      ...faux.getModel(),
+      ...fake.model,
       thinkingLevelMap: { minimal: null, low: null, medium: null, high: 'high', xhigh: 'max' },
     }
   }
@@ -515,8 +503,8 @@ describe('rewriteHistory', () => {
     const model = fauxModel([
       callEcho('a'),
       ctx => {
-        expect(withoutInitialSystemMessage(ctx.messages).map(contentOf)).toEqual(['summary'])
-        return fauxAssistantMessage('ok')
+        expect(ctx.messages.map(contentOf)).toEqual(['summary'])
+        return assistantMessage('ok')
       },
     ])
 
@@ -540,10 +528,8 @@ describe('run records and stats', () => {
 
   it('summary counts model turns, usage, tool calls and errors, and inserted messages', async () => {
     const model = fauxModel([
-      fauxAssistantMessage([fauxToolCall('echo', { x: 'a' }), fauxToolCall('fail', { x: 'b' })], {
-        stopReason: 'toolUse',
-      }),
-      fauxAssistantMessage('ok'),
+      assistantMessage([toolUse('echo', { x: 'a' }), toolUse('fail', { x: 'b' })]),
+      assistantMessage('ok'),
     ])
     const r = createSession(createAgent({ model, tools: [echo, failing] })).send('go')
     const summary = await r.summary
@@ -558,7 +544,7 @@ describe('run records and stats', () => {
   })
 
   it('turns always starts from the first step; the last summary equals r.summary (guarantee 5)', async () => {
-    const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
+    const model = fauxModel([callEcho('a'), assistantMessage('ok')])
     const r = createSession(createAgent({ model, tools: [echo] })).send('go')
 
     await collect(r.text)
@@ -570,7 +556,7 @@ describe('run records and stats', () => {
   })
 
   it('model turns record timing: first token, model, and each tool', async () => {
-    const model = fauxModel([callEcho('a'), fauxAssistantMessage('ok')])
+    const model = fauxModel([callEcho('a'), assistantMessage('ok')])
     const turns = await collect(createSession(createAgent({ model, tools: [echo] })).send('go').turns)
     const [, withTool, final] = turns
 
@@ -581,7 +567,7 @@ describe('run records and stats', () => {
   })
 
   it('a finished run does not keep the events it streamed alive', async () => {
-    const r = createSession(createAgent({ model: fauxModel([fauxAssistantMessage('a streamed answer')]) })).send('go')
+    const r = createSession(createAgent({ model: fauxModel([assistantMessage('a streamed answer')]) })).send('go')
     const delta = await firstDelta(r)
 
     await collectGarbage()
@@ -623,7 +609,7 @@ describe('sessions and interjections', () => {
         return 'opened'
       },
     })
-  const callWait = fauxAssistantMessage([fauxToolCall('wait', {})], { stopReason: 'toolUse' })
+  const callWait = assistantMessage([toolUse('wait', {})])
 
   it('send during a run returns the same Run; send after it ends starts a new Run', async () => {
     const g = gate()
@@ -650,12 +636,7 @@ describe('sessions and interjections', () => {
     const model = fauxModel([
       callWait,
       ctx => {
-        expect(withoutInitialSystemMessage(ctx.messages).map(m => m.role)).toEqual([
-          'user',
-          'assistant',
-          'toolResult',
-          'user',
-        ])
+        expect(ctx.messages.map(m => m.role)).toEqual(['user', 'assistant', 'toolResult', 'user'])
         return replyToLastUser(ctx)
       },
       replyToLastUser,
@@ -682,10 +663,7 @@ describe('sessions and interjections', () => {
   })
 
   it('queued follow-ups equal sending them one by one (guarantee 7, S1)', async () => {
-    const script = (): FauxResponseStep[] => [
-      callEcho('a'),
-      ...Array.from<FauxResponseStep>({ length: 6 }).fill(replyToLastUser),
-    ]
+    const script = (): FakeReply[] => [callEcho('a'), ...Array.from<FakeReply>({ length: 6 }).fill(replyToLastUser)]
 
     const queued = createSession(createAgent({ model: fauxModel(script()), tools: [echo] }))
     const r = queued.send('a')
@@ -703,7 +681,7 @@ describe('sessions and interjections', () => {
 
   it('interrupt: cancels a streaming model turn without a trace (guarantee 9, S4)', async () => {
     const model = fauxModel(
-      [fauxAssistantMessage('a very long answer that will be cut off before it finishes streaming'), replyToLastUser],
+      [assistantMessage('a very long answer that will be cut off before it finishes streaming'), replyToLastUser],
       { tokensPerSecond: 20 },
     )
     const chat = createSession(createAgent({ model }))
@@ -733,10 +711,7 @@ describe('sessions and interjections', () => {
           signal.addEventListener('abort', () => reject(new Error('aborted')))
         }),
     })
-    const model = fauxModel([
-      fauxAssistantMessage([fauxToolCall('hang', {})], { stopReason: 'toolUse' }),
-      replyToLastUser,
-    ])
+    const model = fauxModel([assistantMessage([toolUse('hang', {})]), replyToLastUser])
     const chat = createSession(createAgent({ model, tools: [hang] }))
 
     const r = chat.send('go')
@@ -748,12 +723,7 @@ describe('sessions and interjections', () => {
 
   it('abort: undelivered messages stay in the session for the next run', async () => {
     const model = fauxModel(
-      [
-        fauxAssistantMessage('a very long answer that will be aborted'),
-        replyToLastUser,
-        replyToLastUser,
-        replyToLastUser,
-      ],
+      [assistantMessage('a very long answer that will be aborted'), replyToLastUser, replyToLastUser, replyToLastUser],
       { tokensPerSecond: 20 },
     )
     const chat = createSession(createAgent({ model }))

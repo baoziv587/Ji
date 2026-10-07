@@ -1,11 +1,11 @@
 // A task without a terminal: the tools run unasked, the outcome carries the answer or the failure, and a timeout
 // takes a running command down with the run
-import type { Api, Model } from '@ji.dev/llm'
+import type { Api, AssistantMessage, Model } from '@ji.dev/llm'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { jsonl } from '@ji.dev/plugin-jsonl'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { runTask } from '../src/headless/task.ts'
 
@@ -14,8 +14,8 @@ describe('runTask', () => {
     // Arrange
     const root = scratch()
     const model = faux([
-      fauxAssistantMessage([fauxToolCall('bash', { command: 'echo hello > out.txt' })]),
-      fauxAssistantMessage('written'),
+      assistantMessage([toolUse('bash', { command: 'echo hello > out.txt' })]),
+      assistantMessage('written'),
     ])
     const lines: string[] = []
 
@@ -40,8 +40,8 @@ describe('runTask', () => {
     const root = scratch()
     const marker = join(root, 'after')
     const model = faux([
-      fauxAssistantMessage([fauxToolCall('bash', { command: `sleep 2 && touch ${marker}` })]),
-      fauxAssistantMessage('never'),
+      assistantMessage([toolUse('bash', { command: `sleep 2 && touch ${marker}` })]),
+      assistantMessage('never'),
     ])
 
     // Act
@@ -61,10 +61,7 @@ describe('runTask', () => {
   it('should stop from outside through the signal', async () => {
     // Arrange
     const root = scratch()
-    const model = faux([
-      fauxAssistantMessage([fauxToolCall('bash', { command: 'sleep 5' })]),
-      fauxAssistantMessage('never'),
-    ])
+    const model = faux([assistantMessage([toolUse('bash', { command: 'sleep 5' })]), assistantMessage('never')])
     const stopping = new AbortController()
     setTimeout(() => stopping.abort(new Error('stopped by SIGTERM')), 100)
 
@@ -86,9 +83,8 @@ function scratch(): string {
   return dir
 }
 
-function faux(responses: ReturnType<typeof fauxAssistantMessage>[]): Model<Api> {
-  const provider = registerFauxProvider({ models: [{ id: 'faux' }] })
-  provider.setResponses(responses)
-  onTestFinished(() => provider.unregister())
-  return provider.getModel()
+function faux(responses: AssistantMessage[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  onTestFinished(() => fake.dispose())
+  return fake.model
 }

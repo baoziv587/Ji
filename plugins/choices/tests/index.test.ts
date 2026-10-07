@@ -1,9 +1,9 @@
-import type { JsonObject } from '@earendil-works/pi-ai/compat'
 // The choices plugin against pi-ai's faux provider, with tools that know nothing about it (RFC-0007 §5)
-import type { Api, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
+import type { Api, AssistantMessage, JsonObject, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
+import type { FakeReply } from '@ji.dev/testing'
 import type { Answer, Answers, ChoicesOptions, Question, Questions, Reply } from '../src/index.ts'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
 import { createAgent, createSession, tool, toolError, Type } from '@ji.dev/llm'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import { answerer, APPROVE, ask, ASK_USER, choices, DISMISSED, everyCall, named } from '../src/index.ts'
@@ -180,7 +180,7 @@ describe('approval, with choices', () => {
   it('should wait at the question until the run is aborted when nobody answers (RFC-0007 §5.4)', async () => {
     // Arrange: no layer answers, so the run's own reply, undefined, reaches the question
     const ran: string[] = []
-    const model = faux([calls(['deploy', { to: 'prod' }]), fauxAssistantMessage('done')])
+    const model = faux([calls(['deploy', { to: 'prod' }]), assistantMessage('done')])
     const r = createSession(createAgent({ model, tools: tools(ran), plugins: [nobody()] })).send('go')
     const stopped = new Error('stopped')
 
@@ -204,7 +204,7 @@ describe('approval, with choices', () => {
   it('should stop the run without running the call when the run is aborted at the question', async () => {
     // Arrange
     const ran: string[] = []
-    const model = faux([calls(['deploy', { to: 'prod' }]), fauxAssistantMessage('done')])
+    const model = faux([calls(['deploy', { to: 'prod' }]), assistantMessage('done')])
     const stopped = new Error('stopped')
     let abort = (): void => {}
     const asking = choices({
@@ -374,7 +374,7 @@ describe('answerer', () => {
         return String(yes)
       },
     })
-    const model = faux([calls(['careful', {}]), fauxAssistantMessage('done')])
+    const model = faux([calls(['careful', {}]), assistantMessage('done')])
     const answering = answerer({
       answer: ({ questions: [{ title }] }) => (title === 'Really?' ? pick(true) : undefined),
     })
@@ -390,9 +390,9 @@ describe('answerer', () => {
 
 // Helpers
 
-const registrations: { unregister: () => void }[] = []
+const registrations: { dispose: () => void }[] = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
 type Calls = [name: string, args: JsonObject][]
@@ -407,19 +407,15 @@ function nobody(): Plugin {
   return choices({ approve: [everyCall], answer: () => undefined })
 }
 
-function faux(responses: Parameters<ReturnType<typeof registerFauxProvider>['setResponses']>[0]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function faux(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 /** One assistant message with these tool calls. */
-function calls(...list: Calls): ReturnType<typeof fauxAssistantMessage> {
-  return fauxAssistantMessage(
-    list.map(([name, args]) => fauxToolCall(name, args)),
-    { stopReason: 'toolUse' },
-  )
+function calls(...list: Calls): AssistantMessage {
+  return assistantMessage(list.map(([name, args]) => toolUse(name, args)))
 }
 
 /** deploy records what it ran; echo has no effect. */
@@ -454,7 +450,7 @@ function run(
 
 async function runWith(list: Calls, plugins: Plugin[]): Promise<{ results: ToolResultMessage[]; ran: string[] }> {
   const ran: string[] = []
-  const model = faux([calls(...list), fauxAssistantMessage('done')])
+  const model = faux([calls(...list), assistantMessage('done')])
   const state = await createSession(createAgent({ model, tools: tools(ran), plugins })).send('go').state
   return { results: toolResults(state), ran }
 }

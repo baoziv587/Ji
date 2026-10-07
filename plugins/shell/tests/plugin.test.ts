@@ -1,11 +1,11 @@
-import type { FauxResponseStep, JsonObject } from '@earendil-works/pi-ai/compat'
 // The plugins against pi-ai's faux provider: bash's place in a turn (L7, scenario 2.7) and approval with choices (L8)
-import type { Api, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
+import type { Api, AssistantMessage, JsonObject, Model, Plugin, ToolResultMessage } from '@ji.dev/llm'
 import type { Answer } from '@ji.dev/plugin-choices'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
+import type { FakeReply } from '@ji.dev/testing'
 import { createAgent, createSession } from '@ji.dev/llm'
 import { choices } from '@ji.dev/plugin-choices'
 import { files, memWorkspace } from '@ji.dev/plugin-files'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import fc from 'fast-check'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createMemoryExecutor, createSearchPlugin, createShellPlugin, splitAtBarriers } from '../src/index.ts'
@@ -45,7 +45,7 @@ describe('createShellPlugin', () => {
         ['bash', { command: 'pnpm test' }],
         ['grep', { pattern: 'timeout' }],
       ),
-      fauxAssistantMessage('done'),
+      assistantMessage('done'),
     ])
 
     // Act
@@ -69,7 +69,7 @@ describe('createShellPlugin', () => {
           asked.push(`${title}: ${detail}`)
           return [[yes ? 'yes' : 'no']]
         }
-        const model = faux([calls(['grep', { pattern: 'x' }], ['bash', { command }]), fauxAssistantMessage('done')])
+        const model = faux([calls(['grep', { pattern: 'x' }], ['bash', { command }]), assistantMessage('done')])
 
         // Act
         const results = await resultsOf(model, [
@@ -96,7 +96,7 @@ describe('createShellPlugin', () => {
       asked++
       return [['yes']]
     }
-    const model = faux([calls(['bash', { command: ['rm', '-rf', '/'] }]), fauxAssistantMessage('done')])
+    const model = faux([calls(['bash', { command: ['rm', '-rf', '/'] }]), assistantMessage('done')])
 
     // Act
     const [result] = await resultsOf(model, [shellPlugin, choices({ answer, approve: [shellPlugin.preview] })])
@@ -110,24 +110,20 @@ describe('createShellPlugin', () => {
 
 // Helpers
 
-const registrations: { unregister: () => void }[] = []
+const registrations: { dispose: () => void }[] = []
 afterEach(() => {
-  registrations.splice(0).forEach(r => r.unregister())
+  registrations.splice(0).forEach(r => r.dispose())
 })
 
-function faux(responses: FauxResponseStep[]): Model<Api> {
-  const registration = registerFauxProvider()
-  registration.setResponses(responses)
-  registrations.push(registration)
-  return registration.getModel()
+function faux(responses: FakeReply[]): Model<Api> {
+  const fake = createFakeModel(responses)
+  registrations.push(fake)
+  return fake.model
 }
 
 /** One assistant message with these tool calls. */
-function calls(...list: [name: string, args: JsonObject][]): ReturnType<typeof fauxAssistantMessage> {
-  return fauxAssistantMessage(
-    list.map(([name, args]) => fauxToolCall(name, args)),
-    { stopReason: 'toolUse' },
-  )
+function calls(...list: [name: string, args: JsonObject][]): AssistantMessage {
+  return assistantMessage(list.map(([name, args]) => toolUse(name, args)))
 }
 
 async function resultsOf(model: Model<Api>, plugins: Plugin<any>[]): Promise<ToolResultMessage[]> {

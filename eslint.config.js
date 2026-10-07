@@ -1,6 +1,24 @@
 import antfu from '@antfu/eslint-config'
 import { createSlopConfig } from 'eslint-plugin-slop'
 
+// ESLint's flat config replaces a rule's options block by block instead of merging them, so each block below that
+// restricts imports lists every pattern that applies to its files.
+
+/** Dependencies only point down: packages/ <- plugins/ <- apps/ (RFC-0005 §4.3). */
+const NO_PLUGINS = { group: ['@ji.dev/plugin-*', '**/plugins/**'], message: 'packages/ must not depend on plugins/.' }
+
+/**
+ * pi-ai is reached through two packages only: @ji.dev/llm runs it and @ji.dev/testing fakes it (RFC-0005 promise 9).
+ * An upgrade then touches those two and no test, plugin or app.
+ */
+const NO_PI_AI = {
+  group: ['@earendil-works/pi-ai', '@earendil-works/pi-ai/*'],
+  message: 'Import types and Type from @ji.dev/llm, and a scripted model from @ji.dev/testing.',
+}
+
+/** Where pi-ai is allowed. */
+const PI_AI_USERS = ['packages/llm/src/**', 'packages/testing/src/**']
+
 export default antfu(
   {
     type: 'lib',
@@ -18,19 +36,19 @@ export default antfu(
     files: ['apps/replay/**', 'apps/demo/**', 'apps/examples/**', 'packages/**', 'plugins/**'],
     rules: { 'no-console': 'off' },
   },
-  // Dependencies only point down: packages/ <- plugins/ <- apps/ (RFC-0005 §4.3)
+  {
+    files: ['**/*.ts'],
+    ignores: PI_AI_USERS,
+    rules: { 'no-restricted-imports': ['error', { patterns: [NO_PI_AI] }] },
+  },
   {
     files: ['packages/**'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            { group: ['@ji.dev/plugin-*', '**/plugins/**'], message: 'packages/ must not depend on plugins/.' },
-          ],
-        },
-      ],
-    },
+    ignores: PI_AI_USERS,
+    rules: { 'no-restricted-imports': ['error', { patterns: [NO_PLUGINS, NO_PI_AI] }] },
+  },
+  {
+    files: PI_AI_USERS,
+    rules: { 'no-restricted-imports': ['error', { patterns: [NO_PLUGINS] }] },
   },
   {
     // src/ holds source only; tests live in each workspace's tests/
@@ -56,15 +74,10 @@ export default antfu(
               message: 'Plugins do not import each other; depend on the event protocol instead (RFC-0005 §8.3).',
             },
             {
-              group: [
-                '@ji.dev/llm/*',
-                '@ji.dev/kernel',
-                '@ji.dev/kernel/*',
-                '@earendil-works/pi-ai/compat',
-                '**/packages/**',
-              ],
+              group: ['@ji.dev/llm/*', '@ji.dev/kernel', '@ji.dev/kernel/*', '**/packages/**'],
               message: 'Plugins use only the public entry of @ji.dev/llm.',
             },
+            NO_PI_AI,
           ],
         },
       ],
@@ -87,16 +100,6 @@ export default antfu(
       'no-restricted-imports': [
         'error',
         { patterns: [{ regex: '^(?!\\./)', message: 'The shell core imports only its own modules.' }] },
-      ],
-    },
-  },
-  {
-    // RFC-0005 promise 9: the coding agent needs nothing from pi-ai directly
-    files: ['apps/coding-agent/src/**'],
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        { paths: [{ name: '@earendil-works/pi-ai/compat', message: 'Import it from @ji.dev/llm.' }] },
       ],
     },
   },

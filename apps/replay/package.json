@@ -11,9 +11,9 @@
   "dependencies": {
     "@clack/prompts": "^1.8.1",
     "@duckdb/node-api": "1.5.5-r.4",
-    "@earendil-works/pi-ai": "^1.0.4",
     "@ji.dev/llm": "workspace:*",
     "@ji.dev/plugin-jsonl": "workspace:*",
-    "@ji.dev/plugin-otel": "workspace:*"
+    "@ji.dev/plugin-otel": "workspace:*",
+    "@ji.dev/testing": "workspace:*"
   }
 }

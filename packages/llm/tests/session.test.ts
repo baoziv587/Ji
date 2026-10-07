@@ -1,8 +1,8 @@
 // session.use: switching agents keeps the conversation, and a run in progress switches at the next step boundary.
 // session.id: new for each session unless a resumed one keeps its own.
-import type { Context, SimpleStreamOptions } from '@earendil-works/pi-ai/compat'
+import type { FakeRequest } from '@ji.dev/testing'
 import type { Api, AssistantMessage, Model, RunEvent } from '../src/index.ts'
-import { fauxAssistantMessage, fauxToolCall, registerFauxProvider } from '@earendil-works/pi-ai/compat'
+import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { createAgent, createSession, tool, Type } from '../src/index.ts'
 
@@ -53,7 +53,7 @@ describe('session.use', () => {
       },
     })
     const sent: unknown[] = []
-    const callWait = (): AssistantMessage => fauxAssistantMessage([fauxToolCall('wait', {})], { stopReason: 'toolUse' })
+    const callWait = (): AssistantMessage => assistantMessage([toolUse('wait', {})])
     const agent = createAgent({ model: thinker(sent, [callWait, answer]), tools: [wait] })
     const chat = createSession(agent)
     const r = chat.send('go')
@@ -89,21 +89,21 @@ describe('session.id', () => {
 // Helpers
 
 function answer(): AssistantMessage {
-  return fauxAssistantMessage('ok')
+  return assistantMessage('ok')
 }
 
 /** A model accepting off, high and xhigh; records the reasoning each request carries. */
 function thinker(sent: unknown[], replies: Array<() => AssistantMessage>): Model<Api> {
-  const faux = registerFauxProvider({ models: [{ id: 'thinker', reasoning: true }] })
-  faux.setResponses(
-    replies.map(reply => (_ctx: Context, options: SimpleStreamOptions | undefined) => {
-      sent.push(options?.reasoning)
+  const fake = createFakeModel(
+    replies.map(reply => (request: FakeRequest) => {
+      sent.push(request.thinking)
       return reply()
     }),
+    { id: 'thinker', reasoning: true },
   )
-  onTestFinished(() => faux.unregister())
+  onTestFinished(() => fake.dispose())
   return {
-    ...faux.getModel(),
+    ...fake.model,
     thinkingLevelMap: { minimal: null, low: null, medium: null, high: 'high', xhigh: 'max' },
   }
 }
