@@ -88,7 +88,8 @@ class JiCodingAgent(BaseInstalledAgent):
 
     @override
     async def install(self, environment: BaseEnvironment) -> None:
-        await self.ensure_system_dependencies(environment, ("curl", "git", "bash"))
+        # ripgrep is what the grep tool runs; without it the model falls back to bash grep
+        await self.ensure_system_dependencies(environment, ("curl", "git", "bash", "ripgrep"))
         await self._install_dir(environment)
 
         if self.options.source is None:
