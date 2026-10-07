@@ -391,9 +391,6 @@ importers:
       '@ji.dev/llm':
         specifier: workspace:*
         version: link:../../packages/llm
-      '@mariozechner/pi-ai':
-        specifier: ^0.73.1
-        version: 0.73.1(ws@8.21.3)(zod@4.6.5)
 
   plugins/throttle-updates:
     devDependencies:
