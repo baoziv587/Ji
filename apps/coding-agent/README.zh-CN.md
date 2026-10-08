@@ -14,10 +14,12 @@
 
 ```bash
 pnpm install
-pnpm coding-agent
+pnpm coding-agent --model openai-codex/gpt-5.5
 ```
 
-默认使用 DeepSeek。进入后输入 `/login deepseek`，按提示保存 API key；也可以在启动前设置 `DEEPSEEK_API_KEY`。
+上面的命令选择 Codex。进入后输入 `/login openai-codex`，按提示在浏览器中用 ChatGPT 登录，即可使用订阅服务，无需 API key。
+
+如果使用 DeepSeek，运行 `pnpm coding-agent`，再输入 `/login deepseek` 保存 API key；也可以在启动前设置 `DEEPSEEK_API_KEY`。
 
 然后直接输入任务，例如：
 
@@ -31,7 +33,7 @@ pnpm coding-agent
 **启动目录就是工作目录。** 在其他项目中使用时，先进入那个项目，再运行以下命令（将路径换成本仓库的绝对路径）：
 
 ```bash
-node /path/to/pi-rsi/apps/coding-agent/src/main.ts
+node /path/to/pi-rsi/apps/coding-agent/src/main.ts --model openai-codex/gpt-5.5
 ```
 
 ## 当前支持的功能
