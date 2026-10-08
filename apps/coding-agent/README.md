@@ -14,10 +14,12 @@ You need Node.js 24+, pnpm, and an interactive terminal. Install dependencies in
 
 ```bash
 pnpm install
-pnpm coding-agent
+pnpm coding-agent --model openai-codex/gpt-5.5
 ```
 
-The default provider is DeepSeek. Enter `/login deepseek` and follow the prompts to save your API key. You can also set `DEEPSEEK_API_KEY` before starting.
+The command above selects Codex. Enter `/login openai-codex` and follow the browser prompts to sign in with ChatGPT and use your subscription without an API key.
+
+For DeepSeek, run `pnpm coding-agent`, then enter `/login deepseek` to save an API key. You can also set `DEEPSEEK_API_KEY` before starting.
 
 Then type a task, for example:
 
@@ -31,7 +33,7 @@ Press Enter to send. By default, file reads, edits, and commands wait for approv
 **The directory you start from is the working directory.** To work on another project, open that directory and run this command, replacing the path with this repository's absolute path:
 
 ```bash
-node /path/to/pi-rsi/apps/coding-agent/src/main.ts
+node /path/to/pi-rsi/apps/coding-agent/src/main.ts --model openai-codex/gpt-5.5
 ```
 
 ## Supported features
