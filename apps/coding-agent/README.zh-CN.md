@@ -14,7 +14,7 @@
 
 ```bash
 pnpm install
-pnpm coding-agent --model openai-codex/gpt-5.5
+pnpm coding-agent --model openai-codex/gpt-6.1-sol
 ```
 
 上面的命令选择 Codex。进入后输入 `/login openai-codex`，按提示在浏览器中用 ChatGPT 登录，即可使用订阅服务，无需 API key。
@@ -33,7 +33,7 @@ pnpm coding-agent --model openai-codex/gpt-5.5
 **启动目录就是工作目录。** 在其他项目中使用时，先进入那个项目，再运行以下命令（将路径换成本仓库的绝对路径）：
 
 ```bash
-node /path/to/pi-rsi/apps/coding-agent/src/main.ts --model openai-codex/gpt-5.5
+node /path/to/pi-rsi/apps/coding-agent/src/main.ts --model openai-codex/gpt-6.1-sol
 ```
 
 ## 当前支持的功能

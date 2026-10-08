@@ -14,7 +14,7 @@ You need Node.js 24+, pnpm, and an interactive terminal. Install dependencies in
 
 ```bash
 pnpm install
-pnpm coding-agent --model openai-codex/gpt-5.5
+pnpm coding-agent --model openai-codex/gpt-6.1-sol
 ```
 
 The command above selects Codex. Enter `/login openai-codex` and follow the browser prompts to sign in with ChatGPT and use your subscription without an API key.
@@ -33,7 +33,7 @@ Press Enter to send. By default, file reads, edits, and commands wait for approv
 **The directory you start from is the working directory.** To work on another project, open that directory and run this command, replacing the path with this repository's absolute path:
 
 ```bash
-node /path/to/pi-rsi/apps/coding-agent/src/main.ts --model openai-codex/gpt-5.5
+node /path/to/pi-rsi/apps/coding-agent/src/main.ts --model openai-codex/gpt-6.1-sol
 ```
 
 ## Supported features

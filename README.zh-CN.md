@@ -12,18 +12,7 @@ _极，取「极简」与「极限」之意：内核做到极简，能力靠插�
 
 ## Coding agent
 
-使用 JI 的 [Coding agent](apps/coding-agent/README.zh-CN.md)，在终端里读代码、修改文件、运行测试和命令。支持执行前确认、回答途中补充要求、Skills，以及在脚本中运行的 headless 模式。
-
-需要 Node.js 24+ 和 pnpm，在本仓库运行：
-
-```bash
-pnpm install
-pnpm coding-agent --model openai-codex/gpt-5.5
-```
-
-进入后输入 `/login openai-codex`，用 ChatGPT 登录即可使用订阅服务，无需 API key。
-
-也可以使用 DeepSeek API key：运行 `pnpm coding-agent`，进入后输入 `/login deepseek` 保存 key；或在启动前设置环境变量 `DEEPSEEK_API_KEY`。其他模型和使用方式见[用户指南与已支持功能](apps/coding-agent/README.zh-CN.md)。
+2000 lines [Coding agent](apps/coding-agent/README.zh-CN.md) 是一个极小的终端 coding agent，适合学习和自己使用。
 
 ## Agent 运行时
 

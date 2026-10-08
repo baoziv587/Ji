@@ -12,18 +12,7 @@ _极 (jí) means "the utmost", as in 极简 (minimal to the extreme) and 极限 
 
 ## Coding agent
 
-Use JI's [Coding agent](apps/coding-agent/README.md) to read code, edit files, and run tests and commands in your terminal. It supports operation approvals, additional instructions during a reply, Skills, and headless runs from scripts.
-
-With Node.js 24+ and pnpm, run from this repository:
-
-```bash
-pnpm install
-pnpm coding-agent --model openai-codex/gpt-5.5
-```
-
-Enter `/login openai-codex` to sign in with ChatGPT and use your subscription without an API key.
-
-You can also use a DeepSeek API key: run `pnpm coding-agent`, then enter `/login deepseek` to save your key, or set the `DEEPSEEK_API_KEY` environment variable before starting. See the [user guide and supported features](apps/coding-agent/README.md) for other models and usage.
+2000 lines [Coding agent](apps/coding-agent/README.md) is a tiny terminal coding agent, well suited for learning and personal use.
 
 ## Agent runtime
 
