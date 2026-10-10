@@ -40,7 +40,7 @@ export interface AgentServiceOptions {
 }
 
 /** Where a feature's commands talk to the client: what they say, what a login asks, and that the commands changed. */
-export interface CommandClient {
+interface CommandClient {
   say: Say
   interaction: AuthInteraction
   /** The commands are not what they were: a folder of skills was read, say. */
