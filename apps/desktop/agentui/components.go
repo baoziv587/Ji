@@ -182,28 +182,27 @@ func emptyHeader(c *ui.Context, icon *ui.SVG, title, description string) {
 	})
 }
 
-// selectMenu is shadcn/ui's Select, small: an outlined trigger, and a
-// popover of options marking the chosen one with a check.
-func selectMenu(c *ui.Context, selected *string, options []string, off bool) ui.Element {
+// inlineSelect is shadcn/ui's Select with a trigger that reads as text, as
+// the terminal's title shows a setting: muted, a small chevron after it, a fill
+// while hovered; its popover of options marks the chosen one with a check.
+func inlineSelect(c *ui.Context, selected *string, options []string, off bool) ui.Element {
 	t := c.Theme()
 	p := paletteOf(t)
 	sel := ui.SelectBase(c, selected)
 	if off {
-		sel.Trigger.Disabled(true).Opacity(0.5)
+		sel.Trigger.Disabled(true)
 	}
-	trigger := sel.Trigger.Height(32).Padding(0, 12).Gap(8).Radius(t.Radius).Justify(ui.SpaceBetween).AlignItems(ui.Center).
-		FocusRing(false).Border(1, p.Input).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05)).Transition(colorTransition)
-	if t.Dark {
-		fill := p.Input.Alpha(0.3)
-		if trigger.Hovered() {
-			fill = p.Input.Alpha(0.5)
-		}
-		trigger.Background(fill)
+	trigger := sel.Trigger.Height(24).Padding(0, 2, 0, 6).Gap(2).Radius(6).AlignItems(ui.Center).Shrink(0).
+		FocusRing(false).TextColor(p.MutedForeground).Transition(colorTransition)
+	if trigger.Hovered() {
+		trigger.Background(p.Accent).TextColor(p.Foreground)
 	}
 	focusRing(trigger, p, 1)
 	trigger.Children(func() {
 		ui.Text(c, *selected).SingleLine()
-		ui.Icon(c, chevronDownIcon).FontSize(16).TextColor(p.MutedForeground.Alpha(0.5))
+		if !off {
+			ui.Icon(c, chevronDownIcon).FontSize(14).TextColor(p.MutedForeground.Alpha(0.6))
+		}
 	})
 	sel.Popup(func(panel ui.Element) {
 		panel.Margin(4, 0, 0, 0).Padding(4).Radius(t.Radius).Background(p.Popover).Border(1, p.Border).
