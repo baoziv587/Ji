@@ -4,7 +4,7 @@
 
 import type { AnyPlugin } from '@ji.dev/llm'
 import type { Preview } from '@ji.dev/plugin-choices'
-import type { Command } from '../ui/menu.ts'
+import type { Command } from '../agent/commands.ts'
 
 export interface Feature {
   /** AnyPlugin, so a plugin with state of its own fits, the files plugin with its ledger say. */

@@ -4,6 +4,7 @@
 
 import type { AgentState, Message, RunEvent, Turn } from '@ji.dev/llm'
 import type { Outcome, Unnumbered } from './events.ts'
+import { UsageMeter } from '../agent/meter.ts'
 import { eventOf, outcomeOf, usageOf } from './events.ts'
 
 /** One line of a session's log. */
@@ -14,15 +15,20 @@ export interface History {
   events: Unnumbered[]
   /** How the last run ended; none before the first, or when it never ended. */
   outcome?: Outcome
+  /** What the runs spent, untimed: they ran at another time. */
+  meter: UsageMeter
 }
 
 export function historyOf(records: readonly LogRecord[]): History {
   const turns = new Map<string, Turn[]>()
   const done = new Set<string>()
   const events: Unnumbered[] = []
+  const meter = new UsageMeter()
   let outcome: Outcome | undefined
 
   for (const record of records) {
+    meter.take(record, false)
+
     if (!turns.has(record.run)) {
       turns.set(record.run, [])
     }
@@ -50,7 +56,7 @@ export function historyOf(records: readonly LogRecord[]): History {
       messages = steps.reduce(apply, messages)
     }
   }
-  return { state: { messages, plugins: {} }, events, outcome }
+  return { state: { messages, plugins: {} }, events, outcome, meter }
 }
 
 /** What a step did to the history, as the session applies it. */

@@ -260,21 +260,13 @@ func (a *App) header(c *ui.Context, s Session, view *sessionView) {
 		if st.Model != "" {
 			badge(c, st.Model, variantOutline).Tooltip("Model")
 		}
+		if st.Fast {
+			badge(c, "fast", variantSecondary).Tooltip("OpenAI's priority tier, at about 2x the usage: /fast off")
+		}
 		if len(st.ThinkingLevels) > 0 {
 			level := st.Thinking
 			if selectMenu(c, &level, st.ThinkingLevels, s.Archived).Label("Thinking").Tooltip("Thinking level").Changed() {
 				a.think(s.ID, view, level)
-			}
-		}
-		if st.Mode != "" {
-			mode := button(c, "Mode: "+st.Mode, buttonStyle{variant: variantOutline, size: sizeSmall, disabled: st.Mode == "yolo" || s.Archived}).Label("Mode")
-			if st.Mode == "ask" {
-				mode.Tooltip("Every command, file read and change waits for a yes. Click to approve the folder's files.")
-			} else {
-				mode.Tooltip("Files inside the folder are approved; commands still wait for a yes. Click to ask about all.")
-			}
-			if mode.Clicked() {
-				a.switchMode(s.ID, view)
 			}
 		}
 		if s.Archived {
@@ -323,7 +315,7 @@ func (a *App) conversation(c *ui.Context, view *sessionView) {
 				ui.Column(c).Center().Gap(12).Padding(80, 0).Children(func() {
 					ui.Text(c, "What should we work on?").FontSize(textLG(t)).FontWeight(500).LetterSpacing(-0.4)
 					ui.Row(c).Gap(16).Children(func() {
-						for _, hint := range [][2]string{{"↵", "to send"}, {"⇧ ↵", "for a new line"}, {"esc", "to stop a reply"}} {
+						for _, hint := range [][2]string{{"↵", "to send"}, {"⇧ ↵", "for a new line"}, {"/", "for commands"}} {
 							ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 								kbd(c, hint[0])
 								ui.Text(c, hint[1]).FontSize(textXS(t)).TextColor(p.MutedForeground)
@@ -335,9 +327,6 @@ func (a *App) conversation(c *ui.Context, view *sessionView) {
 			for i, item := range view.t.Items {
 				a.item(c.Key(i), item)
 			}
-			if view.t.State.Replying && view.t.Asking == nil {
-				marker(c, func() { spinner(c, "Working") }, "Working…")
-			}
 		})
 	})
 }
@@ -346,9 +335,11 @@ func (a *App) conversation(c *ui.Context, view *sessionView) {
 // one's message, after an icon.
 func marker(c *ui.Context, icon func(), text string) ui.Element {
 	p := paletteOf(c.Theme())
-	return ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+	return ui.Row(c).Gap(8).AlignItems(ui.Start).Children(func() {
 		icon()
-		ui.Text(c, text).TextColor(p.MutedForeground).Selectable().Shrink(1)
+		// MinWidth(0): a word longer than the row, a link say, breaks
+		// rather than pushing the row past the window
+		ui.Text(c, text).TextColor(p.MutedForeground).LineHeight(1.25).Selectable().Shrink(1).MinWidth(0)
 	})
 }
 
@@ -375,11 +366,24 @@ func (a *App) item(c *ui.Context, item *Item) {
 	case KindTool:
 		a.tool(c, item)
 	case KindNotice:
-		if item.Failed {
-			marker(c, func() { ui.Icon(c, xIcon).FontSize(16).TextColor(p.Destructive).Label("Failed") }, item.Text)
-			return
+		icon, color, label := (*ui.SVG)(nil), p.MutedForeground, ""
+		switch {
+		case item.Failed:
+			icon, color, label = xIcon, p.Destructive, "Failed"
+		case item.Level == "warn":
+			icon, color, label = triangleAlertIcon, t.Warning, "Warning"
+		case item.Level == "success":
+			icon, color, label = checkIcon, t.Success, "Done"
+		case item.Level == "info":
+			icon, label = infoIcon, "Note"
 		}
-		marker(c, func() {}, item.Text)
+		marker(c, func() {
+			if icon != nil {
+				ui.Icon(c, icon).FontSize(16).TextColor(color).Label(label)
+			}
+		}, item.Text)
+	case KindHelp:
+		help(c, item.Help)
 	}
 }
 
@@ -434,7 +438,8 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 	t := c.Theme()
 	p := paletteOf(t)
 	asking := view.t.Asking
-	approval := len(asking.Questions) == 1 && !asking.Questions[0].Multiple && !asking.Questions[0].Other
+	// A call waiting for a yes: one click answers it
+	approval := asking.Tool != "" && len(asking.Questions) == 1 && !asking.Questions[0].Multiple && !asking.Questions[0].Other
 
 	ui.Column(c).Padding(0, 24, 12).Children(func() {
 		card := centered(c, 12, func() {
@@ -474,7 +479,17 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 					}
 				})
 				if q.Other {
-					textInput(c.Key(fmt.Sprint("other", i)), &view.others[i]).Placeholder("Or type your own answer").Label("Your answer")
+					placeholder := "Or type your own answer"
+					switch {
+					case q.Placeholder != "":
+						placeholder = q.Placeholder
+					case len(q.Options) == 0:
+						placeholder = "Type your answer"
+					}
+					input := textInput(c.Key(fmt.Sprint("other", i)), &view.others[i]).Placeholder(placeholder).Label("Your answer")
+					if q.Secret {
+						input.Password()
+					}
 				}
 			}
 			// An approval's No says it all; the model's questions can be left unanswered
@@ -495,14 +510,18 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 	})
 }
 
-// composer is the input, as shadcn/ui's InputGroup: the text area, and
-// under it in the same border the buttons that send and stop.
+// composer is where the next message is typed, between the terminal's two
+// bars: above it the status line, what the reply does, the mode and the
+// keys that work now; below it the usage. The input is shadcn/ui's
+// InputGroup: the text area, and under it in the same border the buttons
+// that send and stop. The menu of commands opens over the conversation as
+// a `/` is typed.
 func (a *App) composer(c *ui.Context, s Session, view *sessionView) {
 	t := c.Theme()
 	p := paletteOf(t)
 	st := view.t.State
-	ui.Column(c).Padding(0, 24, 16).Children(func() {
-		centered(c, 8, func() {
+	ui.Column(c).Padding(0, 24, 12).Children(func() {
+		centered(c, 6, func() {
 			if s.Archived {
 				ui.Row(c).Gap(12).AlignItems(ui.Center).Padding(12, 16).Radius(t.Radius).Border(1, p.Border).Children(func() {
 					ui.Text(c, "This session is archived. Unarchive it to go on.").TextColor(p.MutedForeground).Grow(1)
@@ -512,24 +531,25 @@ func (a *App) composer(c *ui.Context, s Session, view *sessionView) {
 				})
 				return
 			}
+			entries := view.menu.entries(st.Commands, view.draft)
+			a.statusLine(c, s, view, entries)
+
 			group := ui.Column(c).Radius(t.Radius).Border(1, p.Input).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05)).Transition(colorTransition)
 			if t.Dark {
 				group.Background(p.Input.Alpha(0.3))
 			}
 			group.Children(func() {
-				placeholder := "Ask the agent to read, change or run something"
+				placeholder := "Ask anything, or type / for commands"
 				if st.Replying {
-					placeholder = "Steer the reply in progress"
+					placeholder = "Steer the reply: it reads this after the step in progress"
 				}
-				// Enter sends, before the text area takes it as a new line; Shift+Enter is left to it
-				ui.TextAreaBase(c.Key("draft"), &view.draft).Lines(2, 8).Placeholder(placeholder).Label("Message").AutoFocus().Padding(12, 12, 4).
-					HandleInput(func(ev ui.InputEvent) bool {
-						if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEnter || ev.Mods != 0 {
-							return false
-						}
-						a.send(s.ID, view)
-						return true
-					})
+				// The menu's keys, Enter and Shift+Tab, before the text area takes them; Shift+Enter is left to it
+				area := ui.TextAreaBase(c.Key("draft"), &view.draft).Lines(2, 8).Placeholder(placeholder).Label("Message").AutoFocus().Padding(12, 12, 4).
+					HandleInput(func(ev ui.InputEvent) bool { return a.composerKey(s, view, ev) })
+				if view.menu.toEnd {
+					view.menu.toEnd = false
+					area.SetTextSelection(runeCount(view.draft), runeCount(view.draft))
+				}
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Justify(ui.End).Padding(4, 12, 12).Children(func() {
 					if st.Replying {
 						if button(c, "Stop", buttonStyle{variant: variantOutline, size: sizeExtraSmall, icon: squareIcon}).Tooltip("Esc").Clicked() {
@@ -549,22 +569,329 @@ func (a *App) composer(c *ui.Context, s Session, view *sessionView) {
 			if group.FocusWithin() {
 				group.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.5))
 			}
-			if st.Replying && c.Shortcut(0, ui.KeyEscape) {
+
+			// Esc closes the menu first
+			if st.Replying && len(entries) == 0 && c.Shortcut(0, ui.KeyEscape) {
 				a.stop(s.ID)
 			}
-			ui.Row(c).Gap(12).Padding(0, 4).Children(func() {
-				switch {
-				case a.connection != "":
-					ui.Text(c, a.connection).TextColor(p.Destructive).FontSize(textXS(t)).Grow(1).Shrink(1)
-				case a.failure != "":
-					ui.Text(c, a.failure).TextColor(p.Destructive).FontSize(textXS(t)).Selectable().Grow(1).Shrink(1)
-				default:
-					ui.Text(c, status(st)).TextColor(p.MutedForeground).FontSize(textXS(t)).Grow(1).Shrink(1)
-				}
-				u := view.t.Usage
-				ui.Textf(c, "%s in · %s out · $%.4f", count(u.Input), count(u.Output), u.Cost).TextColor(p.MutedForeground).FontSize(textXS(t)).FontFeatures("tnum")
-			})
+			usageLine(c, st.Usage)
+			// Over the conversation, as wide as the input
+			if len(entries) > 0 {
+				a.commandList(c, s, view, entries).Attach(ui.AnchorTopLeft, ui.AnchorBottomLeft).Top(-4)
+			}
 		})
+	})
+}
+
+// composerKey is what a key does in the input before the text area has
+// it: the menu's keys while it is open, then Enter sends and Shift+Tab
+// switches the mode, as in the terminal.
+func (a *App) composerKey(s Session, view *sessionView, ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputKeyDown {
+		return false
+	}
+	if entries := view.menu.entries(view.t.State.Commands, view.draft); len(entries) > 0 {
+		chosen := entries[view.menu.selected]
+		switch {
+		case ev.Key == ui.KeyUp && ev.Mods == 0:
+			view.menu.move(-1, len(entries))
+			return true
+		case ev.Key == ui.KeyDown && ev.Mods == 0:
+			view.menu.move(1, len(entries))
+			return true
+		case ev.Key == ui.KeyTab && ev.Mods == 0:
+			view.menu.complete(&view.draft, chosen)
+			return true
+		case ev.Key == ui.KeyEscape:
+			view.menu.close(view.draft)
+			return true
+		case ev.Key == ui.KeyEnter && ev.Mods == 0:
+			a.choose(s.ID, view, chosen)
+			return true
+		}
+	}
+
+	switch {
+	case ev.Key == ui.KeyEnter && ev.Mods == 0:
+		a.send(s.ID, view)
+		return true
+	case ev.Key == ui.KeyTab && ev.Mods == ui.Shift:
+		if canSwitchMode(s, view.t.State) {
+			a.switchMode(s.ID, view)
+		}
+		return true
+	}
+	return false
+}
+
+// choose runs the entry, or completes it when it takes something next.
+func (a *App) choose(id string, view *sessionView, e menuEntry) {
+	if e.runs() {
+		a.command(id, view, e.completion())
+		return
+	}
+	view.menu.complete(&view.draft, e)
+}
+
+func canSwitchMode(s Session, st State) bool {
+	return st.Mode != "" && st.Mode != "yolo" && !s.Archived
+}
+
+// statusLine is the terminal's status line: what the reply does and for
+// how long, the mode, what a yes allowed, the steers not yet delivered,
+// which entry of the menu is chosen, then the keys that work now.
+func (a *App) statusLine(c *ui.Context, s Session, view *sessionView, entries []menuEntry) {
+	t := c.Theme()
+	p := paletteOf(t)
+	st := view.t.State
+	small := func(text string, color ui.Color) ui.Element { return barText(c, text, color) }
+	ui.Row(c).Height(20).Gap(6).Padding(0, 4).AlignItems(ui.Center).Children(func() {
+		var parts []func()
+		switch {
+		case a.connection != "":
+			parts = append(parts, func() { small(a.connection, p.Destructive).Shrink(1) })
+		case a.failure != "":
+			parts = append(parts, func() { small(a.failure, p.Destructive).Selectable().Shrink(1) })
+		}
+		if label := view.t.Activity; label != "" && (st.Replying || view.t.Asking != nil) {
+			parts = append(parts, func() {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(1).Children(func() {
+					spinner(c, label).FontSize(12)
+					small(label, p.Foreground).Shrink(1)
+					small(fmt.Sprintf("%ds", int(time.Since(view.t.Since).Seconds())), p.MutedForeground)
+				})
+			})
+		}
+		if st.Mode != "" {
+			parts = append(parts, func() {
+				// Less careful than ask, so it stands out in the warning color
+				color := p.MutedForeground
+				if st.Mode != "ask" {
+					color = t.Warning
+				}
+				mode := ui.ButtonBase(c).Padding(0, 4).Radius(4).FocusRing(false).Transition(colorTransition).Label("Mode")
+				if !canSwitchMode(s, st) {
+					mode.Disabled(true)
+				} else if mode.Hovered() {
+					mode.Background(p.Accent)
+				}
+				focusRing(mode, p, 0)
+				mode.Children(func() { small(st.Mode, color).FontWeight(500) })
+				switch st.Mode {
+				case "ask":
+					mode.Tooltip("Every command, file read and change waits for a yes. ⇧⇥ approves the folder's files.")
+				case "auto":
+					mode.Tooltip("Files inside the folder are approved; commands still wait for a yes. ⇧⇥ asks about all.")
+				default:
+					mode.Tooltip("Nothing waits for a yes, outside the folder too. Chosen when the service started.")
+				}
+				if mode.Clicked() {
+					a.switchMode(s.ID, view)
+				}
+			})
+		}
+		if st.Allowed != "" {
+			parts = append(parts, func() { small(st.Allowed, t.Warning).Shrink(1) })
+		}
+		if st.Queued > 0 {
+			parts = append(parts, func() { small(fmt.Sprintf("%d queued", st.Queued), p.Info) })
+		}
+		if len(entries) > 0 {
+			parts = append(parts, func() { small(fmt.Sprintf("%d of %d", view.menu.selected+1, len(entries)), p.MutedForeground) })
+		}
+
+		for i, part := range parts {
+			if i > 0 {
+				small("·", p.MutedForeground)
+			}
+			part()
+		}
+
+		ui.Box(c).Grow(1)
+		for _, key := range keysOf(st, view, entries) {
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
+				kbd(c, key[0])
+				small(key[1], p.MutedForeground)
+			})
+		}
+	})
+}
+
+// keysOf is the keys that work now, as the terminal's status line lists
+// them.
+func keysOf(st State, view *sessionView, entries []menuEntry) [][2]string {
+	switch {
+	case len(entries) > 0:
+		return [][2]string{{"↑↓", "choose"}, {"tab", "completes"}, {"↵", "runs"}, {"esc", "closes"}}
+	case view.t.Asking != nil && st.Replying:
+		return [][2]string{{"esc", "stops"}}
+	case st.Replying:
+		return [][2]string{{"↵", "steers"}, {"esc", "stops"}}
+	case st.Mode != "" && st.Mode != "yolo":
+		return [][2]string{{"⇧⇥", "switches"}, {"/", "commands"}}
+	default:
+		return [][2]string{{"/", "commands"}}
+	}
+}
+
+// usageLine is the terminal's usage line: the history's size against
+// where it is compacted, then what the session has spent. Blank until the
+// first call has ended.
+func usageLine(c *ui.Context, u UsageReading) {
+	t := c.Theme()
+	p := paletteOf(t)
+	ui.Row(c).Height(16).Gap(12).Padding(0, 4).AlignItems(ui.Center).Children(func() {
+		if u.Calls == 0 {
+			return
+		}
+
+		if ctx := u.Context; ctx != nil {
+			estimate, color := "", p.MutedForeground
+			if ctx.Estimated {
+				estimate = "~"
+			}
+			switch {
+			case float64(ctx.Tokens) >= float64(ctx.Limit)*0.9:
+				color = p.Destructive
+			case float64(ctx.Tokens) >= float64(ctx.Limit)*0.7:
+				color = t.Warning
+			}
+			barText(c, fmt.Sprintf("ctx %s%s/%s", estimate, count(ctx.Tokens), count(ctx.Limit)), color).
+				Tooltip("The history, against where it is compacted")
+		}
+
+		parts := []string{
+			fmt.Sprintf("$%.4f", u.Cost),
+			fmt.Sprintf("in %s · out %s", count(u.Input), count(u.Output)),
+			fmt.Sprintf("cache %d%%", u.Cache),
+		}
+		if u.Speed > 0 {
+			parts = append(parts, fmt.Sprintf("%.0f tok/s", u.Speed))
+		}
+		barText(c, strings.Join(parts, " · "), p.MutedForeground).Shrink(1)
+	})
+}
+
+// barText is the small text of the status and usage lines, its digits
+// tabular so a count that changes does not jiggle what follows it.
+func barText(c *ui.Context, text string, color ui.Color) ui.Element {
+	return ui.Text(c, text).FontSize(textXS(c.Theme())).TextColor(color).FontFeatures("tnum").SingleLine()
+}
+
+// commandList is shadcn/ui's Command in a popover: the commands that match
+// what is typed, or what the command takes, the chosen one in the accent;
+// a click runs it as Enter does.
+func (a *App) commandList(c *ui.Context, s Session, view *sessionView, entries []menuEntry) ui.Element {
+	t := c.Theme()
+	p := paletteOf(t)
+	panel := ui.Column(c).WidthPercent(100).Padding(4).Radius(t.Radius).Background(p.Popover).Border(1, p.Border).
+		Shadow(0, 4, 6, -1, ui.RGBA(0, 0, 0, 0.1)).Label("Commands")
+	panel.Children(func() {
+		ui.Scroll(c).MaxHeight(8*32 + 24).Children(func() {
+			group := ""
+			for i, e := range entries {
+				if e.Choice == "" && e.Command.Group != group {
+					group = e.Command.Group
+					ui.Text(c, group).FontSize(textXS(t)).FontWeight(500).TextColor(p.MutedForeground).Padding(6, 8)
+				}
+				// A row, not a button: the focus stays in the input, whose keys move along the menu
+				item := ui.Row(c.Key(e.Command.Name+" "+e.Choice)).Height(32).Padding(0, 8).Gap(8).Radius(6).
+					AlignItems(ui.Center).Label(e.completion())
+				if item.Hovered() && view.menu.selected != i {
+					view.menu.selected = i
+				}
+				if i == view.menu.selected {
+					item.Background(p.Accent).ScrollIntoView()
+				}
+				item.Children(func() { menuRow(c, e, view.t.State) })
+				if item.Clicked() {
+					a.choose(s.ID, view, e)
+				}
+			}
+		})
+	})
+	return panel
+}
+
+// menuRow is an entry's name, what it takes and what it does, with what
+// was typed in the foreground and the rest muted; or a choice, a check by
+// the one in use.
+func menuRow(c *ui.Context, e menuEntry, st State) {
+	t := c.Theme()
+	p := paletteOf(t)
+	if e.Choice != "" {
+		marked(c, e.Choice, e.Chose, p.Foreground, p.Foreground).Grow(1)
+		if inUse(e, st) {
+			ui.Icon(c, checkIcon).FontSize(16).TextColor(p.Foreground).Label("In use")
+		}
+		return
+	}
+	// The name whole, as it is what is typed; what it takes and does give way
+	marked(c, e.Command.Name, e.Name, p.Foreground, p.Foreground).FontWeight(500).Shrink(0)
+	if e.Command.Arg != "" {
+		ui.Text(c, e.Command.Arg).Font("monospace").FontSize(textXS(t)).TextColor(p.MutedForeground).SingleLine().Shrink(1)
+	}
+	ui.Box(c).Grow(1).MinWidth(12)
+	marked(c, e.Command.Hint, e.Hint, p.MutedForeground, p.Foreground).FontSize(textXS(t)).Shrink(1)
+}
+
+// inUse says whether a choice is what the session uses now.
+func inUse(e menuEntry, st State) bool {
+	switch e.Command.Name {
+	case "/think":
+		return e.Choice == st.Thinking
+	case "/fast":
+		return (e.Choice == "on") == st.Fast
+	}
+	return false
+}
+
+// marked is text with the part that matched what is typed underlined in
+// its own color, as the terminal underlines it.
+func marked(c *ui.Context, text string, at span, color, match ui.Color) ui.Element {
+	if at.From < 0 || at.To <= at.From {
+		return ui.Text(c, text).TextColor(color).SingleLine()
+	}
+	return ui.RichText(c,
+		ui.Span{Text: text[:at.From], Color: color},
+		ui.Span{Text: text[at.From:at.To], Color: match, Underline: true},
+		ui.Span{Text: text[at.To:], Color: color},
+	).SingleLine()
+}
+
+// help is what /help lists, then the window's own keys, in a box of its
+// own: each part's title small and muted, its rows a key and what it does.
+func help(c *ui.Context, sections []HelpSection) {
+	t := c.Theme()
+	p := paletteOf(t)
+	keys := HelpSection{Title: "Keys", Rows: [][2]string{
+		{"↵", "sends, or steers a reply"}, {"⇧ ↵", "a new line"}, {"esc", "stops a reply"},
+		{"⇧ ⇥", "switches ask/auto"}, {"/", "opens the commands"},
+	}}
+	ui.Column(c).Padding(12, 14).Radius(t.Radius).Border(1, p.Border).Gap(12).Children(func() {
+		for i, section := range append(append([]HelpSection{}, sections...), keys) {
+			ui.Column(c.Key(i)).Gap(4).Children(func() {
+				ui.Text(c, section.Title).FontSize(textXS(t)).FontWeight(500).TextColor(p.MutedForeground)
+				if section.Text != "" {
+					ui.Text(c, section.Text).LineHeight(1.625).Selectable()
+				}
+				for _, row := range section.Rows {
+					ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+						ui.Row(c).Width(120).Shrink(0).Gap(4).Children(func() {
+							if len(row[0]) > 1 && strings.HasPrefix(row[0], "/") {
+								ui.Text(c, row[0]).Font("monospace").FontWeight(500).SingleLine()
+								return
+							}
+							// The window's keys, as keys
+							for _, key := range strings.Fields(row[0]) {
+								kbd(c, key)
+							}
+						})
+						ui.Text(c, row[1]).TextColor(p.MutedForeground).Selectable().Shrink(1)
+					})
+				}
+			})
+		}
 	})
 }
 

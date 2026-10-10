@@ -22,6 +22,9 @@ type App struct {
 	// ChooseFolder asks for a folder to start a session in: "" when the
 	// person cancels. Nil leaves the choice out.
 	ChooseFolder func() (string, error)
+	// Quit ends the app, as /exit does in the terminal. Nil leaves /exit to
+	// the service, which says there is nothing to quit.
+	Quit func()
 
 	ctx         context.Context
 	list        Sessions
@@ -53,6 +56,8 @@ type sessionView struct {
 	t      Transcript
 	draft  string
 	scroll ui.ScrollState
+	// The menu of commands, open while one is typed.
+	menu menuState
 	// The answer being put together to the open questions: for each, the
 	// values picked and the text typed instead.
 	answering string
@@ -276,9 +281,14 @@ func (a *App) neighbour(id string) string {
 	return ""
 }
 
+// send sends what is typed: a message, or the command it names.
 func (a *App) send(id string, view *sessionView) {
 	text := strings.TrimSpace(view.draft)
 	if text == "" {
+		return
+	}
+	if strings.HasPrefix(text, "/") {
+		a.command(id, view, text)
 		return
 	}
 	view.draft = ""
@@ -289,6 +299,27 @@ func (a *App) send(id string, view *sessionView) {
 			a.update(func() {
 				if view.draft == "" {
 					view.draft = text
+				}
+			})
+		}
+		return err
+	})
+}
+
+// command runs the command the line names: the service runs it, but /exit
+// quits the app here.
+func (a *App) command(id string, view *sessionView, line string) {
+	view.draft = ""
+	if strings.Fields(line)[0] == "/exit" && a.Quit != nil {
+		a.Quit()
+		return
+	}
+	a.call(func(ctx context.Context) error {
+		_, err := a.agent.Command(ctx, id, line)
+		if err != nil {
+			a.update(func() {
+				if view.draft == "" {
+					view.draft = line
 				}
 			})
 		}

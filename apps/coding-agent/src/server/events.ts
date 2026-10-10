@@ -3,6 +3,8 @@
 
 import type { RunEvent, ThinkingLevel, ToolResultMessage } from '@ji.dev/llm'
 import type { Questions } from '@ji.dev/plugin-choices'
+import type { HelpSection } from '../agent/commands.ts'
+import type { UsageReading } from '../agent/meter.ts'
 
 /** A tool's output is cut to this many characters in an event: a client shows it, the model already has it whole. */
 const MAX_OUTPUT = 4_000
@@ -18,6 +20,19 @@ export interface QuestionView {
   multiple: boolean
   other: boolean
   initial?: string
+  /** What the typed answer is for, before one is typed. */
+  placeholder?: string
+  /** The typed answer is a key: shown as dots. */
+  secret?: boolean
+}
+
+/** A command as a client's menu shows it, and what it takes when that is one of a few. */
+export interface CommandView {
+  name: string
+  arg?: string
+  hint: string
+  group?: string
+  choices?: string[]
 }
 
 export interface Usage {
@@ -35,6 +50,8 @@ export interface ServiceState {
   model: string
   thinking: ThinkingLevel
   thinkingLevels: ThinkingLevel[]
+  /** OpenAI's priority tier, switched with /fast. */
+  fast: boolean
   mode: string
   allowed: string
   replying: boolean
@@ -44,6 +61,10 @@ export interface ServiceState {
   asking: string[]
   /** How the last reply ended; none before the first. */
   outcome?: Outcome
+  /** The commands typed after a `/`, built-in ones first. */
+  commands: CommandView[]
+  /** What the session has spent so far, and how much the history holds. */
+  usage: UsageReading
 }
 
 /** What a client reads, in order of `seq`. */
@@ -58,6 +79,10 @@ export type ServiceEvent = { seq: number } & (
   | { type: 'compacted'; before: number; after: number }
   | { type: 'reply_end'; outcome: Outcome; error?: string; unsent?: string; usage: Usage }
   | { type: 'state'; state: ServiceState }
+  /** What a command said, by how it went. */
+  | { type: 'notice'; level: 'info' | 'success' | 'warn' | 'error'; text: string }
+  /** What /help lists. */
+  | { type: 'help'; sections: HelpSection[] }
 )
 
 /** An event before the log numbers it. */

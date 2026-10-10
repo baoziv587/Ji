@@ -10,6 +10,8 @@
 //   GET  /api/sessions/:id/events                   its events: those after Last-Event-ID (or ?after=n), then each as
 //                                                   it happens
 //   POST /api/sessions/:id/messages   {text}        starts a reply, or steers the one in progress
+//   POST /api/sessions/:id/commands   {line}        runs the command the line names, as the terminal does: {result:
+//                                                   'ran'}, or a skill's sent as a message ('started' | 'steered')
 //   POST /api/sessions/:id/questions/:q  {answers: string[][]} | {dismissed: true}
 //   POST /api/sessions/:id/stop
 //   POST /api/sessions/:id/mode                     switches between ask and auto
@@ -110,6 +112,8 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
       }
       return sendJson(res, 200, { result: await service.send(text) })
     }
+    case 'commands':
+      return sendJson(res, 200, { result: await service.command(stringField(body, 'line').trim()) })
     case 'questions':
       if (question === undefined || !service.answer(decodeURIComponent(question), replyOf(body))) {
         throw new HttpError(404, `no question ${question} waits for an answer`)

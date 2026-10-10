@@ -54,7 +54,14 @@ useCredentialStore(createFileCredentialStore(join(homedir(), '.ji', 'auth.json')
 const store = createSessionStore(ARGS.sessions)
 const hub = createSessionHub({
   store,
-  open: createSessionOpener({ store, model: ARGS.model, thinking, skills: ARGS.skills, yolo: ARGS.yolo }),
+  open: createSessionOpener({
+    store,
+    model: ARGS.model,
+    thinking,
+    skills: ARGS.skills,
+    auth: join(homedir(), '.ji'),
+    yolo: ARGS.yolo,
+  }),
 })
 
 const server = createAgentHttpServer({ hub, defaultRoot: resolve(ARGS.root) })

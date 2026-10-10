@@ -59,6 +59,7 @@ func main() {
 		var win *mygo.Window
 		a = agentui.NewApp(agentui.NewClient(url), func(fn func()) { win.Update(fn) })
 		a.SidebarSize = loadLayout().Sidebar
+		a.Quit = mygo.App.Quit
 		a.ChooseFolder = func() (string, error) {
 			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 				Parent:            win,

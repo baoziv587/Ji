@@ -17,6 +17,9 @@ type palette struct {
 	Border, Input, Ring        ui.Color
 	Sidebar, SidebarAccent     ui.Color
 	SidebarBorder              ui.Color
+	// shadcn/ui has no token of it: Tailwind's sky, for what the
+	// terminal shows in cyan.
+	Info ui.Color
 }
 
 var lightPalette = palette{
@@ -37,6 +40,7 @@ var lightPalette = palette{
 	Sidebar:           ui.Oklch(0.985, 0, 0),
 	SidebarAccent:     ui.Oklch(0.97, 0, 0),
 	SidebarBorder:     ui.Oklch(0.922, 0, 0),
+	Info:              ui.Oklch(0.588, 0.158, 241.966),
 }
 
 var darkPalette = palette{
@@ -57,6 +61,7 @@ var darkPalette = palette{
 	Sidebar:           ui.Oklch(0.205, 0, 0),
 	SidebarAccent:     ui.Oklch(0.269, 0, 0),
 	SidebarBorder:     ui.Oklch(1, 0, 0).Alpha(0.1),
+	Info:              ui.Oklch(0.746, 0.16, 232.661),
 }
 
 // paletteOf is the palette that goes with a theme, light or dark.

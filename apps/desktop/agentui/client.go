@@ -46,13 +46,78 @@ type State struct {
 	Model          string   `json:"model"`
 	Thinking       string   `json:"thinking"`
 	ThinkingLevels []string `json:"thinkingLevels"`
-	Mode           string   `json:"mode"`
-	Allowed        string   `json:"allowed"`
-	Replying       bool     `json:"replying"`
-	Queued         int      `json:"queued"`
-	Tools          []string `json:"tools"`
-	Asking         []string `json:"asking"`
-	Outcome        string   `json:"outcome,omitempty"`
+	// OpenAI's priority tier, switched with /fast.
+	Fast     bool     `json:"fast"`
+	Mode     string   `json:"mode"`
+	Allowed  string   `json:"allowed"`
+	Replying bool     `json:"replying"`
+	Queued   int      `json:"queued"`
+	Tools    []string `json:"tools"`
+	Asking   []string `json:"asking"`
+	Outcome  string   `json:"outcome,omitempty"`
+	// The commands typed after a `/`, built-in ones first.
+	Commands []Command `json:"commands"`
+	// What the session has spent so far, and how much the history holds.
+	Usage UsageReading `json:"usage"`
+}
+
+// Command is one of the commands typed after a `/`, as in the terminal.
+type Command struct {
+	Name string `json:"name"`
+	// What it takes after its name, as `<off|high>`; none when it takes
+	// nothing.
+	Arg   string `json:"arg,omitempty"`
+	Hint  string `json:"hint"`
+	Group string `json:"group,omitempty"`
+	// What it takes, when that is one of a few.
+	Choices []string `json:"choices,omitempty"`
+}
+
+// UsageReading is what a session has spent, as the terminal's usage line
+// shows it.
+type UsageReading struct {
+	// The history's size against where it is compacted; nil until the
+	// model has answered once.
+	Context *ContextSize `json:"context,omitempty"`
+	Cost    float64      `json:"cost"`
+	Input   int          `json:"input"`
+	Output  int          `json:"output"`
+	// The share of the input that came from the cache, in percent.
+	Cache int `json:"cache"`
+	// Output tokens a second; 0 until a call is timed.
+	Speed float64 `json:"speed,omitempty"`
+	Calls int     `json:"calls"`
+}
+
+// ContextSize is the history's tokens, an estimate after a compaction until
+// the model counts them, and where it is compacted.
+type ContextSize struct {
+	Tokens    int  `json:"tokens"`
+	Estimated bool `json:"estimated"`
+	Limit     int  `json:"limit"`
+}
+
+// HelpSection is a part of what /help lists: rows of a key and what it
+// does, or a line of text.
+type HelpSection struct {
+	Title string
+	Rows  [][2]string
+	Text  string
+}
+
+func (h *HelpSection) UnmarshalJSON(b []byte) error {
+	var raw struct {
+		Title string          `json:"title"`
+		Rows  json.RawMessage `json:"rows"`
+	}
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	h.Title = raw.Title
+	if json.Unmarshal(raw.Rows, &h.Text) == nil {
+		return nil
+	}
+	return json.Unmarshal(raw.Rows, &h.Rows)
 }
 
 // Option is one answer a question offers.
@@ -71,6 +136,9 @@ type Question struct {
 	Multiple bool     `json:"multiple"`
 	Other    bool     `json:"other"`
 	Initial  string   `json:"initial,omitempty"`
+	// What the typed answer is for, and whether it is a key, shown as dots.
+	Placeholder string `json:"placeholder,omitempty"`
+	Secret      bool   `json:"secret,omitempty"`
 }
 
 // Usage is what a reply spent.
@@ -109,6 +177,11 @@ type Event struct {
 	Usage   *Usage `json:"usage,omitempty"`
 
 	State *State `json:"state,omitempty"`
+
+	// A notice's level: info, success, warn or error; Text says it.
+	Level string `json:"level,omitempty"`
+	// What /help lists.
+	Sections []HelpSection `json:"sections,omitempty"`
 }
 
 // Agent is what the window needs of the service; a fake stands in for it in
@@ -127,6 +200,9 @@ type Agent interface {
 	// Send starts a reply, or steers the one in progress: "started" or
 	// "steered".
 	Send(ctx context.Context, id, text string) (string, error)
+	// Command runs the command a line names, as the terminal does: "ran",
+	// or what Send says for a skill's, which goes to the model.
+	Command(ctx context.Context, id, line string) (string, error)
 	// Answer replies to a question: one list of values per question, or nil
 	// to dismiss them.
 	Answer(ctx context.Context, id, question string, answers [][]string) error
@@ -181,6 +257,14 @@ func (c *Client) Send(ctx context.Context, id, text string) (string, error) {
 		Result string `json:"result"`
 	}
 	err := c.do(ctx, http.MethodPost, sessionPath(id, "messages"), map[string]string{"text": text}, &out)
+	return out.Result, err
+}
+
+func (c *Client) Command(ctx context.Context, id, line string) (string, error) {
+	var out struct {
+		Result string `json:"result"`
+	}
+	err := c.do(ctx, http.MethodPost, sessionPath(id, "commands"), map[string]string{"line": line}, &out)
 	return out.Result, err
 }
 

@@ -20,6 +20,7 @@ type fakeAgent struct {
 	followed []string
 	created  []string
 	sent     map[string][]string
+	commands map[string][]string
 	answers  map[string][][]string
 	archived []string
 	stopped  []string
@@ -39,6 +40,10 @@ func (f *fakeAgent) State(context.Context, string) (State, error) { return State
 func (f *fakeAgent) Send(_ context.Context, id, text string) (string, error) {
 	f.sent[id] = append(f.sent[id], text)
 	return "started", nil
+}
+func (f *fakeAgent) Command(_ context.Context, id, line string) (string, error) {
+	f.commands[id] = append(f.commands[id], line)
+	return "ran", nil
 }
 func (f *fakeAgent) Answer(_ context.Context, id, question string, answers [][]string) error {
 	f.answers[id+"/"+question] = answers
@@ -60,13 +65,24 @@ func (f *fakeAgent) Follow(_ context.Context, id string, _ int, fn func(Event)) 
 	}
 }
 
+// testCommands are the service's commands, as a session lists them.
+var testCommands = []Command{
+	{Name: "/think", Arg: "<off|high>", Hint: "sets thinking", Choices: []string{"off", "high"}},
+	{Name: "/fast", Arg: "[on|off]", Hint: "answers faster, for more usage", Choices: []string{"on", "off"}},
+	{Name: "/compact", Hint: "summarizes the conversation so far"},
+	{Name: "/help", Hint: "lists keys, commands and tools"},
+	{Name: "/exit", Hint: "quits"},
+	{Name: "/login", Arg: "<provider>", Hint: "signs in: in the browser, or with a key typed in", Choices: []string{"deepseek", "openai", "openai-codex"}},
+	{Name: "/impeccable", Arg: "[command]", Hint: "designs and polishes interfaces", Group: "Skills"},
+}
+
 // testApp runs every action at once, on the test's goroutine, with three
 // sessions in two folders and one archived.
 func testApp() (*App, *fakeAgent) {
 	now := time.Now().UnixMilli()
-	f := &fakeAgent{events: map[string][]Event{}, sent: map[string][]string{}, answers: map[string][][]string{}}
+	f := &fakeAgent{events: map[string][]Event{}, sent: map[string][]string{}, commands: map[string][]string{}, answers: map[string][][]string{}}
 	for _, id := range []string{"a", "b", "c", "d"} {
-		f.events[id] = []Event{{Type: "state", State: &State{ID: id, Root: "/code/" + id, Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}}}}
+		f.events[id] = []Event{{Type: "state", State: &State{ID: id, Root: "/code/" + id, Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}, Commands: testCommands}}}
 	}
 	a := NewApp(f, func(fn func()) { fn() })
 	a.async = func(fn func()) { fn() }
@@ -293,6 +309,7 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 
 func TestTranscriptJoinsDeltasAndEndsCalls(t *testing.T) {
 	var tr Transcript
+	var activities []string
 	for _, e := range []Event{
 		{Type: "user", Text: "list files"},
 		{Type: "thinking", Delta: "Let me "},
@@ -304,6 +321,7 @@ func TestTranscriptJoinsDeltasAndEndsCalls(t *testing.T) {
 		{Type: "reply_end", Outcome: "done", Usage: &Usage{Input: 100, Output: 20, Cost: 0.01}},
 	} {
 		tr.Apply(e)
+		activities = append(activities, tr.Activity)
 	}
 
 	kinds := []ItemKind{}
@@ -319,8 +337,10 @@ func TestTranscriptJoinsDeltasAndEndsCalls(t *testing.T) {
 	if call := tr.Items[2].Tool; !call.Done || !call.OK || call.Output != "a.go" || call.MS != 12 {
 		t.Errorf("call %+v", call)
 	}
-	if tr.Usage != (Usage{Input: 100, Output: 20, Cost: 0.01}) {
-		t.Errorf("usage %+v", tr.Usage)
+	// What the status line says, after each event, as the terminal's
+	want := []string{"Waiting", "Thinking", "Thinking", "Running bash", "Waiting", "Writing", "Writing", ""}
+	if !reflect.DeepEqual(activities, want) {
+		t.Errorf("activities %q, want %q", activities, want)
 	}
 }
 
@@ -384,7 +404,8 @@ func TestAgoIsBrief(t *testing.T) {
 }
 
 // TestSnapshot draws the window to a PNG, to look at: SNAPSHOT=out.png,
-// DARK=1 for the dark theme, TOAST=1 once the session is archived.
+// DARK=1 for the dark theme, TOAST=1 once the session is archived, MENU=/th
+// with the menu of commands open on what is typed.
 func TestSnapshot(t *testing.T) {
 	out := os.Getenv("SNAPSHOT")
 	if out == "" {
@@ -393,7 +414,7 @@ func TestSnapshot(t *testing.T) {
 	a, _ := testApp()
 	view := a.views["a"]
 	for _, e := range []Event{
-		{Type: "state", State: &State{ID: "a", Root: "/code/web", Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}, Replying: true, Tools: []string{"bash", "grep", "read", "edit", "ask_user"}}},
+		{Type: "state", State: &State{ID: "a", Root: "/code/web", Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}, Replying: true, Tools: []string{"bash", "grep", "read", "edit", "ask_user"}, Commands: testCommands}},
 		{Type: "user", Text: "The login form submits twice. Find out why and fix it."},
 		{Type: "thinking", Delta: "Probably a double event binding."},
 		{Type: "tool_start", ID: "1", Name: "grep", Args: "{\n  \"pattern\": \"onSubmit\"\n}"},
@@ -410,7 +431,11 @@ func TestSnapshot(t *testing.T) {
 	}
 	a.list.Sessions[0].Status = "asking"
 	a.list.Sessions[2].Status = "running"
-	view.t.Usage = Usage{Input: 12400, Output: 830, Cost: 0.0042}
+	view.t.State.Usage = UsageReading{Cost: 0.0042, Input: 12400, Output: 830, Cache: 82, Speed: 61, Calls: 3}
+	view.t.State.Usage.Context = &ContextSize{Tokens: 13230, Limit: 200000}
+	if menu := os.Getenv("MENU"); menu != "" {
+		view.draft = menu
+	}
 	tt := ui.NewTester(a.View, 1180, 780)
 	tt.SetDark(os.Getenv("DARK") == "1")
 	tt.Frame()

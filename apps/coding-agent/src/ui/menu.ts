@@ -7,21 +7,12 @@
 // alike, so a match by the hint shows why it is there.
 
 import type { Editing, KeyHint } from '@ji.dev/tui'
+import type { Command } from '../agent/commands.ts'
 import type { Menu } from './bars.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
 import { editingText, EMPTY_EDITING } from '@ji.dev/tui'
-
-export interface Command {
-  name: string
-  /** What it takes after its name, as the menu shows it; without one, the menu runs it at once. */
-  arg?: string
-  hint: string
-  /** What it does in the terminal. Without one, the line goes to the model as typed: a plugin knows what it means. */
-  run?: (arg: string) => void
-  /** Where /help lists it, by name only among the others of its group; without one, under Commands with its hint. */
-  group?: string
-}
+import { commandOf, hintOf } from '../agent/commands.ts'
 
 /** What a key of the menu's did: the input after it, and whether what is in it is to be sent. */
 export interface MenuKey {
@@ -46,27 +37,6 @@ export class CommandMenu {
 
   constructor(commands: () => readonly Command[]) {
     this.commands = commands
-  }
-
-  /** The commands without a group: `/think` and what it does, for /help. */
-  hints(): KeyHint[] {
-    return this.commands()
-      .filter(command => command.group === undefined)
-      .map(hintOf)
-  }
-
-  /** The names of the commands with a group, by group, in the order the groups first appear. */
-  groups(): Map<string, string[]> {
-    const groups = new Map<string, string[]>()
-    for (const { name, group } of this.commands()) {
-      if (group === undefined) {
-        continue
-      }
-      const names = groups.get(group) ?? []
-      names.push(name)
-      groups.set(group, names)
-    }
-    return groups
   }
 
   /** The menu as the bars show it; none while no command is typed, or none matches. What is typed is underlined. */
@@ -118,12 +88,12 @@ export class CommandMenu {
    * has nothing to run here, so the message is sent as it is.
    */
   run(message: string): boolean {
-    if (!message.startsWith('/')) {
+    const named = commandOf(this.commands(), message)
+    if (named === undefined) {
       return false
     }
 
-    const [name, ...rest] = message.split(/\s+/)
-    const command = this.commands().find(c => c.name === name)
+    const { command, name, arg } = named
     if (command === undefined) {
       log.warn(`No such command: ${name}. /help lists them.`)
       return true
@@ -132,7 +102,7 @@ export class CommandMenu {
       return false
     }
 
-    command.run(rest.join(' '))
+    command.run(arg)
     return true
   }
 
@@ -194,9 +164,4 @@ function underlined(text: string, query: string): string {
 /** The command's name in the input, with a space after it when it takes something, for what comes next. */
 function completed(command: Command): Editing {
   return { ...EMPTY_EDITING, before: command.arg === undefined ? command.name : `${command.name} ` }
-}
-
-/** The name alone in the key column, so a long argument hint does not push every column out; the hint comes after it. */
-function hintOf({ name, arg, hint }: Command): KeyHint {
-  return [name, arg === undefined ? hint : `${arg}  ${hint}`]
 }
