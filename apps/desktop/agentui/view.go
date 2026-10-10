@@ -262,7 +262,7 @@ func (a *App) header(c *ui.Context, s Session, view *sessionView) {
 		ui.Text(c, titleOf(s)).FontWeight(600).SingleLine().Shrink(1)
 		if st.Model != "" {
 			dot()
-			ui.Text(c, st.Model).SingleLine().Shrink(1).Tooltip("Model")
+			ui.Text(c, st.Model).TextColor(p.MutedForeground).SingleLine().Shrink(1).Tooltip("Model")
 		}
 		if len(st.ThinkingLevels) > 0 {
 			dot()
@@ -333,7 +333,7 @@ func (a *App) conversation(c *ui.Context, view *sessionView) {
 				ui.Column(c).Center().Gap(12).Padding(80, 0).Children(func() {
 					ui.Text(c, "What should we work on?").FontSize(textLG(t)).FontWeight(500).LetterSpacing(-0.4)
 					ui.Row(c).Gap(16).Children(func() {
-						for _, hint := range [][2]string{{"↵", "to send"}, {"⇧ ↵", "for a new line"}, {"/", "for commands"}} {
+						for _, hint := range [][2]string{{"↵", "to send"}, {"⇧↵", "for a new line"}, {"/", "for commands"}} {
 							ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 								kbd(c, hint[0])
 								ui.Text(c, hint[1]).FontSize(textXS(t)).TextColor(p.MutedForeground)
@@ -378,8 +378,10 @@ func (a *App) item(c *ui.Context, item *Item) {
 	case KindText:
 		ui.Text(c, strings.TrimSpace(item.Text)).Selectable().LineHeight(1.625)
 	case KindThinking:
-		ui.Collapsible(c, "Thinking", &item.Open, func() {
-			ui.Text(c, strings.TrimSpace(item.Text)).TextColor(p.MutedForeground).LineHeight(1.625).Selectable()
+		disclosure(c, "Thinking", &item.Open, func() {
+			// In by the chevron and its gap, 16 + 8, so it sits under the label
+			ui.Text(c, strings.TrimSpace(item.Text)).Padding(0, 0, 0, 24).
+				TextColor(p.MutedForeground).LineHeight(1.625).Selectable()
 		})
 	case KindTool:
 		a.tool(c, item)
@@ -412,7 +414,8 @@ func (a *App) tool(c *ui.Context, item *Item) {
 	p := paletteOf(t)
 	call := item.Tool
 	ui.Column(c).Padding(10, 14).Radius(t.Radius).Border(1, p.Border).Gap(6).Children(func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+		// The disclosure's gap, so Details below lines up with the name
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			switch {
 			case !call.Done:
 				spinner(c, "Running")
@@ -427,19 +430,17 @@ func (a *App) tool(c *ui.Context, item *Item) {
 				ui.Text(c, duration(call.MS)).TextColor(p.MutedForeground).FontSize(textXS(t)).FontFeatures("tnum")
 			}
 		})
-		ui.Collapsible(c, "Details", &item.Open, func() {
-			ui.Column(c).Gap(8).Children(func() {
-				code(c, func() { ui.Text(c, call.Args).Font("monospace").FontSize(textXS(t)).Selectable() })
-				if call.Done {
-					output := call.Output
-					if output == "" {
-						output = "(no output)"
-					}
-					code(c, func() {
-						ui.Text(c, output).Font("monospace").FontSize(textXS(t)).TextColor(p.MutedForeground).Selectable()
-					})
+		disclosure(c, "Details", &item.Open, func() {
+			code(c, func() { ui.Text(c, call.Args).Font("monospace").FontSize(textXS(t)).Selectable() })
+			if call.Done {
+				output := call.Output
+				if output == "" {
+					output = "(no output)"
 				}
-			})
+				code(c, func() {
+					ui.Text(c, output).Font("monospace").FontSize(textXS(t)).TextColor(p.MutedForeground).Selectable()
+				})
+			}
 		})
 	})
 }
@@ -883,8 +884,8 @@ func help(c *ui.Context, sections []HelpSection) {
 	t := c.Theme()
 	p := paletteOf(t)
 	keys := HelpSection{Title: "Keys", Rows: [][2]string{
-		{"↵", "sends, or steers a reply"}, {"⇧ ↵", "a new line"}, {"esc", "stops a reply"},
-		{"⇧ ⇥", "switches ask/auto"}, {"/", "opens the commands"},
+		{"↵", "sends, or steers a reply"}, {"⇧↵", "a new line"}, {"esc", "stops a reply"},
+		{"⇧⇥", "switches ask/auto"}, {"/", "opens the commands"},
 	}}
 	ui.Column(c).Padding(12, 14).Radius(t.Radius).Border(1, p.Border).Gap(12).Children(func() {
 		for i, section := range append(append([]HelpSection{}, sections...), keys) {
@@ -929,7 +930,13 @@ func toasts(c *ui.Context, width float32) {
 			toast.Root.Children(func() {
 				ui.Text(c, item.Title).FontWeight(500).TextColor(p.Foreground).Shrink(1).MaxLines(2)
 				if item.Action != "" {
-					toast.ActionButton().Height(24).Padding(0, 8).Radius(4).Background(p.Primary).Children(func() {
+					action := toast.ActionButton().Height(24).Padding(0, 8).Radius(4).Background(p.Primary).
+						FocusRing(false).Transition(colorTransition)
+					if action.Hovered() {
+						action.Background(p.Primary.Alpha(0.9))
+					}
+					focusRing(action, p, 0)
+					action.Children(func() {
 						ui.Text(c, item.Action).FontSize(textXS(t)).FontWeight(500).TextColor(p.PrimaryForeground)
 					})
 				}
@@ -970,23 +977,9 @@ func detail(c *ui.Context, text string) {
 			case strings.HasPrefix(line, "-"):
 				color = t.Danger
 			}
-			ui.Text(c, line).Font("monospace").FontSize(12).TextColor(color).NoWrap()
+			ui.Text(c, line).Font("monospace").FontSize(textXS(t)).TextColor(color).NoWrap()
 		}
 	})
-}
-
-func status(s State) string {
-	var parts []string
-	if s.Queued > 0 {
-		parts = append(parts, fmt.Sprintf("%d queued", s.Queued))
-	}
-	if s.Allowed != "" {
-		parts = append(parts, s.Allowed)
-	}
-	if len(s.Tools) > 0 {
-		parts = append(parts, fmt.Sprintf("%d tools", len(s.Tools)))
-	}
-	return strings.Join(parts, " · ")
 }
 
 // titleOf is a session's title, or what stands for one before its first
