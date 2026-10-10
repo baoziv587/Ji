@@ -4,7 +4,7 @@
 // while the coding agent runs is found without a restart.
 
 import type { Skill, SkillsPlugin } from '@ji.dev/plugin-skills'
-import type { Command } from '../ui/menu.ts'
+import type { Command, Say } from '../agent/commands.ts'
 import type { Feature } from './feature.ts'
 import { log } from '@clack/prompts'
 import { createSkillsPlugin } from '@ji.dev/plugin-skills'
@@ -14,7 +14,8 @@ export interface SkillsFeature extends Feature {
   plugin: SkillsPlugin
 }
 
-export function createSkillsFeature(dir: string): SkillsFeature {
+/** What /reload-skills has to say goes to `say`: the terminal's log, unless told otherwise. */
+export function createSkillsFeature(dir: string, say: Say = log): SkillsFeature {
   const plugin = createSkillsPlugin(dir)
 
   const reloading: Command = {
@@ -22,8 +23,8 @@ export function createSkillsFeature(dir: string): SkillsFeature {
     hint: `reads ${abbreviateHomePath(dir)} again`,
     run: () => {
       plugin.reload().then(
-        loaded => log.success(`${countOf(loaded.length)} in ${abbreviateHomePath(dir)}`),
-        (error: unknown) => log.error(error instanceof Error ? error.message : String(error)),
+        loaded => say.success(`${countOf(loaded.length)} in ${abbreviateHomePath(dir)}`),
+        (error: unknown) => say.error(error instanceof Error ? error.message : String(error)),
       )
     },
   }

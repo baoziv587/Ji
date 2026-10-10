@@ -124,6 +124,7 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
   try {
     for await (const e of r) {
       await stage.answered()
+      meter.take(e)
       switch (e.type) {
         case 'step_end':
           if (e.turn.kind === 'input') {
@@ -144,7 +145,6 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           if (e.by === undefined) {
             // The level actually sent, after any plugin and after mapping to what the model supports
             status.show(e.thinking === 'off' ? 'Waiting' : 'Thinking')
-            meter.start()
           }
           break
         case 'compaction:start':
@@ -153,7 +153,6 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           break
         case 'compaction:end':
           if (e.error === undefined) {
-            meter.compacted(e.after)
             const sizes = `${formatCount(e.before)} → ${formatCount(e.after)} tokens`
             log.message(dimText(`Compacted the conversation: ${sizes}`), { symbol: dimText('≡') })
           } else {
@@ -162,17 +161,14 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           status.show('Waiting')
           break
         case 'thinking':
-          meter.streaming()
           await out.write(e.delta, 'thinking')
           status.show('Thinking', out.describeThought())
           break
         case 'text':
-          meter.streaming()
           await out.write(e.delta, 'text')
           status.show('Writing')
           break
         case 'tool_call_delta': {
-          meter.streaming()
           const before = writing.get(e.call.id)
           if (before === undefined) {
             // The text before it has ended
@@ -231,20 +227,14 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
           break
         }
         case 'model_end':
-          meter.end(e.message.usage)
-          if (e.by === undefined) {
-            meter.measured(e.message.usage)
-          }
           writing.clear()
           // Its calls have not started yet: one may wait for a question
           status.show('Waiting')
           break
         case 'model_error':
-          meter.dropped(e.usage)
           writing.clear()
           break
         case 'step_cancelled':
-          meter.dropped()
           writing.clear()
           running.clear()
           break

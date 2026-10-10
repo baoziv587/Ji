@@ -3,7 +3,7 @@
 
 import type { AuthInteraction } from '@ji.dev/llm'
 import type { AuthMethod, AuthPlugin } from '@ji.dev/plugin-auth'
-import type { Command } from '../ui/menu.ts'
+import type { Command, Say } from '../agent/commands.ts'
 import type { Feature } from './feature.ts'
 import { log } from '@clack/prompts'
 import { authMethodsOf, createAuthPlugin, listLoginProviders } from '@ji.dev/plugin-auth'
@@ -15,31 +15,32 @@ export interface AuthFeature extends Feature {
   login: (provider: string) => Promise<void>
 }
 
-export function createAuthFeature(dir: string, interaction: AuthInteraction): AuthFeature {
+/** What it has to say goes to `say`: the terminal's log, unless told otherwise. */
+export function createAuthFeature(dir: string, interaction: AuthInteraction, say: Say = log): AuthFeature {
   const plugin = createAuthPlugin({ dir })
 
   const login = async (provider: string): Promise<void> => {
     const methods = authMethodsOf(provider)
     if (methods.length === 0) {
-      log.error(`Nothing to log in to for "${provider}". Providers: ${listLoginProviders().join(', ')}`)
+      say.error(`Nothing to log in to for "${provider}". Providers: ${listLoginProviders().join(', ')}`)
       return
     }
 
     try {
       const method = methods.length === 1 ? methods[0] : await choose(provider, methods, interaction)
       await plugin.login(provider, method.type, interaction)
-      log.success(`Logged in to ${provider} with ${method.name}; kept in ${abbreviateHomePath(plugin.file)}`)
+      say.success(`Logged in to ${provider} with ${method.name}; kept in ${abbreviateHomePath(plugin.file)}`)
     } catch (error) {
-      log.error(error instanceof Error ? error.message : String(error))
+      say.error(error instanceof Error ? error.message : String(error))
     }
   }
 
   const logout = async (provider: string): Promise<void> => {
     try {
       await plugin.logout(provider)
-      log.success(`Logged out of ${provider}`)
+      say.success(`Logged out of ${provider}`)
     } catch (error) {
-      log.error(error instanceof Error ? error.message : String(error))
+      say.error(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -48,12 +49,14 @@ export function createAuthFeature(dir: string, interaction: AuthInteraction): Au
       name: '/login',
       arg: '<provider>',
       hint: 'signs in: in the browser, or with a key typed in',
+      choices: listLoginProviders,
       run: provider => void login(provider.trim()),
     },
     {
       name: '/logout',
       arg: '<provider>',
       hint: 'forgets what /login kept',
+      choices: listLoginProviders,
       run: provider => void logout(provider.trim()),
     },
   ]

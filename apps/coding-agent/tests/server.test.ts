@@ -10,7 +10,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
-import { describe, expect, it, onTestFinished } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createAgentHttpServer } from '../src/server/http.ts'
 import { createSessionOpener } from '../src/server/open.ts'
 import { createSessionHub } from '../src/server/sessions.ts'
@@ -200,15 +200,87 @@ describe('agent HTTP service', () => {
 })
 
 /** A service on a folder of sessions, a new one by default, whose sessions work in a new folder of their own. */
+describe('commands over HTTP', () => {
+  it('should list the commands and run one, telling the client what it said', async () => {
+    // Arrange
+    const { url } = await serve([])
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+    const first = await events.until(e => e.type === 'state')
+
+    // Act
+    const ran = await post(url, `/api/sessions/${id}/commands`, { line: '/fast on' })
+    const notice = await events.until(e => e.type === 'notice')
+    await post(url, `/api/sessions/${id}/commands`, { line: '/nope' })
+    const unknown = await events.until(e => e.type === 'notice')
+    await post(url, `/api/sessions/${id}/commands`, { line: '/help' })
+    const help = await events.until(e => e.type === 'help')
+
+    // Assert
+    expect(ran).toEqual({ result: 'ran' })
+    const commands = first.type === 'state' ? first.state.commands : []
+    expect(commands.map(c => c.name)).toEqual(['/think', '/fast', '/compact', '/help', '/exit'])
+    expect(commands[0]).toMatchObject({ arg: '<off>', choices: ['off'] })
+    expect(notice).toMatchObject({ level: 'info', text: expect.stringContaining('Fast mode is for openai') })
+    expect(unknown).toMatchObject({ level: 'warn', text: 'No such command: /nope. /help lists them.' })
+    expect(help.type === 'help' && help.sections.map(s => s.title)).toEqual(['Commands', 'Mode', 'Tools (5)'])
+  })
+
+  it('should log in by asking the client for the key, and keep it where the terminal does', async () => {
+    // Arrange
+    vi.stubEnv('DEEPSEEK_API_KEY', '')
+    onTestFinished(() => {
+      vi.unstubAllEnvs()
+    })
+    const auth = scratch()
+    const { url } = await serve([], scratch(), auth)
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+    const first = await events.until(e => e.type === 'state')
+
+    // Act
+    await post(url, `/api/sessions/${id}/commands`, { line: '/login deepseek' })
+    const ask = await events.until(e => e.type === 'ask')
+    await post(url, `/api/sessions/${id}/questions/${idOf(ask)}`, { answers: [['sk-typed']] })
+    const notice = await events.until(e => e.type === 'notice')
+
+    // Assert
+    const login = first.type === 'state' ? first.state.commands.find(c => c.name === '/login') : undefined
+    expect(login?.choices).toContain('deepseek')
+    expect(ask).toMatchObject({ questions: [{ options: [], other: true, secret: true }] })
+    expect(notice).toMatchObject({ level: 'success', text: expect.stringContaining('Logged in to deepseek') })
+    expect(readFileSync(join(auth, 'auth.json'), 'utf8')).toContain('sk-typed')
+  })
+
+  it('should say what the replies spent in the state', async () => {
+    // Arrange
+    const { url } = await serve([assistantMessage('hi')])
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+
+    // Act
+    await post(url, `/api/sessions/${id}/messages`, { text: 'hello' })
+    await events.until(e => e.type === 'reply_end')
+    const state = await events.until(e => e.type === 'state')
+
+    // Assert
+    expect(state.type === 'state' && state.state.usage).toMatchObject({ calls: 1, context: { estimated: false } })
+  })
+})
+
 async function serve(
   replies: (AssistantMessage | FakeReply)[],
   sessions = scratch(),
+  auth?: string,
 ): Promise<{ url: string; root: string }> {
   const root = scratch()
   const fake = createFakeModel(replies)
   onTestFinished(() => fake.dispose())
   const store = createSessionStore(sessions)
-  const hub = createSessionHub({ store, open: createSessionOpener({ store, model: fake.model, thinking: 'off' }) })
+  const hub = createSessionHub({
+    store,
+    open: createSessionOpener({ store, model: fake.model, thinking: 'off', auth }),
+  })
   const server = createAgentHttpServer({ hub, defaultRoot: root })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   onTestFinished(async () => {

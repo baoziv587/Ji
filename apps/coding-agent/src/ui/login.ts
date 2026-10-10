@@ -57,7 +57,7 @@ function tell(event: AuthEvent): void {
 }
 
 /** Best effort: the URL is on screen either way. */
-function openBrowser(url: string): void {
+export function openBrowser(url: string): void {
   const [command, args] = browserCommand(url)
 
   const child = spawn(command, args, { stdio: 'ignore', detached: true })
