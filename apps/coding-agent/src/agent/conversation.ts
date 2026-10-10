@@ -27,9 +27,10 @@ export class Conversation {
   private sent: string[] = []
   private fastMode = false
 
-  constructor(agent: Agent) {
+  /** `resume` picks up a conversation kept elsewhere: its id, and its history. */
+  constructor(agent: Agent, resume: { id?: string; state?: AgentState } = {}) {
     this.current = agent
-    this.session = createSession(agent)
+    this.session = createSession(agent, resume)
   }
 
   /** Stays the same when a reply that did not finish takes the conversation back. */

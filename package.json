@@ -9,6 +9,8 @@
   "scripts": {
     "demo": "pnpm --filter @ji.dev/demo start",
     "coding-agent": "pnpm --filter @ji.dev/coding-agent start",
+    "agent-server": "pnpm --filter @ji.dev/coding-agent serve",
+    "desktop": "cd apps/desktop && go run .",
     "replay": "node apps/replay/src/cli.ts",
     "replay:shell": "node apps/replay/src/cli.ts shell",
     "test": "vitest run",

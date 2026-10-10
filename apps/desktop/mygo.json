@@ -1,0 +1,6 @@
+{
+  "name": "Ji Agent",
+  "identifier": "dev.ji.agent",
+  "version": "0.1.0",
+  "out": "build"
+}
