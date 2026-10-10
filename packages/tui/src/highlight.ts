@@ -9,7 +9,6 @@
 
 import type { BundledLanguage, GrammarState, Highlighter } from 'shiki'
 import process from 'node:process'
-import { styleText } from 'node:util'
 import { bundledLanguages, createHighlighter } from 'shiki'
 
 /** A background over part of a line: from `start` to `end`, in UTF-16 units. A later one covers an earlier. */
@@ -86,7 +85,7 @@ export async function highlightCode(code: string, lang: BundledLanguage | undefi
 
 /** `text` as inline code, in its own blue; only the foreground is set, so styles around it stay. */
 export function paintInlineCode(text: string): string {
-  return styleText(INLINE_CODE, text)
+  return text === '' ? text : `\x1B[38;2;${rgb(INLINE_CODE)}m${text}\x1B[39m`
 }
 
 /**

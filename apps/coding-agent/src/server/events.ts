@@ -148,7 +148,7 @@ function textOfResult(result: ToolResultMessage): string {
 }
 
 /** A message's text, its content a string or a list of parts. */
-export function textOfMessage(message: { content: unknown }): string {
+function textOfMessage(message: { content: unknown }): string {
   const { content } = message
   if (typeof content === 'string') {
     return content

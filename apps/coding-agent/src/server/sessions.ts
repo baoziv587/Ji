@@ -12,7 +12,7 @@ import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 /** idle, replying, waiting for an answer, or its last reply failed. */
-export type SessionStatus = 'idle' | 'running' | 'asking' | 'failed'
+type SessionStatus = 'idle' | 'running' | 'asking' | 'failed'
 
 export interface SessionSummary extends SessionMeta {
   status: SessionStatus
