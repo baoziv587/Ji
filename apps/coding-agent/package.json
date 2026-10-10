@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node src/main.ts",
     "headless": "node src/headless.ts",
+    "serve": "node src/server.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
