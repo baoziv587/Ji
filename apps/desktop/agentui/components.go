@@ -182,6 +182,32 @@ func emptyHeader(c *ui.Context, icon *ui.SVG, title, description string) {
 	})
 }
 
+// disclosure is shadcn/ui's Collapsible as AI Elements' Reasoning draws
+// it: a muted trigger, its chevron turning as it opens, that a hover brings
+// to the foreground; what fn builds below it. The chevron takes an icon's
+// 16px and its 8px gap, so the label lines up with text after an icon.
+func disclosure(c *ui.Context, label string, open *bool, fn func()) ui.Element {
+	p := paletteOf(c.Theme())
+	return ui.Column(c).Shrink(0).Children(func() {
+		parts := ui.CollapsibleBase(c, open)
+
+		trigger := parts.Trigger.AlignSelf(ui.Start).Height(20).Gap(8).Radius(4).AlignItems(ui.Center).
+			FocusRing(false).TextColor(p.MutedForeground).Transition(colorTransition)
+		if trigger.Hovered() {
+			trigger.TextColor(p.Foreground)
+		}
+		focusRing(trigger, p, 0)
+		trigger.Children(func() {
+			ui.Icon(c, chevronRightIcon).FontSize(16).Rotate(90 * parts.Progress())
+			ui.Text(c, label).SingleLine()
+		})
+
+		parts.Panel(func() {
+			ui.Column(c).Padding(8, 0, 0).Gap(8).Children(fn)
+		})
+	})
+}
+
 // inlineSelect is shadcn/ui's Select with a trigger that reads as text, as
 // the terminal's title shows a setting: muted, a small chevron after it, a fill
 // while hovered; its popover of options marks the chosen one with a check.
@@ -251,6 +277,7 @@ var (
 	arrowUpIcon        = lucide(`<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>`)
 	checkIcon          = lucide(`<path d="M20 6 9 17l-5-5"/>`)
 	chevronDownIcon    = lucide(`<path d="m6 9 6 6 6-6"/>`)
+	chevronRightIcon   = lucide(`<path d="m9 18 6-6-6-6"/>`)
 	folderOpenIcon     = lucide(`<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>`)
 	infoIcon           = lucide(`<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`)
 	loaderIcon         = lucide(`<path d="M21 12a9 9 0 1 1-6.219-8.56"/>`)
