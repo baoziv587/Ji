@@ -248,27 +248,45 @@ func (a *App) detail(c *ui.Context, s Session, view *sessionView) {
 	a.composer(c.Key("composer:"+s.ID), s, view)
 }
 
+// header is the terminal's title, in one line over a rule: the session,
+// the model and its settings muted after it, then its folder; what gives
+// way first as the window narrows is the folder, then the title. Only the
+// thinking level is chosen here: the rest is the session's.
 func (a *App) header(c *ui.Context, s Session, view *sessionView) {
 	t := c.Theme()
 	p := paletteOf(t)
 	st := view.t.State
-	ui.Row(c).Height(56).Gap(8).Padding(0, 16).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
-			ui.Text(c, titleOf(s)).FontWeight(600).SingleLine()
-			ui.Text(c, shortPath(s.Root)).FontSize(textXS(t)).TextColor(p.MutedForeground).SingleLine().Tooltip(s.Root)
-		})
+	dot := func() ui.Element { return ui.Text(c, "·").TextColor(p.MutedForeground).Shrink(0) }
+	// As tall as the sidebar's own header, so the two read as one bar
+	ui.Row(c).Height(48).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+		ui.Text(c, titleOf(s)).FontWeight(600).SingleLine().Shrink(1)
 		if st.Model != "" {
-			badge(c, st.Model, variantOutline).Tooltip("Model")
-		}
-		if st.Fast {
-			badge(c, "fast", variantSecondary).Tooltip("OpenAI's priority tier, at about 2x the usage: /fast off")
+			dot()
+			ui.Text(c, st.Model).SingleLine().Shrink(1).Tooltip("Model")
 		}
 		if len(st.ThinkingLevels) > 0 {
+			dot()
 			level := st.Thinking
-			if selectMenu(c, &level, st.ThinkingLevels, s.Archived).Label("Thinking").Tooltip("Thinking level").Changed() {
+			// Pulled in by its padding, so its text keeps the dots' spacing
+			if inlineSelect(c, &level, st.ThinkingLevels, s.Archived).Margin(0, -2, 0, -6).Label("Thinking").Tooltip("Thinking level").Changed() {
 				a.think(s.ID, view, level)
 			}
 		}
+		if st.Fast {
+			dot()
+			ui.Text(c, "fast").TextColor(p.MutedForeground).Shrink(0).Tooltip("OpenAI's priority tier, at about 2x the usage: /fast off")
+		}
+		// The folder shrinks far faster than the rest, so it gives way before
+		// they are cut; and as the terminal drops it whole, it hides while the
+		// last frame had no room for all of it, rather than show a stub
+		before := dot()
+		root := shortPath(s.Root)
+		folder := ui.Text(c, root).TextColor(p.MutedForeground).SingleLine().Shrink(1000).Tooltip(s.Root)
+		if full, _ := c.MeasureText(0, ui.Span{Text: root, Size: t.FontSize}); folder.Bounds().W+0.5 < full {
+			before.Opacity(0)
+			folder.Opacity(0)
+		}
+		ui.Box(c).Grow(1).MinWidth(8)
 		if s.Archived {
 			if button(c, "Unarchive", buttonStyle{variant: variantOutline, size: sizeSmall, icon: archiveRestoreIcon}).Clicked() {
 				a.unarchive(s.ID)
@@ -276,11 +294,11 @@ func (a *App) header(c *ui.Context, s Session, view *sessionView) {
 			return
 		}
 		busy := st.Replying || len(st.Asking) > 0
-		archive := button(c, "Archive", buttonStyle{variant: variantGhost, size: sizeSmall, icon: archiveIcon, disabled: busy})
+		archive := button(c, "", buttonStyle{variant: variantGhost, size: sizeIconSmall, icon: archiveIcon, disabled: busy}).Label("Archive")
 		if busy {
 			archive.Tooltip("Stop the reply before archiving the session")
 		} else {
-			archive.Tooltip("Move to Archived; nothing is deleted")
+			archive.Tooltip("Archive: move to Archived; nothing is deleted")
 		}
 		if archive.Clicked() {
 			a.archive(s.ID, true)
