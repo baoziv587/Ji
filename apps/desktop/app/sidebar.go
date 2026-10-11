@@ -65,10 +65,14 @@ func (a *App) sidebar(c *ui.Context) {
 		}
 
 		ui.Row(c).Gap(6).Padding(8, 10, 10).Justify(ui.End).Children(func() {
-			if a.ChooseFolder != nil && components.Button(c, "Open Folder…", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.FolderOpen}).
-				Tooltip("Start a session in another folder (⌘O)").Grow(1).Clicked() {
-				a.NewSessionInFolder()
+			if a.ChooseFolder != nil {
+				open := components.Button(c, "Open Folder…", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.FolderOpen}).
+					Tooltip("Start a session in another folder (⌘O)").Grow(1)
+				if open.Clicked() {
+					a.NewSessionInFolder()
+				}
 			}
+
 			gear := components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Settings}).
 				Label("Settings").Tooltip("Settings (⌘,)")
 			if a.settingsOpen {

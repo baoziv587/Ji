@@ -24,6 +24,10 @@ colors:
   success: '#0E7C66'
   thinking: '#597059'
   warning: '#8B651E'
+  code-keyword: '#3D6C3D'
+  code-string: '#7E5D1D'
+  code-number: '#915140'
+  code-type: '#166989'
   background-dark: '#1C2A1F'
   foreground-dark: '#EAE5DF'
   card-dark: '#2B382C'
@@ -46,6 +50,10 @@ colors:
   success-dark: '#6DC9AC'
   thinking-dark: '#A0B9A0'
   warning-dark: '#DDB06F'
+  code-keyword-dark: '#92BF91'
+  code-string-dark: '#CCAC76'
+  code-number-dark: '#DF9F8F'
+  code-type-dark: '#7ABBDA'
 typography:
   headline:
     fontFamily: 'SF Pro Text, -apple-system, system-ui, sans-serif'
@@ -154,15 +162,25 @@ components:
     rounded: '{rounded.lg}'
     padding: '0 8px'
     height: '32px'
-  tool-panel:
+  work-line:
+    textColor: '{colors.muted-foreground}'
+    rounded: '{rounded.md}'
+    padding: '0 8px'
+    height: '28px'
+  step-row:
+    typography: '{typography.figures}'
+    rounded: '{rounded.md}'
+    padding: '0 8px'
+    height: '26px'
+  inspector:
     backgroundColor: '{colors.card}'
-    rounded: '{rounded.lg}'
-    padding: '10px 14px'
+    width: '400px'
   code-block:
     backgroundColor: '{colors.muted}'
     typography: '{typography.figures}'
     rounded: '{rounded.lg}'
-    padding: '8px 12px'
+    padding: '0 12px 10px'
+    header-height: '32px'
   select-item:
     textColor: '{colors.foreground}'
     rounded: '{rounded.md}'
@@ -196,7 +214,7 @@ A cool graphite neutral ramp with seven semantic hues, each tuned per appearance
 
 ### Primary
 
-- **Console Blue** (`primary` / `primary-dark`): the brand. Primary buttons (Yes, Send answer), the focus ring and composer focus, text selection (30% alpha), the running spinner in the sidebar, tool rows and status line, and toast actions. The selected sidebar row sits on its blue-tinted fill (`sidebar-accent`).
+- **Console Blue** (`primary` / `primary-dark`): the brand. Primary buttons (Yes, Send answer), the focus ring and composer focus, text selection (30% alpha), the running spinner in the sidebar, work lines and status line, the inspected step's tint (14% alpha), and toast actions. The selected sidebar row sits on its blue-tinted fill (`sidebar-accent`).
 
 ### Semantic hues
 
@@ -207,11 +225,15 @@ A cool graphite neutral ramp with seven semantic hues, each tuned per appearance
 - **Caution Amber** (`warning` / `warning-dark`): less-careful approval modes (anything but `ask`), what a yes has allowed, context filling past 70%, Warning notices.
 - **Queue Cyan** (`info` / `info-dark`): the count of steers queued for delivery.
 
+### Code
+
+Code in a well is colored as it reads, the one place hue names no state: **Code Keyword** (`code-keyword`, the brand's own hue), **Code String** (`code-string`), **Code Number** (`code-number`, numbers, literals and constants) and **Code Type** (`code-type`, types, builtins and attributes), three hues apart from the brand and from each other, each 4.5:1 or more on the well, the card and the ground. Comments are quiet ink, punctuation halfway to it, the rest ink. Each scheme tunes its own four, never violet.
+
 ### Neutral
 
 - **Graphite Ground** (`background`): the conversation canvas; cool off-white `#F7F8FA` in light, near-black graphite in dark.
 - **Sidebar Panel** (`sidebar`): the session list, one step off the ground.
-- **Raised Panel** (`card`, `popover`): tool rows, the approval panel, the composer, inputs, menus and toasts.
+- **Raised Panel** (`card`, `popover`): the inspector, the approval panel, the composer, inputs, menus and toasts.
 - **Secondary Fill** (`secondary`): user messages and secondary buttons.
 - **Muted Well** (`muted`): code and diff wells, the empty-state tile; in dark it sits below the ground, a recessed well.
 - **Hover Fill** (`accent`): hover on ghost buttons, triggers and menu items; Kbd caps.
@@ -227,7 +249,7 @@ A cool graphite neutral ramp with seven semantic hues, each tuned per appearance
 
 **The Tinted State Rule.** State tags are the state's own colour as text, on a 10% fill of it, inside a 45% seam of it; never a solid fill.
 
-**The Legible Diff Rule.** Diff lines sit on a 12% band of their hue; in light mode the line's text mixes 30% toward the foreground and the band drops to 60% of that strength so the text holds 4.5:1.
+**The Legible Diff Rule.** Diff lines sit on a 12% band of their hue, their sign in it and their code in its colors; in light mode the band drops to 60% of that strength. Where a changed line differs from the one it replaced, that part sits on a band 2.5 times as strong.
 
 ## Typography
 
@@ -253,13 +275,13 @@ A cool graphite neutral ramp with seven semantic hues, each tuned per appearance
 
 ## Layout
 
-Two panes: a sidebar of sessions grouped by project folder (48px header row, 32px session rows padded 8px, sections collapsible) and the session pane (48px header with a bottom seam carrying title, model, thinking select and folder separated by middle dots). The conversation, the approval panel and the composer share one centred column, max 768px, with user messages right-aligned at up to 80% of it. Below the composer sit two 20px/16px lines: the status line (activity, mode, queue, menu position, then right-aligned key hints) and the usage line.
+Two panes: a sidebar of sessions grouped by project folder (48px header row, 32px session rows padded 8px, sections collapsible) and the session pane (48px header with a bottom seam carrying title, model, thinking select and folder separated by middle dots). The conversation, the approval panel and the composer share one centred column, max 768px, with user messages right-aligned at up to 80% of it. A step chosen opens the inspector at the right (400px by default, 320px at least, dragged wider from its edge); with less than 440px left for the conversation it covers the conversation instead, with a back button. Below the composer sit two 20px/16px lines: the status line (activity, mode, queue, menu position, then right-aligned key hints) and the usage line.
 
-Spacing runs on a 4px unit; recurring steps are 4, 6, 8, 12, 16 and 24 (empty states pad 48 with a 24 gap). The approval panel pads 16 with a 12 gap; tool rows pad 10x14.
+Spacing runs on a 4px unit; recurring steps are 4, 6, 8, 12, 16 and 24 (empty states pad 48 with a 24 gap). The approval panel pads 16 with a 12 gap; work lines and step rows pad 0x8, pulled out by 8 so their text keeps the column's edge.
 
 ## Elevation & Depth
 
-Flat by default. Depth is conveyed by three tonal steps (ground, sidebar panel, raised panel; dark mode adds a recessed muted well below the ground) and by 1px seams. Controls, panels, tool rows and the approval panel carry no shadow. Floating layers, and only those, keep a soft offset shadow so they lift off the content they overlay.
+Flat by default. Depth is conveyed by three tonal steps (ground, sidebar panel, raised panel; dark mode adds a recessed muted well below the ground) and by 1px seams. Controls, panels, work lines and the approval panel carry no shadow. Floating layers, and only those, keep a soft offset shadow so they lift off the content they overlay.
 
 ### Shadow Vocabulary
 
@@ -296,10 +318,14 @@ Quiet, compact, shadcn anatomy.
 
 ### Cards / Containers
 
-- **Tool row:** raised panel, 1px seam, 8px radius, 10x14 padding; status glyph (blue spinner, green check, red X), SF Mono name and args, right-aligned tabular duration; Details disclosure underneath.
+- **Work line:** the thinking and calls between two stretches of the reply fold into one 28px line, no panel: state glyph (blue spinner, waiting spinner while an answer is awaited, green check, red X), what the work did in quiet ink ("Thought, searched for "onSubmit", read 2 files"), tabular duration, a chevron that turns as it opens; accent fill on hover. While it runs, the line says what runs now (SF Mono name and target, or "Thinking" in the thinking tint with its last words) and counts the steps done.
+- **Step rows:** the work open, a 26px row a step on a thread: a 1px line in quiet ink at 30% that stops short of each 5px mark (green done, red failed, quiet stopped, thinking tint, a 12px spinner while running); SF Mono 11px name at 500 and target, edits' +/− counts, tabular duration. The step in the inspector sits on the brand at 14%.
+- **Outcome lines:** under the work line, open or closed, the files it changed (pencil, SF Mono path, green +n, red −n) and the calls that failed (red X, name, the output's first line); a click shows the step.
+- **Inspector:** raised panel at the right with a 1px seam; a frosted 48px bar with the step's state, SF Mono name, duration, "3 of 9", previous and next, copy (a green check for 1.5s once copied) and close. Under it the subject in SF Mono 13px, then 11px/500 headings (Input, Changes, Output, Error) over muted wells of numbered lines in color (a read in its file's language, numbered from where it started; the input as JSON; a command as shell), an edit's diff on its bands; thinking reads at body size.
 - **Approval / question panel:** raised panel, 16px padding, seamed in waiting orange at 70%, an 8px waiting dot before the title; the only panel in that colour.
 - **User message:** secondary fill, 1px seam, 8x12 padding, right-aligned.
-- **Code well:** muted fill, 8x12 padding, SF Mono 11px.
+- **Code well:** muted fill, SF Mono 11px at 1.5 line height, 12px sides. In the reply, a fenced block has a 32px head with its language in quiet ink and a quiet Copy (a green check for 1.5s once copied); its lines take their colors as each ends while the reply streams in.
+- **Reply text:** the reply and the thinking read as Markdown (goldmark, with GitHub's tables, task lists and strikethrough) at body size and 1.625 line height, 12px between blocks. Headings at 600 (17px, 15px, then body size) with 24px (20px from the third level) above and 8px below. List items hang from a 20px gutter of quiet bullets (•, ◦, ▪ by depth) or tabular numbers, 4px apart in a tight list and 8px under the line that leads in; a task shows a 14px box, filled with the brand and a check once done. A quote has a 2px seam-coloured bar 12px before its text in quiet ink. Inline code is SF Mono 1px under the body on the muted fill; a link is in the brand and opens in the browser; a table sits in a 1px seam with its head on the muted fill, its columns only as wide as they need. A line that may still turn into a fence, heading, item, rule or table row waits until it ends, so marks never flash as text. Tool output is never Markdown: it is shown as it came.
 
 ### Inputs / Fields
 
@@ -315,6 +341,14 @@ Quiet, compact, shadcn anatomy.
 ### Disclosure
 
 Muted trigger, 16px chevron rotating 90 degrees as it opens, hover to foreground; tinted with the thinking token only for Thinking.
+
+### Motion
+
+Things come to rest slowly: ease-out-expo (`1 - 2^(-10t)`), never a bounce, and none of it while the system asks for less motion.
+
+- **Opening the work:** the steps grow into view over 200ms, each row a moment after the one before (200ms + 28ms a row, from 4px above), and what is below makes way as they do.
+- **What runs now:** each step's name rises 6px into the line as the last one rises away (260ms); the spinner gives way to the check the same way.
+- **The inspector:** comes in 32px from the right over 320ms as the conversation narrows to make room; another step's lines rise 6px into it (240ms). It keeps up with its edge while dragged.
 
 ## Do's and Don'ts
 

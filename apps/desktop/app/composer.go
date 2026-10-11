@@ -47,6 +47,10 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 				// The menu's keys, Enter and Shift+Tab, before the text area takes them; Shift+Enter is left to it
 				area := ui.TextAreaBase(c.Key("draft"), &view.draft).Lines(2, 8).Placeholder(placeholder).Label("Message").AutoFocus().Padding(4, 4, 0).
 					HandleInput(func(ev ui.InputEvent) bool { return a.composerKey(s, view, ev) })
+				if view.refocus {
+					view.refocus = false
+					area.Focus()
+				}
 				if view.menu.ToEnd {
 					view.menu.ToEnd = false
 					area.SetTextSelection(runeCount(view.draft), runeCount(view.draft))
@@ -72,8 +76,8 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))
 			}
 
-			// Esc closes the menu first
-			if st.Replying && len(entries) == 0 && c.Shortcut(0, ui.KeyEscape) {
+			// Esc closes the menu and the inspector first
+			if st.Replying && len(entries) == 0 && view.t.Inspected == nil && c.Shortcut(0, ui.KeyEscape) {
 				a.stop(s.ID)
 			}
 			// Over the conversation, as wide as the input

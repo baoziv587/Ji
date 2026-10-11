@@ -113,24 +113,25 @@ func (a *App) modes(c *ui.Context) {
 	p := components.PaletteOf(t)
 	ui.RadioGroup(c, func() {
 		for _, m := range appearances {
-			s := ui.RadioBase(c, &a.Settings.Appearance, m.value).Height(30).Padding(0, 10).Gap(6).Radius(t.Radius - 2).AlignItems(ui.Center).
-				FocusRing(false).Transition(components.ColorTransition).Label(m.label)
+			tab := ui.RadioBase(c, &a.Settings.Appearance, m.value).Label(m.label).
+				Height(30).Padding(0, 10).Gap(6).Radius(t.Radius - 2).AlignItems(ui.Center).
+				FocusRing(false).Transition(components.ColorTransition)
 
 			chosen := a.Settings.Appearance == m.value
 			color := p.MutedForeground
 			switch {
 			case chosen && t.Dark:
-				s.Background(p.Input.Alpha(0.3)).Border(1, p.Input)
+				tab.Background(p.Input.Alpha(0.3)).Border(1, p.Input)
 				color = p.Foreground
 			case chosen:
-				s.Background(p.Background).Shadow(0, 1, 3, 0, ui.Oklch(0, 0, 0).Alpha(0.1))
+				tab.Background(p.Background).Shadow(0, 1, 3, 0, ui.Oklch(0, 0, 0).Alpha(0.1))
 				color = p.Foreground
-			case s.Hovered():
+			case tab.Hovered():
 				color = p.Foreground
 			}
-			components.FocusRing(s, p, 0)
+			components.FocusRing(tab, p, 0)
 
-			s.Children(func() {
+			tab.Children(func() {
 				ui.Icon(c, m.icon).FontSize(14).TextColor(color)
 				ui.Text(c, m.label).FontWeight(500).TextColor(color).SingleLine()
 			})

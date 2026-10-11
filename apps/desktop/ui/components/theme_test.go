@@ -116,3 +116,38 @@ func oklch(c ui.Color) (lightness, chroma, hue float64) {
 	hue = math.Mod(math.Atan2(bb, a)*180/math.Pi+360, 360)
 	return lightness, math.Hypot(a, bb), hue
 }
+
+// Code reads on every surface it is drawn on: its colors at 4.5:1 at least
+// against the wells, the cards and the ground.
+func TestCodeColorsRead(t *testing.T) {
+	for _, s := range Schemes {
+		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
+			for name, c := range map[string]ui.Color{"CodeKeyword": p.CodeKeyword, "CodeString": p.CodeString, "CodeNumber": p.CodeNumber, "CodeType": p.CodeType} {
+				for ground, g := range map[string]ui.Color{"Muted": p.Muted, "Card": p.Card, "Background": p.Background} {
+					if r := contrast(c, g); r < 4.5 {
+						t.Errorf("%s %s %s on %s: %.2f:1, at least 4.5:1", s.Name, mode, name, ground, r)
+					}
+				}
+			}
+		}
+	}
+}
+
+// contrast is WCAG's contrast ratio of a and b.
+func contrast(a, b ui.Color) float64 {
+	luminance := func(c ui.Color) float64 {
+		linear := func(v uint8) float64 {
+			x := float64(v) / 255
+			if x <= 0.04045 {
+				return x / 12.92
+			}
+			return math.Pow((x+0.055)/1.055, 2.4)
+		}
+		return 0.2126*linear(c.R) + 0.7152*linear(c.G) + 0.0722*linear(c.B)
+	}
+	hi, lo := luminance(a), luminance(b)
+	if hi < lo {
+		hi, lo = lo, hi
+	}
+	return (hi + 0.05) / (lo + 0.05)
+}

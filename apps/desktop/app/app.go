@@ -14,6 +14,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
+	"desktop/syntax"
 	"desktop/ui/components"
 )
 
@@ -40,6 +41,10 @@ type App struct {
 	selected    string
 	views       map[string]*sessionView
 	SidebarSize float32
+	// How wide the inspector is, beside the conversation, and whether its
+	// edge is being dragged.
+	InspectorSize float32
+	resizing      bool
 	// Whether each folder's section of the sidebar is open, by folder; the
 	// archived section is closed until opened.
 	opened       map[string]*bool
@@ -65,14 +70,17 @@ type toast struct {
 }
 
 func New(service agent.Agent, update func(func())) *App {
+	// Code colored in the background shows as it is
+	syntax.Ready = func() { update(func() {}) }
 	return &App{
-		agent:       service,
-		update:      update,
-		async:       func(fn func()) { go fn() },
-		ctx:         context.Background(),
-		views:       map[string]*sessionView{},
-		opened:      map[string]*bool{},
-		SidebarSize: 260,
+		agent:         service,
+		update:        update,
+		async:         func(fn func()) { go fn() },
+		ctx:           context.Background(),
+		views:         map[string]*sessionView{},
+		opened:        map[string]*bool{},
+		SidebarSize:   260,
+		InspectorSize: 400,
 	}
 }
 

@@ -69,26 +69,18 @@ func TestAskingCutsDetailsIntoLines(t *testing.T) {
 		{Title: "Pick one"},
 	}})
 	want := []DiffLine{
-		{"--- a.go", DiffMeta}, {"+++ a.go", DiffMeta}, {"@@ -1 +1 @@", DiffMeta},
-		{"-old", DiffRemoved}, {"+new", DiffAdded}, {" same", DiffPlain},
+		{Text: "--- a.go", Kind: DiffMeta}, {Text: "+++ a.go", Kind: DiffMeta}, {Text: "@@ -1 +1 @@", Kind: DiffMeta},
+		{Text: "-old", Kind: DiffRemoved}, {Text: "+new", Kind: DiffAdded}, {Text: " same", Kind: DiffPlain},
 	}
 	details := tr.Asking.Details
-	if len(details) != 2 || !reflect.DeepEqual(details[0], want) || details[1] != nil {
-		t.Errorf("details %+v", details)
+	if len(details) != 2 || details[1] != nil {
+		t.Fatalf("details %+v", details)
 	}
-}
-
-func TestPiecesStayAsTextGrows(t *testing.T) {
-	line := strings.Repeat("x", 300) + "\n"
-	text := strings.Repeat(line, 40)
-	before := pieces(text)
-	after := pieces(text + "more\nand more")
-	if len(before) < 4 || strings.Join(before, "\n") != text || strings.Join(after, "\n") != text+"more\nand more" {
-		t.Fatalf("pieces do not make the text: %d", len(before))
+	var got []DiffLine
+	for _, line := range details[0] {
+		got = append(got, DiffLine{Text: line.Text, Kind: line.Kind})
 	}
-	for i := range before[:len(before)-1] {
-		if before[i] != after[i] {
-			t.Fatalf("piece %d changed as the text grew", i)
-		}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("details %+v", got)
 	}
 }

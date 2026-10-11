@@ -1,12 +1,11 @@
 // Package conversation is a session's conversation: built from the
-// service's events (logic.go), and drawn (view.go) as the messages, the
-// reply's text and thinking, the calls of tools and the notices, in a
-// column as wide as it reads well, in the middle of the window.
+// service's events (logic.go, work.go), and drawn (view.go) as the
+// messages, the reply's text, the work between it folded into a line each
+// (work_view.go) and the notices, in a column as wide as it reads well, in
+// the middle of the window; and a step of the work whole (inspect.go).
 package conversation
 
 import (
-	"strings"
-
 	"github.com/egoist/mygo/ui"
 
 	"desktop/ui/components"
@@ -34,8 +33,14 @@ func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
 	theme := c.Theme()
 	p := components.PaletteOf(theme)
 	list.FollowEnd = true
-	return ui.List(c, list, len(t.Items), func(i int) {
-		Centered(c, 0, func() { item(c, t.Items[i]) })
+	return ui.List(c, list, len(t.Blocks), func(i int) {
+		Centered(c, 0, func() {
+			if b := t.Blocks[i]; b.Work != nil {
+				work(c, t, b.Work)
+			} else {
+				item(c, b.Item)
+			}
+		})
 	}).Grow(1).Gap(16).Padding(24).Children(func() {
 		if len(t.Items) > 0 {
 			return
@@ -72,34 +77,6 @@ func Marker(c *ui.Context, icon func(), text string) ui.Element {
 	})
 }
 
-// streamed draws text that grows as a reply streams in, in pieces that
-// end at a line break: a layout is kept by its whole text, so one Text
-// was shaped again in full for every delta, and only the last piece is.
-func streamed(c *ui.Context, text string, color ui.Color) ui.Element {
-	return ui.Column(c).Selectable().Children(func() {
-		for _, piece := range pieces(strings.TrimSpace(text)) {
-			ui.Text(c, piece).TextColor(color).LineHeight(1.625)
-		}
-	})
-}
-
-// pieces cuts s at the first line break past every pieceSize bytes; a piece
-// once cut stays the same as s grows.
-func pieces(s string) []string {
-	var out []string
-	for len(s) > pieceSize {
-		n := strings.IndexByte(s[pieceSize:], '\n')
-		if n < 0 {
-			break
-		}
-		out = append(out, s[:pieceSize+n])
-		s = s[pieceSize+n+1:]
-	}
-	return append(out, s)
-}
-
-const pieceSize = 2048
-
 func item(c *ui.Context, item *Item) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -115,14 +92,7 @@ func item(c *ui.Context, item *Item) {
 			})
 		})
 	case KindText:
-		streamed(c, item.Text, p.Foreground)
-	case KindThinking:
-		components.Disclosure(c, "Thinking", p.Thinking, &item.Open, func() {
-			// In by the chevron and its gap, 16 + 8, so it sits under the label
-			streamed(c, item.Text, p.MutedForeground).Padding(0, 0, 0, 24)
-		})
-	case KindTool:
-		tool(c, item)
+		reply(c, item)
 	case KindNotice:
 		icon, color, label := (*ui.SVG)(nil), p.MutedForeground, ""
 		switch {

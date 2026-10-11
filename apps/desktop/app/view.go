@@ -23,24 +23,9 @@ const TitleBarHeight = 52
 
 // View builds the window from the app's state.
 func (a *App) View(c *ui.Context) {
-	system := c.Theme()
-	a.systemDark = system.Dark
-
-	if a.Settings.Appearance == "" {
-		a.Settings.Appearance = components.System
-	}
-	scheme := components.SchemeNamed(a.Settings.Theme)
-	a.Settings.Theme = scheme.Name
+	a.applyTheme(c)
 	defer a.saveSettings()
 
-	dark := a.Settings.Appearance.IsDark(system.Dark)
-	if a.theme == nil || a.theme.Dark != dark || a.theme.FontSize != system.FontSize || a.scheme != scheme {
-		a.theme, a.scheme = components.Theme(system, scheme, dark), scheme
-	}
-	components.Use(scheme)
-	c.SetTheme(a.theme)
-
-	p := components.PaletteOf(a.theme)
 	if a.toast != nil {
 		shown := a.toast
 		a.toast = nil
@@ -51,6 +36,8 @@ func (a *App) View(c *ui.Context) {
 		c.Root().Background(ui.Transparent)
 	}
 	toasts(c, a.SidebarSize)
+
+	p := components.PaletteOf(a.theme)
 	ui.Split(c, &a.SidebarSize, func() { a.sidebar(c) }, func() {
 		ui.Column(c).Fill().Background(p.Background).Children(func() {
 			if a.settingsOpen {
@@ -66,6 +53,27 @@ func (a *App) View(c *ui.Context) {
 			a.detail(c, s, view)
 		})
 	}).Fill()
+}
+
+// applyTheme sets the theme the settings choose, made again only when the
+// mode, the scheme or the system's size of text changes.
+func (a *App) applyTheme(c *ui.Context) {
+	system := c.Theme()
+	a.systemDark = system.Dark
+
+	if a.Settings.Appearance == "" {
+		a.Settings.Appearance = components.System
+	}
+	scheme := components.SchemeNamed(a.Settings.Theme)
+	a.Settings.Theme = scheme.Name
+
+	dark := a.Settings.Appearance.IsDark(system.Dark)
+	if a.theme == nil || a.theme.Dark != dark || a.theme.FontSize != system.FontSize || a.scheme != scheme {
+		a.theme, a.scheme = components.Theme(system, scheme, dark), scheme
+	}
+
+	components.Use(scheme)
+	c.SetTheme(a.theme)
 }
 
 // vibrant is whether the window shows the system's material, which is
@@ -115,9 +123,35 @@ func (a *App) noSession(c *ui.Context) {
 
 func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 	view.startAnswering()
-	// The conversation scrolls under the header, which frosts it, and under
-	// the input, of frosted glass, at its end
-	ui.Box(c).Grow(1).MinHeight(0).Children(func() {
+	room := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
+	space := room.Bounds().W
+	room.Children(func() {
+		// It gives the inspector room smoothly, but keeps up with its edge
+		// while dragged
+		conv := a.conversation(c, s, view)
+		if !a.resizing {
+			conv.Transition(ui.ElementTransition{Duration: panelMotion.Duration, Ease: panelMotion.Ease, Size: true})
+		}
+
+		// The step shown is read once its lines in the conversation, which
+		// a click shows or hides, are built
+		step := view.t.Inspected
+		if step == nil {
+			return
+		}
+		// With too little room for both, the inspector covers the
+		// conversation rather than squeeze it
+		covering := space < inspectorMin+conversationMin
+		width := min(a.InspectorSize, max(space-conversationMin, inspectorMin))
+		a.inspector(c, view, step, covering, width)
+	})
+}
+
+// conversation is the session's conversation, which scrolls under the
+// header, which frosts it, and under the input, of frosted glass, at its
+// end.
+func (a *App) conversation(c *ui.Context, s agent.Session, view *sessionView) ui.Element {
+	return ui.Box(c.Key("room:" + s.ID)).Grow(1).MinWidth(0).Children(func() {
 		conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t).Fill().
 			Padding(TitleBarHeight+24, 24, view.bottom+24).ScrollbarInsets(TitleBarHeight, 0, view.bottom)
 		a.header(c, s, view)

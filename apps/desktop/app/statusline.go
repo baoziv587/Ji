@@ -106,6 +106,8 @@ func keysOf(st agent.State, view *sessionView, entries []commands.Entry) [][2]st
 	switch {
 	case len(entries) > 0:
 		return [][2]string{{"↑↓", "choose"}, {"tab", "completes"}, {"↵", "runs"}, {"esc", "closes"}}
+	case view.t.Inspected != nil:
+		return [][2]string{{"↑↓", "steps"}, {"esc", "closes"}}
 	case view.t.Asking != nil && st.Replying:
 		return [][2]string{{"esc", "stops"}}
 	case st.Replying:
