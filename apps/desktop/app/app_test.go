@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"image/png"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +117,26 @@ func TestSidebarGroupsSessionsByFolder(t *testing.T) {
 	}
 }
 
+// A long conversation builds only what is in view, and shows its end as it
+// streams on.
+func TestLongConversationFollowsItsEnd(t *testing.T) {
+	a, _ := testApp()
+	view := a.views["a"]
+	for i := range 300 {
+		a.apply(view, agent.Event{Type: "user", Text: fmt.Sprintf("Question %d", i)})
+	}
+	a.apply(view, agent.Event{Type: "text", Delta: "The newest reply"})
+	tt := ui.NewTester(a.View, 1180, 780)
+	if tt.HasText("Question 0") || !tt.HasText("Question 299") || !tt.HasText("The newest reply") {
+		t.Fatal("the end of the conversation is not in view, or all of it is built")
+	}
+	a.apply(view, agent.Event{Type: "text", Delta: " goes on"})
+	tt.Frame()
+	if !tt.HasText("The newest reply goes on") {
+		t.Fatal("the reply as it streams is not in view")
+	}
+}
+
 func TestChoosingASessionShowsIt(t *testing.T) {
 	a, f := testApp()
 	f.events["c"] = append(f.events["c"], agent.Event{Type: "user", Text: "bump react to 19"}, agent.Event{Type: "text", Delta: "Bumped."})
@@ -187,6 +209,27 @@ func TestApprovalAnswersWithAClick(t *testing.T) {
 
 	if got := f.answers["a/7"]; !reflect.DeepEqual(got, [][]string{{"no"}}) {
 		t.Errorf("answered %v", got)
+	}
+}
+
+// A write's approval shows the whole file, and builds only the lines in
+// view.
+func TestLongApprovalBuildsWhatIsInView(t *testing.T) {
+	a, _ := testApp()
+	view := a.views["a"]
+	lines := make([]string, 2000)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("+line %d", i)
+	}
+	a.apply(view, agent.Event{Type: "ask", ID: "9", Tool: "write", Questions: []agent.Question{{
+		Title:   "Write index.html",
+		Detail:  strings.Join(lines, "\n"),
+		Options: []agent.Option{{Value: "yes", Label: "Yes"}, {Value: "no", Label: "No"}},
+	}}})
+	tt := ui.NewTester(a.View, 1180, 780)
+
+	if !tt.HasText("+line 0") || tt.HasText("+line 1999") || !tt.HasText("Yes") {
+		t.Fatalf("the start of the file is not in view, or all of it is built")
 	}
 }
 

@@ -32,9 +32,16 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 		if label := view.t.Activity; label != "" && (st.Replying || view.t.Asking != nil) {
 			parts = append(parts, func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(1).Children(func() {
-					components.Spinner(c, label).FontSize(12)
+					spin := p.Primary
+					if view.t.Asking != nil {
+						spin = p.Waiting
+					}
+					components.Spinner(c, label, 12, spin)
 					small(label, p.Foreground).Shrink(1)
-					small(fmt.Sprintf("%ds", int(time.Since(view.t.Since).Seconds())), p.MutedForeground)
+					elapsed := time.Since(view.t.Since)
+					figures(c, fmt.Sprintf("%ds", int(elapsed.Seconds())), p.MutedForeground)
+					// The spinner turns without building the view, so the count asks for its next second
+					c.After(time.Second - elapsed%time.Second)
 				})
 			})
 		}
@@ -43,7 +50,7 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 				// Less careful than ask, so it stands out in the warning color
 				color := p.MutedForeground
 				if st.Mode != "ask" {
-					color = t.Warning
+					color = p.Warning
 				}
 				mode := ui.ButtonBase(c).Padding(0, 4).Radius(4).FocusRing(false).Transition(components.ColorTransition).Label("Mode")
 				if !canSwitchMode(s, st) {
@@ -67,13 +74,13 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 			})
 		}
 		if st.Allowed != "" {
-			parts = append(parts, func() { small(st.Allowed, t.Warning).Shrink(1) })
+			parts = append(parts, func() { small(st.Allowed, p.Warning).Shrink(1) })
 		}
 		if st.Queued > 0 {
-			parts = append(parts, func() { small(fmt.Sprintf("%d queued", st.Queued), p.Info) })
+			parts = append(parts, func() { figures(c, fmt.Sprintf("%d queued", st.Queued), p.Info) })
 		}
 		if len(entries) > 0 {
-			parts = append(parts, func() { small(fmt.Sprintf("%d of %d", view.menu.Selected+1, len(entries)), p.MutedForeground) })
+			parts = append(parts, func() { figures(c, fmt.Sprintf("%d of %d", view.menu.Selected+1, len(entries)), p.MutedForeground) })
 		}
 
 		for i, part := range parts {
@@ -130,9 +137,9 @@ func usageLine(c *ui.Context, u agent.UsageReading) {
 			case float64(ctx.Tokens) >= float64(ctx.Limit)*0.9:
 				color = p.Destructive
 			case float64(ctx.Tokens) >= float64(ctx.Limit)*0.7:
-				color = t.Warning
+				color = p.Warning
 			}
-			barText(c, fmt.Sprintf("ctx %s%s/%s", estimate, format.Count(ctx.Tokens), format.Count(ctx.Limit)), color).
+			figures(c, fmt.Sprintf("ctx %s%s/%s", estimate, format.Count(ctx.Tokens), format.Count(ctx.Limit)), color).
 				Tooltip("The history, against where it is compacted")
 		}
 
@@ -144,7 +151,7 @@ func usageLine(c *ui.Context, u agent.UsageReading) {
 		if u.Speed > 0 {
 			parts = append(parts, fmt.Sprintf("%.0f tok/s", u.Speed))
 		}
-		barText(c, strings.Join(parts, " · "), p.MutedForeground).Shrink(1)
+		figures(c, strings.Join(parts, " · "), p.MutedForeground).Shrink(1)
 	})
 }
 
@@ -152,4 +159,10 @@ func usageLine(c *ui.Context, u agent.UsageReading) {
 // tabular so a count that changes does not jiggle what follows it.
 func barText(c *ui.Context, text string, color ui.Color) ui.Element {
 	return ui.Text(c, text).FontSize(components.TextXS(c.Theme())).TextColor(color).FontFeatures("tnum").SingleLine()
+}
+
+// figures is bar text that measures something, in the monospace of the
+// console's numbers.
+func figures(c *ui.Context, text string, color ui.Color) ui.Element {
+	return barText(c, text, color).Font("monospace")
 }

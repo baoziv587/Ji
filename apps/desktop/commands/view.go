@@ -31,7 +31,7 @@ func List(c *ui.Context, entries []Entry, m *State, st agent.State, choose func(
 					m.Selected = i
 				}
 				if i == m.Selected {
-					item.Background(p.Accent).ScrollIntoView()
+					item.Background(p.SidebarAccent).ScrollIntoView()
 				}
 				item.Children(func() { row(c, e, st) })
 				if item.Clicked() {
@@ -50,19 +50,19 @@ func row(c *ui.Context, e Entry, st agent.State) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	if e.Choice != "" {
-		marked(c, e.Choice, e.Chose, p.Foreground, p.Foreground).Grow(1)
+		marked(c, e.Choice, e.Chose, p.Foreground, p.Primary).Grow(1)
 		if inUse(e, st) {
 			ui.Icon(c, icons.Check).FontSize(16).TextColor(p.Foreground).Label("In use")
 		}
 		return
 	}
 	// The name whole, as it is what is typed; what it takes and does give way
-	marked(c, e.Command.Name, e.Name, p.Foreground, p.Foreground).FontWeight(500).Shrink(0)
+	marked(c, e.Command.Name, e.Name, p.Foreground, p.Primary).FontWeight(500).Shrink(0)
 	if e.Command.Arg != "" {
 		ui.Text(c, e.Command.Arg).Font("monospace").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine().Shrink(1)
 	}
 	ui.Box(c).Grow(1).MinWidth(12)
-	marked(c, e.Command.Hint, e.Hint, p.MutedForeground, p.Foreground).FontSize(components.TextXS(t)).Shrink(1)
+	marked(c, e.Command.Hint, e.Hint, p.MutedForeground, p.Primary).FontSize(components.TextXS(t)).Shrink(1)
 }
 
 // inUse says whether a choice is what the session uses now.

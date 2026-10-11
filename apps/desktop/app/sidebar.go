@@ -24,7 +24,7 @@ func (a *App) sidebar(c *ui.Context) {
 		ui.Row(c).Height(48).Padding(0, 10, 0, 18).Gap(8).AlignItems(ui.Center).Children(func() {
 			dot := p.Destructive
 			if a.connected {
-				dot = t.Success
+				dot = p.Success
 			}
 			ui.Box(c).Size(6, 6).Radius(3).Background(dot).Label("Connection").
 				Tooltip(map[bool]string{true: "Connected to the agent", false: "Not connected to the agent"}[a.connected])
@@ -120,17 +120,17 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 	status := a.status(s)
 	item := ui.SidebarItem(c.Key(s.ID), s.ID, nil, titleOf(s)).Height(32).Padding(0, 8).Transition(components.ColorTransition)
 	if s.ID == a.selected {
-		// The active item, focused or not: bg-sidebar-accent font-medium
+		// The active item, focused or not, on the selection's tint
 		item.Background(p.SidebarAccent).TextColor(p.Foreground).FontWeight(500)
 	}
 	item.Children(func() {
 		switch status {
 		case "asking":
-			components.Badge(c, "Approval", components.Default)
+			components.Tag(c, "Approval", p.Waiting)
 		case "running":
-			components.Spinner(c, "Running")
+			components.Spinner(c, "Running", 16, p.Primary)
 		case "failed":
-			components.Badge(c, "Failed", components.Destructive)
+			components.Tag(c, "Failed", p.Destructive)
 		default:
 			ui.Text(c, format.Ago(s.Updated, time.Now())).FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground).FontFeatures("tnum")
 		}

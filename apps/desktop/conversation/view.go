@@ -5,7 +5,6 @@
 package conversation
 
 import (
-	"math"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -28,36 +27,35 @@ func Centered(c *ui.Context, gap float32, fn func()) ui.Element {
 	return column
 }
 
-// View is the conversation, scrolled to its end as it grows unless
-// scrolled up from it.
-func View(c *ui.Context, scroll *ui.ScrollState, t *Transcript) {
+// View is the conversation, kept at its end as it grows unless scrolled up
+// from it. A list, which builds only the items in view: built whole, a long
+// session took longer than a frame for every delta of a reply.
+func View(c *ui.Context, list *ui.ListState, t *Transcript) {
 	theme := c.Theme()
 	p := components.PaletteOf(theme)
-	if scroll.Y >= scroll.MaxY-4 {
-		scroll.Y = math.MaxFloat32
-	}
-	ui.Scroll(c).TrackScroll(scroll).Grow(1).Padding(24).Children(func() {
+	list.FollowEnd = true
+	ui.List(c, list, len(t.Items), func(i int) {
+		Centered(c, 0, func() { item(c, t.Items[i]) })
+	}).Grow(1).Gap(16).Padding(24).Children(func() {
+		if len(t.Items) > 0 {
+			return
+		}
 		Centered(c, 16, func() {
-			if t.State.ID == "" && len(t.Items) == 0 {
-				Marker(c, func() { components.Spinner(c, "Opening") }, "Opening the session…")
+			if t.State.ID == "" {
+				Marker(c, func() { components.Spinner(c, "Opening", 16, ui.Color{}) }, "Opening the session…")
 				return
 			}
-			if len(t.Items) == 0 {
-				ui.Column(c).Center().Gap(12).Padding(80, 0).Children(func() {
-					ui.Text(c, "What should we work on?").FontSize(components.TextLG(theme)).FontWeight(500).LetterSpacing(-0.4)
-					ui.Row(c).Gap(16).Children(func() {
-						for _, hint := range [][2]string{{"↵", "to send"}, {"⇧↵", "for a new line"}, {"/", "for commands"}} {
-							ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-								components.Kbd(c, hint[0])
-								ui.Text(c, hint[1]).FontSize(components.TextXS(theme)).TextColor(p.MutedForeground)
-							})
-						}
-					})
+			ui.Column(c).Center().Gap(12).Padding(80, 0).Children(func() {
+				ui.Text(c, "What should we work on?").FontSize(components.TextLG(theme)).FontWeight(500).LetterSpacing(-0.4)
+				ui.Row(c).Gap(16).Children(func() {
+					for _, hint := range [][2]string{{"↵", "to send"}, {"⇧↵", "for a new line"}, {"/", "for commands"}} {
+						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+							components.Kbd(c, hint[0])
+							ui.Text(c, hint[1]).FontSize(components.TextXS(theme)).TextColor(p.MutedForeground)
+						})
+					}
 				})
-			}
-			for i, it := range t.Items {
-				item(c.Key(i), it)
-			}
+			})
 		})
 	})
 }
@@ -74,14 +72,42 @@ func Marker(c *ui.Context, icon func(), text string) ui.Element {
 	})
 }
 
+// streamed draws text that grows as a reply streams in, in pieces that
+// end at a line break: a layout is kept by its whole text, so one Text
+// was shaped again in full for every delta, and only the last piece is.
+func streamed(c *ui.Context, text string, color ui.Color) ui.Element {
+	return ui.Column(c).Selectable().Children(func() {
+		for _, piece := range pieces(strings.TrimSpace(text)) {
+			ui.Text(c, piece).TextColor(color).LineHeight(1.625)
+		}
+	})
+}
+
+// pieces cuts s at the first line break past every pieceSize bytes; a piece
+// once cut stays the same as s grows.
+func pieces(s string) []string {
+	var out []string
+	for len(s) > pieceSize {
+		n := strings.IndexByte(s[pieceSize:], '\n')
+		if n < 0 {
+			break
+		}
+		out = append(out, s[:pieceSize+n])
+		s = s[pieceSize+n+1:]
+	}
+	return append(out, s)
+}
+
+const pieceSize = 2048
+
 func item(c *ui.Context, item *Item) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	switch item.Kind {
 	case KindUser:
-		// A Bubble, secondary, at the end: rounded-xl px-3 py-2 leading-relaxed
+		// A raised panel at the end: the user's own words
 		ui.Row(c).Justify(ui.End).Children(func() {
-			ui.Column(c).MaxWidth(Width*0.8).Padding(8, 12).Radius(14).Background(p.Secondary).Gap(4).Children(func() {
+			ui.Column(c).MaxWidth(Width*0.8).Padding(8, 12).Radius(t.Radius).Background(p.Secondary).Border(1, p.Border).Gap(4).Children(func() {
 				ui.Text(c, item.Text).Selectable().LineHeight(1.625)
 				if item.Steer {
 					ui.Text(c, "steer").FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground)
@@ -89,12 +115,11 @@ func item(c *ui.Context, item *Item) {
 			})
 		})
 	case KindText:
-		ui.Text(c, strings.TrimSpace(item.Text)).Selectable().LineHeight(1.625)
+		streamed(c, item.Text, p.Foreground)
 	case KindThinking:
-		components.Disclosure(c, "Thinking", &item.Open, func() {
+		components.Disclosure(c, "Thinking", p.Thinking, &item.Open, func() {
 			// In by the chevron and its gap, 16 + 8, so it sits under the label
-			ui.Text(c, strings.TrimSpace(item.Text)).Padding(0, 0, 0, 24).
-				TextColor(p.MutedForeground).LineHeight(1.625).Selectable()
+			streamed(c, item.Text, p.MutedForeground).Padding(0, 0, 0, 24)
 		})
 	case KindTool:
 		tool(c, item)
@@ -104,9 +129,9 @@ func item(c *ui.Context, item *Item) {
 		case item.Failed:
 			icon, color, label = icons.X, p.Destructive, "Failed"
 		case item.Level == "warn":
-			icon, color, label = icons.TriangleAlert, t.Warning, "Warning"
+			icon, color, label = icons.TriangleAlert, p.Warning, "Warning"
 		case item.Level == "success":
-			icon, color, label = icons.Check, t.Success, "Done"
+			icon, color, label = icons.Check, p.Success, "Done"
 		case item.Level == "info":
 			icon, label = icons.Info, "Note"
 		}

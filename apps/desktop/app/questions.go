@@ -10,9 +10,9 @@ import (
 	"desktop/ui/icons"
 )
 
-// questions shows what the session waits on, as shadcn/ui's Card above the
-// input: an approval answers with a click, the model's own questions with
-// picks and a Send.
+// questions shows what the session waits on, a panel above the input: an
+// approval answers with a click, the model's own questions with picks and a
+// Send.
 func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -24,15 +24,18 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 		card := conversation.Centered(c, 12, func() {
 			for i, q := range asking.Questions {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					if i == 0 {
+						ui.Box(c).Size(8, 8).Radius(4).Background(p.Waiting).Shrink(0)
+					}
 					ui.Text(c, q.Title).FontWeight(600).Grow(1).Shrink(1)
 					if asking.Outside && i == 0 {
-						components.Badge(c, "outside the folder", components.Destructive)
+						components.Tag(c, "outside the folder", p.Destructive)
 					}
 				})
 				if q.Detail != "" {
-					ui.Scroll(c).MaxHeight(220).Padding(8, 12).Radius(t.Radius).Background(p.Muted).Children(func() {
-						conversation.Diff(c, q.Detail)
-					})
+					// The lines' bands span the panel, so it pads only above and below
+					conversation.Diff(c.Key(fmt.Sprintf("detail:%s:%d", asking.ID, i)), asking.Details[i]).
+						MaxHeight(220).Padding(8, 0).Radius(t.Radius).Background(p.Muted)
 				}
 				ui.Row(c.Key(i)).Gap(8).Wrap().Children(func() {
 					for _, o := range q.Options {
@@ -43,6 +46,10 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 						case !approval && view.picked(i, o.Value):
 							// A toggle that is on
 							style.Variant, style.Icon = components.Secondary, icons.Check
+						}
+						if approval && o.Value == "no" {
+							// Apart from the yeses, so it is not hit for one
+							ui.Box(c).Grow(1)
 						}
 						b := components.Button(c, o.Label, style)
 						if o.Hint != "" {
@@ -84,7 +91,7 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 				})
 			}
 		})
-		// rounded-xl border bg-card shadow-sm
-		card.Padding(16).Radius(14).Border(1, p.Border).Background(p.Card).Shadow(0, 1, 3, 0, ui.RGBA(0, 0, 0, 0.1))
+		// The one panel in the waiting color: the agent stops here until it is answered
+		card.Padding(16).Radius(t.Radius).Border(1, p.Waiting.Alpha(0.7)).Background(p.Card)
 	})
 }

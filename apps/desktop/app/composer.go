@@ -37,10 +37,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 			entries := view.menu.Entries(st.Commands, view.draft)
 			a.statusLine(c, s, view, entries)
 
-			group := ui.Column(c).Radius(t.Radius).Border(1, p.Input).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05)).Transition(components.ColorTransition)
-			if t.Dark {
-				group.Background(p.Input.Alpha(0.3))
-			}
+			group := ui.Column(c).Radius(t.Radius).Border(1, p.Input).Background(p.Card).Transition(components.ColorTransition)
 			group.Children(func() {
 				placeholder := "Ask anything, or type / for commands"
 				if st.Replying {

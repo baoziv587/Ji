@@ -14,9 +14,9 @@ import (
 // sessionView is what the window keeps of a session it opened: its
 // conversation, and what is typed and picked in it.
 type sessionView struct {
-	t      conversation.Transcript
-	draft  string
-	scroll ui.ScrollState
+	t     conversation.Transcript
+	draft string
+	list  ui.ListState
 	// The menu of commands, open while one is typed.
 	menu commands.State
 	// The answer being put together to the open questions: for each, the

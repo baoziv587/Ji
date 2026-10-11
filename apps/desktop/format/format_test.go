@@ -38,3 +38,20 @@ func TestCountIsShort(t *testing.T) {
 		}
 	}
 }
+
+func TestHeadKeepsWholeCharacters(t *testing.T) {
+	for _, c := range []struct {
+		s    string
+		n    int
+		want string
+	}{
+		{"hello", 10, "hello"},
+		{"hello", 3, "hel"},
+		{"写个页面", 4, "写"},
+		{"写个页面", 6, "写个"},
+	} {
+		if got := Head(c.s, c.n); got != c.want {
+			t.Errorf("Head(%q, %d) = %q, want %q", c.s, c.n, got, c.want)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Count is a count in a few characters, as the terminal writes it: 950,
@@ -53,6 +54,17 @@ func Duration(ms int) string {
 		return fmt.Sprintf("%dms", ms)
 	}
 	return fmt.Sprintf("%.1fs", float64(ms)/1000)
+}
+
+// Head is the first n bytes of s at most, not cutting a character.
+func Head(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 // OneLine is s with its runs of spaces and lines as one space.
