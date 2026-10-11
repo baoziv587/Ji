@@ -61,6 +61,8 @@ func main() {
 		var win *mygo.Window
 		a = app.New(agent.NewClient(url), func(fn func()) { win.Update(fn) })
 		a.SidebarSize = loadLayout().Sidebar
+		a.Settings = loadSettings()
+		a.SaveSettings = saveSettings
 		a.Quit = mygo.App.Quit
 		a.ChooseFolder = func() (string, error) {
 			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
@@ -76,7 +78,21 @@ func main() {
 			return paths[0], nil
 		}
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Role: mygo.RoleAppMenu},
+			{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
+				{Role: mygo.RoleAbout},
+				mygo.Separator(),
+				{Label: "Settings…", Accelerator: "CmdOrCtrl+,", Click: func(*mygo.MenuItem, *mygo.Window) {
+					win.Update(a.OpenSettings)
+				}},
+				mygo.Separator(),
+				{Role: mygo.RoleServices},
+				mygo.Separator(),
+				{Role: mygo.RoleHide},
+				{Role: mygo.RoleHideOthers},
+				{Role: mygo.RoleUnhide},
+				mygo.Separator(),
+				{Role: mygo.RoleQuit},
+			}},
 			{Label: "File", Submenu: []*mygo.MenuItem{
 				{Label: "New Session", Accelerator: "CmdOrCtrl+N", Click: func(*mygo.MenuItem, *mygo.Window) {
 					win.Update(func() { a.NewSession("") })
@@ -122,23 +138,47 @@ func main() {
 	}
 }
 
+func configPath(name string) string {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "Ji Agent", name)
+}
+
+// writeConfig writes v as JSON to the config file of that name, or nothing
+// when it cannot.
+func writeConfig(name string, v any) {
+	path := configPath(name)
+	if path == "" {
+		return
+	}
+	if b, err := json.Marshal(v); err == nil && os.MkdirAll(filepath.Dir(path), 0o755) == nil {
+		_ = os.WriteFile(path, b, 0o644)
+	}
+}
+
+// loadSettings reads the settings kept, the defaults where a file is
+// missing or unreadable.
+func loadSettings() app.Settings {
+	var s app.Settings
+	if b, err := os.ReadFile(configPath("settings.json")); err == nil {
+		_ = json.Unmarshal(b, &s)
+	}
+	return s
+}
+
+func saveSettings(s app.Settings) { writeConfig("settings.json", s) }
+
 // layout is what of the window's arrangement lasts from one run to the next;
 // the window's own frame MyGo keeps (StateKey).
 type layout struct {
 	Sidebar float32 `json:"sidebar"`
 }
 
-func layoutPath() string {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(dir, "Ji Agent", "layout.json")
-}
-
 func loadLayout() layout {
 	l := layout{Sidebar: 260}
-	if b, err := os.ReadFile(layoutPath()); err == nil {
+	if b, err := os.ReadFile(configPath("layout.json")); err == nil {
 		_ = json.Unmarshal(b, &l)
 	}
 	if l.Sidebar < 180 {
@@ -147,15 +187,7 @@ func loadLayout() layout {
 	return l
 }
 
-func saveLayout(l layout) {
-	path := layoutPath()
-	if path == "" {
-		return
-	}
-	if b, err := json.Marshal(l); err == nil && os.MkdirAll(filepath.Dir(path), 0o755) == nil {
-		_ = os.WriteFile(path, b, 0o644)
-	}
-}
+func saveLayout(l layout) { writeConfig("layout.json", l) }
 
 func envOr(name, fallback string) string {
 	if v := os.Getenv(name); v != "" {

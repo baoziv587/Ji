@@ -20,7 +20,7 @@ func (a *App) sidebar(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	// Over the window's material where it shows one, as a macOS sidebar
-	vibrant := c.Vibrancy()
+	vibrant := a.vibrant(c)
 	background := p.Sidebar
 	if vibrant {
 		background = ui.Transparent
@@ -43,7 +43,12 @@ func (a *App) sidebar(c *ui.Context) {
 		})
 
 		groups, archived := a.groups()
-		if ui.Sidebar(c, &a.selected, func() {
+		// None is chosen while the settings show, so that choosing any shows it
+		chosen := a.selected
+		if a.settingsOpen {
+			chosen = ""
+		}
+		if ui.Sidebar(c, &chosen, func() {
 			for _, g := range groups {
 				a.section(c, g)
 			}
@@ -55,17 +60,23 @@ func (a *App) sidebar(c *ui.Context) {
 				})
 			}
 		}).Background(background).Grow(1).Changed() {
-			a.open(a.selected)
+			a.Select(chosen)
 		}
 
-		if a.ChooseFolder != nil {
-			ui.Row(c).Padding(8, 10, 10).Children(func() {
-				if components.Button(c, "Open Folder…", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.FolderOpen}).
-					Tooltip("Start a session in another folder (⌘O)").Grow(1).Clicked() {
-					a.NewSessionInFolder()
-				}
-			})
-		}
+		ui.Row(c).Gap(6).Padding(8, 10, 10).Justify(ui.End).Children(func() {
+			if a.ChooseFolder != nil && components.Button(c, "Open Folder…", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.FolderOpen}).
+				Tooltip("Start a session in another folder (⌘O)").Grow(1).Clicked() {
+				a.NewSessionInFolder()
+			}
+			gear := components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Settings}).
+				Label("Settings").Tooltip("Settings (⌘,)")
+			if a.settingsOpen {
+				gear.Background(p.SidebarAccent)
+			}
+			if gear.Clicked() {
+				a.settingsOpen = !a.settingsOpen
+			}
+		})
 	})
 }
 
@@ -126,11 +137,11 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 	p := components.PaletteOf(t)
 	status := a.status(s)
 	item := ui.SidebarItem(c.Key(s.ID), s.ID, nil, titleOf(s)).Height(32).Padding(0, 8).Transition(components.ColorTransition)
-	if s.ID == a.selected {
+	if s.ID == a.selected && !a.settingsOpen {
 		// The active item, focused or not, on the selection's tint; over the
 		// material, a tint of the brand that lets it show through
 		tint := p.SidebarAccent
-		if c.Vibrancy() {
+		if a.vibrant(c) {
 			tint = p.Primary.Alpha(0.16)
 		}
 		item.Background(tint).TextColor(p.Foreground).FontWeight(500)

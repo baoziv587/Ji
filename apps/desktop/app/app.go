@@ -14,6 +14,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
+	"desktop/ui/components"
 )
 
 // App is the window: the list of sessions, and the one chosen.
@@ -45,8 +46,17 @@ type App struct {
 	archivedOpen bool
 	// A toast to show in the next frame, which only the view can.
 	toast *toast
-	// The theme made for the system's, light or dark, until it changes.
-	theme *ui.Theme
+	// Settings are the person's choices; SaveSettings keeps them once
+	// changed, nil for this run only.
+	Settings     Settings
+	SaveSettings func(Settings)
+	saved        Settings
+	settingsOpen bool
+	// The theme made from the settings and the system's, until either
+	// changes; the system's is dark or not.
+	theme      *ui.Theme
+	scheme     *components.Scheme
+	systemDark bool
 }
 
 type toast struct {
@@ -88,15 +98,21 @@ func (a *App) setList(s agent.Sessions) {
 	if a.selected == "" {
 		for _, session := range s.Sessions {
 			if !session.Archived {
-				a.Select(session.ID)
+				a.show(session.ID)
 				break
 			}
 		}
 	}
 }
 
-// Select shows a session, reading it from the service the first time.
+// Select shows a session, in place of the settings, reading it from the
+// service the first time.
 func (a *App) Select(id string) {
+	a.settingsOpen = false
+	a.show(id)
+}
+
+func (a *App) show(id string) {
 	a.selected = id
 	a.open(id)
 }

@@ -1,0 +1,199 @@
+package app
+
+// The settings, in place of the session: for now how the window looks,
+// light or dark and in which colors. A choice shows at once and is kept.
+
+import (
+	"github.com/egoist/mygo/plugins/glass"
+	"github.com/egoist/mygo/ui"
+
+	"desktop/ui/components"
+	"desktop/ui/icons"
+)
+
+// Settings are what the person chooses, kept from one run to the next.
+type Settings struct {
+	Appearance components.Appearance `json:"appearance,omitempty"`
+	Theme      string                `json:"theme,omitempty"`
+}
+
+var appearances = []struct {
+	value components.Appearance
+	label string
+	icon  *ui.SVG
+}{
+	{components.System, "System", icons.Monitor},
+	{components.Light, "Light", icons.Sun},
+	{components.Dark, "Dark", icons.Moon},
+}
+
+func (a *App) OpenSettings() { a.settingsOpen = true }
+
+// saveSettings hands the settings on to be kept when they have changed.
+func (a *App) saveSettings() {
+	if a.Settings == a.saved {
+		return
+	}
+
+	a.saved = a.Settings
+	if a.SaveSettings != nil {
+		a.SaveSettings(a.Settings)
+	}
+}
+
+func (a *App) settings(c *ui.Context) {
+	if c.Shortcut(0, ui.KeyEscape) {
+		a.settingsOpen = false
+	}
+
+	ui.Box(c).Grow(1).MinHeight(0).Children(func() {
+		ui.Scroll(c).Fill().Padding(TitleBarHeight+32, 24, 48).ScrollbarInsets(TitleBarHeight, 0, 0).Children(func() {
+			ui.Row(c).Justify(ui.Center).Children(func() {
+				ui.Column(c).Grow(1).MaxWidth(636).Gap(24).Children(func() { a.appearance(c) })
+			})
+		})
+
+		ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).
+			Material(glass.ScrollEdge{Hard: true}).DragWindow().Children(func() {
+			ui.Text(c, "Settings").FontWeight(600).Grow(1)
+			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.X}).
+				Label("Close Settings").Tooltip("Close (Esc)").Clicked() {
+				a.settingsOpen = false
+			}
+		})
+	})
+}
+
+func (a *App) appearance(c *ui.Context) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	ui.Text(c, "Appearance").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
+
+	ui.Row(c).Gap(16).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, "Mode").FontWeight(500)
+			ui.Text(c, modeNote(a.Settings.Appearance, a.systemDark)).TextColor(p.MutedForeground)
+		})
+		a.modes(c)
+	})
+
+	ui.Box(c).Height(1).Background(p.Border)
+
+	ui.Column(c).Gap(12).Children(func() {
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Text(c, "Color theme").FontWeight(500)
+			ui.Text(c, "Each comes in light and dark; shown here as the window is now.").TextColor(p.MutedForeground)
+		})
+		ui.RadioGroup(c, func() {
+			for _, s := range components.Schemes {
+				a.schemeCard(c, s)
+			}
+		}).Row().Wrap().Gap(12).Label("Color theme")
+	})
+}
+
+func modeNote(mode components.Appearance, systemDark bool) string {
+	switch mode {
+	case components.Light:
+		return "Always light, whatever macOS uses."
+	case components.Dark:
+		return "Always dark, whatever macOS uses."
+	}
+
+	if systemDark {
+		return "Follows macOS, which is dark now."
+	}
+	return "Follows macOS, which is light now."
+}
+
+// modes is the choice of appearance, as shadcn/ui's Tabs list: the chosen
+// one raised on a muted track.
+func (a *App) modes(c *ui.Context) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	ui.RadioGroup(c, func() {
+		for _, m := range appearances {
+			s := ui.RadioBase(c, &a.Settings.Appearance, m.value).Height(30).Padding(0, 10).Gap(6).Radius(t.Radius - 2).AlignItems(ui.Center).
+				FocusRing(false).Transition(components.ColorTransition).Label(m.label)
+
+			chosen := a.Settings.Appearance == m.value
+			color := p.MutedForeground
+			switch {
+			case chosen && t.Dark:
+				s.Background(p.Input.Alpha(0.3)).Border(1, p.Input)
+				color = p.Foreground
+			case chosen:
+				s.Background(p.Background).Shadow(0, 1, 3, 0, ui.Oklch(0, 0, 0).Alpha(0.1))
+				color = p.Foreground
+			case s.Hovered():
+				color = p.Foreground
+			}
+			components.FocusRing(s, p, 0)
+
+			s.Children(func() {
+				ui.Icon(c, m.icon).FontSize(14).TextColor(color)
+				ui.Text(c, m.label).FontWeight(500).TextColor(color).SingleLine()
+			})
+		}
+	}).Row().Shrink(0).Height(36).Padding(3).Gap(2).Radius(t.Radius).Background(p.Muted).Label("Mode")
+}
+
+// schemeCard is a scheme to choose, shown as a small window in its
+// colors: the sidebar with a session chosen, a message, a reply and the
+// input with its button.
+func (a *App) schemeCard(c *ui.Context, s *components.Scheme) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	q := s.Of(t.Dark)
+	chosen := components.SchemeNamed(a.Settings.Theme) == s
+
+	card := ui.RadioBase(c.Key(s.Name), &a.Settings.Theme, s.Name).Column().Width(150).Gap(8).Padding(4).Radius(12).
+		FocusRing(false).Transition(components.ColorTransition).Label(s.Name + " theme")
+
+	edge := p.Border
+	switch {
+	case chosen:
+		edge = p.Primary
+	case card.Hovered():
+		edge = p.MutedForeground.Alpha(0.5)
+	}
+	components.FocusRing(card, p, 0)
+
+	card.Children(func() {
+		window := ui.Row(c).Height(84).Radius(8).Clip().Background(q.Background).Border(1, edge).Transition(components.ColorTransition)
+		if chosen {
+			window.Shadow(0, 0, 0, 1, p.Primary)
+		}
+		window.Children(func() {
+			line := func(w float32, color ui.Color) {
+				ui.Box(c).Width(w).Height(4).Radius(2).Background(color).Shrink(0)
+			}
+
+			ui.Column(c).Width(38).Shrink(0).Padding(10, 5).Gap(6).Background(q.Sidebar).BorderWidth(0, 1, 0, 0).BorderColor(q.SidebarBorder).Children(func() {
+				line(18, q.MutedForeground.Alpha(0.45))
+				ui.Row(c).Height(10).Padding(0, 3).Radius(3).Background(q.SidebarAccent).AlignItems(ui.Center).Children(func() {
+					line(14, q.Foreground.Alpha(0.6))
+				})
+				line(22, q.Foreground.Alpha(0.3))
+				line(16, q.Foreground.Alpha(0.3))
+			})
+
+			ui.Column(c).Grow(1).Padding(8, 8, 7).Gap(5).Children(func() {
+				ui.Box(c).AlignSelf(ui.End).Width(44).Height(10).Radius(4).Background(q.Secondary)
+				line(66, q.Foreground.Alpha(0.45))
+				line(48, q.Foreground.Alpha(0.45))
+				ui.Box(c).Grow(1)
+				ui.Row(c).Height(16).Padding(0, 3, 0, 6).Radius(5).Border(1, q.Input).AlignItems(ui.Center).Justify(ui.End).Children(func() {
+					ui.Box(c).Size(10, 10).Radius(5).Background(q.Primary)
+				})
+			})
+		})
+
+		ui.Row(c).Gap(6).Padding(0, 2).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, s.Name).FontWeight(500).Grow(1).SingleLine()
+			if chosen {
+				ui.Icon(c, icons.Check).FontSize(14).TextColor(p.Primary)
+			}
+		})
+	})
+}

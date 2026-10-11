@@ -115,7 +115,7 @@ func Button(c *ui.Context, label string, style ButtonStyle) ui.Element {
 }
 
 // FocusRing draws shadcn/ui's ring of the keyboard focus around e: its
-// border in the ring color, and 3px of it at half strength outside.
+// border in the ring color, and 3px of it at a quarter strength outside.
 func FocusRing(e ui.Element, p *Palette, width float32) {
 	if !e.FocusVisible() {
 		return
@@ -123,5 +123,5 @@ func FocusRing(e ui.Element, p *Palette, width float32) {
 	if width > 0 {
 		e.Border(width, p.Ring)
 	}
-	e.Shadow(0, 0, 0, 3, p.Ring.Alpha(0.5))
+	e.Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))
 }

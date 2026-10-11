@@ -15,7 +15,7 @@ func TextInput(c *ui.Context, value *string) ui.Element {
 		input = ui.TextInputBase(c, value).Grow(1)
 	})
 	if input.Focused() {
-		box.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.5))
+		box.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))
 	}
 	return input
 }
