@@ -205,7 +205,7 @@ func (a *App) transparency(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	ui.Column(c).Width(236).Shrink(0).Gap(2).Children(func() {
-		a.sliding = components.Slider(c, &a.Settings.Transparency, transparencySolid, transparencyClear, transparencyDetents[:]...).
+		a.sliding = ui.StepSlider(c, &a.Settings.Transparency, transparencySolid, transparencyClear, transparencyStep).
 			Label("Transparency").Pressed()
 		ui.Row(c).Justify(ui.SpaceBetween).Children(func() {
 			for _, end := range []string{"Solid", "Clear"} {

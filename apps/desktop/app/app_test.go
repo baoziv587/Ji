@@ -590,36 +590,30 @@ func TestSnapshot(t *testing.T) {
 	}
 }
 
-// The transparency slider snaps to its detents while dragged, and stops
-// anywhere between; what it sets is kept once it is let go. It reaches
-// the sidebar over the window's material, and, solid, the sidebar is as
-// it is with none.
+// The transparency slider snaps by its step as it is dragged; what it
+// sets is kept once it is let go.
 func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 	a, _ := testApp()
 	var saved []Settings
 	a.SaveSettings = func(s Settings) { saved = append(saved, s) }
 	tt := ui.NewTester(a.View, 1100, 700)
-	tt.SetVibrancy(true)
 	a.OpenSettings()
 	tt.Frame()
 
+	// The knob is 20 wide, its center 10 below the slider's top, which is
+	// 28 tall over the names of its ends
 	solid, _ := tt.Find("Solid")
 	clear, _ := tt.Find("Clear")
-	left, right := solid.X+8, clear.X+clear.W-8
-	y := solid.Y - 2 - 16
+	left, right := solid.X+10, clear.X+clear.W-10
+	y := solid.Y - 2 - 28 + 10
 	along := func(v float32) float32 { return left + (right-left)*v/100 }
 	kept := len(saved)
 
 	tt.Press(along(50), y)
-	tt.Move(along(52), y)
+	tt.Move(along(73), y)
 	tt.Frame()
-	if a.Settings.Transparency != transparencyStandard {
-		t.Errorf("transparency %v: 52 snaps to standard", a.Settings.Transparency)
-	}
-	tt.Move(along(75), y)
-	tt.Frame()
-	if v := a.Settings.Transparency; v < 72 || v > 78 {
-		t.Errorf("transparency %v: it stops between detents", v)
+	if a.Settings.Transparency != 70 {
+		t.Errorf("transparency %v: 73 snaps to 70", a.Settings.Transparency)
 	}
 	if len(saved) != kept {
 		t.Errorf("saved %v while dragging", saved[kept:])
@@ -633,8 +627,8 @@ func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 
 	tt.Key(0, ui.KeyLeft)
 	tt.Frame()
-	if a.Settings.Transparency != 99 {
-		t.Errorf("transparency %v: the arrows move it freely", a.Settings.Transparency)
+	if a.Settings.Transparency != 90 {
+		t.Errorf("transparency %v: the arrows step", a.Settings.Transparency)
 	}
 }
 
