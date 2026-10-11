@@ -90,7 +90,7 @@ Summary: format.OneLine(format.Head(e.Args, 512))
 - **不要用 `Painter.AnimationFrame()`**。它按显示器的最高刷新率要帧（ProMotion 屏上是 120Hz），而每次重绘都要把整个窗口画一遍（遍历所有元素、提交 scene、玻璃材质）。一个 16px 的 Spinner 就能让窗口一直以 120fps 重画，回复进行时主进程 CPU 一直降不下来。所有 Spinner 用同一个时钟对齐到 Tick，同一帧就把它们全部画完。
 - 按秒变化的文本（比如已用时间），用 `c.After(time.Second - elapsed%time.Second)` 在下一秒整点重建一次。不要靠动画顺带刷新。见 [app/statusline.go](../app/statusline.go)。
 - 折叠的 `CollapsibleBase` 不会构建面板内容，不占成本。展开以后才要算它的成本，见第 2 条。
-- **带 `Exit` 的 Transition 让每次重建都重新分配元素**：只要上一帧建过带 Exit 的元素（`components.Rise`、检查器的 `panelMotion`），mygo 就会把元素 arena 和备用 arena 对调，`finish` 再把备用的那块裁到只剩一个 chunk，下一帧只好重新分配。会话区一般 150 多个元素，每次重建约多分配 240KB（`MYGO_FRAME_STATS` 里表现为每帧固定 5 次、共 240KB 的分配）。这是 mygo 的问题，v0.4.2 仍然如此；在应用这边，控制重建的次数（见第 5 条“当前会话也按 Tick 取事件”）就是控制这部分垃圾。
+- **带 `Exit` 的 Transition 让每次重建都重新分配元素**：只要上一帧建过带 Exit 的元素（`components.Rise`、检查器的 `panelMotion`），mygo 就会把元素 arena 和备用 arena 对调，`finish` 再把备用的那块裁到只剩一个 chunk，下一帧只好重新分配。会话区一般 150 多个元素，每次重建约多分配 240KB（`MYGO_FRAME_STATS` 里表现为每帧固定 5 次、共 240KB 的分配）。这是 mygo 的问题，v0.4.2 仍然如此（[egoist/mygo#232](https://github.com/egoist/mygo/issues/232)）；在应用这边，控制重建的次数（见第 5 条“当前会话也按 Tick 取事件”）就是控制这部分垃圾。
 
 ## 5. 不在眼前的东西不要触发重建
 
