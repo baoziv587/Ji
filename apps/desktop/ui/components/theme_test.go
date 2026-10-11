@@ -53,7 +53,7 @@ func TestDarkSchemesStepApart(t *testing.T) {
 	for _, s := range Schemes {
 		v := reflect.ValueOf(s.Dark)
 		lightness := func(name string) float64 {
-			l, _ := oklch(v.FieldByName(name).Interface().(ui.Color))
+			l, _, _ := oklch(v.FieldByName(name).Interface().(ui.Color))
 			return l
 		}
 
@@ -74,13 +74,29 @@ func TestDarkSchemesStepApart(t *testing.T) {
 	}
 }
 
+// No color of a scheme is violet: one that is not grey keeps out of hues
+// 280° to 345°, and thinking takes the scheme's own brand hue.
+func TestSchemesHaveNoViolet(t *testing.T) {
+	for _, s := range Schemes {
+		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
+			v := reflect.ValueOf(p)
+			for i := range v.NumField() {
+				_, chroma, hue := oklch(v.Field(i).Interface().(ui.Color))
+				if chroma > 0.02 && hue >= 280 && hue <= 345 {
+					t.Errorf("%s %s %s: hue %.0f° is violet", s.Name, mode, v.Type().Field(i).Name, hue)
+				}
+			}
+		}
+	}
+}
+
 func chroma(c ui.Color) float64 {
-	_, chroma := oklch(c)
+	_, chroma, _ := oklch(c)
 	return chroma
 }
 
-// oklch is the OKLCH lightness and chroma of c.
-func oklch(c ui.Color) (lightness, chroma float64) {
+// oklch is the OKLCH lightness, chroma and hue in degrees of c.
+func oklch(c ui.Color) (lightness, chroma, hue float64) {
 	linear := func(v uint8) float64 {
 		x := float64(v) / 255
 		if x <= 0.04045 {
@@ -97,5 +113,6 @@ func oklch(c ui.Color) (lightness, chroma float64) {
 	lightness = 0.2104542553*l + 0.7936177850*m - 0.0040720468*s
 	a := 1.9779984951*l - 2.4285922050*m + 0.4505937099*s
 	bb := 0.0259040371*l + 0.7827717662*m - 0.8086757660*s
-	return lightness, math.Hypot(a, bb)
+	hue = math.Mod(math.Atan2(bb, a)*180/math.Pi+360, 360)
+	return lightness, math.Hypot(a, bb), hue
 }

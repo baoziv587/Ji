@@ -22,7 +22,7 @@ colors:
   info: '#2C729E'
   waiting: '#A2613F'
   success: '#0E7C66'
-  thinking: '#6C5D9C'
+  thinking: '#597059'
   warning: '#8B651E'
   background-dark: '#1C2A1F'
   foreground-dark: '#EAE5DF'
@@ -44,7 +44,7 @@ colors:
   info-dark: '#83CFFB'
   waiting-dark: '#EDA77F'
   success-dark: '#6DC9AC'
-  thinking-dark: '#BAA3E7'
+  thinking-dark: '#A0B9A0'
   warning-dark: '#DDB06F'
 typography:
   headline:
@@ -203,7 +203,7 @@ A cool graphite neutral ramp with seven semantic hues, each tuned per appearance
 - **Waiting Ember** (`waiting` / `waiting-dark`): only for "waiting for you". The Approval tag on a sidebar row, the 8px dot and 70%-alpha seam of the question/approval panel, and the status-line spinner while an answer is awaited. Nowhere else.
 - **Done Green** (`success` / `success-dark`): a tool call that succeeded (check), the connected dot, Done notices, added diff lines.
 - **Signal Red** (`destructive` / `destructive-dark`): failed tool calls and sessions, connection and request errors, destructive buttons, removed diff lines, context at 90% of its limit, the "outside the folder" tag.
-- **Thought Violet** (`thinking` / `thinking-dark`): the Thinking disclosure label. Only reasoning.
+- **Thought Tint** (`thinking` / `thinking-dark`): the Thinking disclosure label. Only reasoning. The brand's own hue at less than half its chroma, so it follows the scheme and stays quieter than an action; never violet.
 - **Caution Amber** (`warning` / `warning-dark`): less-careful approval modes (anything but `ask`), what a yes has allowed, context filling past 70%, Warning notices.
 - **Queue Cyan** (`info` / `info-dark`): the count of steers queued for delivery.
 
@@ -314,7 +314,7 @@ Quiet, compact, shadcn anatomy.
 
 ### Disclosure
 
-Muted trigger, 16px chevron rotating 90 degrees as it opens, hover to foreground; tinted violet only for Thinking.
+Muted trigger, 16px chevron rotating 90 degrees as it opens, hover to foreground; tinted with the thinking token only for Thinking.
 
 ## Do's and Don'ts
 
@@ -333,4 +333,4 @@ Muted trigger, 16px chevron rotating 90 degrees as it opens, hover to foreground
 - **Don't** put shadows on controls, panels or rows; only popovers, menus and toasts lift.
 - **Don't** follow the macOS accent colour; the brand blue is fixed.
 - **Don't** use a near-black or grey primary; primary actions are brand blue.
-- **Don't** use violet for anything but reasoning, or cyan for anything but queued steers.
+- **Don't** use violet anywhere, or cyan for anything but queued steers.
