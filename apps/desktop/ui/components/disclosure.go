@@ -8,9 +8,10 @@ import (
 
 // Disclosure is shadcn/ui's Collapsible as AI Elements' Reasoning draws
 // it: a muted trigger, its chevron turning as it opens, that a hover brings
-// to the foreground; what fn builds below it. The chevron takes an icon's
-// 16px and its 8px gap, so the label lines up with text after an icon.
-func Disclosure(c *ui.Context, label string, open *bool, fn func()) ui.Element {
+// to the foreground, or its label in tint when that is set; what fn builds
+// below it. The chevron takes an icon's 16px and its 8px gap, so the label
+// lines up with text after an icon.
+func Disclosure(c *ui.Context, label string, tint ui.Color, open *bool, fn func()) ui.Element {
 	p := PaletteOf(c.Theme())
 	return ui.Column(c).Shrink(0).Children(func() {
 		parts := ui.CollapsibleBase(c, open)
@@ -23,7 +24,10 @@ func Disclosure(c *ui.Context, label string, open *bool, fn func()) ui.Element {
 		FocusRing(trigger, p, 0)
 		trigger.Children(func() {
 			ui.Icon(c, icons.ChevronRight).FontSize(16).Rotate(90 * parts.Progress())
-			ui.Text(c, label).SingleLine()
+			l := ui.Text(c, label).SingleLine()
+			if tint.A > 0 {
+				l.TextColor(tint)
+			}
 		})
 
 		parts.Panel(func() {

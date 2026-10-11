@@ -43,8 +43,11 @@ type Item struct {
 // ToolCall is a call the agent made, and how it ended once it has.
 type ToolCall struct {
 	ID, Name, Args, Output string
-	Done, OK               bool
-	MS                     int
+	// Args on one line, cut short: the call's title shows only its start,
+	// and a write's are the whole file.
+	Summary  string
+	Done, OK bool
+	MS       int
 }
 
 // Asking is the questions waiting for the person's answer.
@@ -53,6 +56,43 @@ type Asking struct {
 	Tool      string
 	Outside   bool
 	Questions []agent.Question
+	// Each question's Detail cut into its lines once, as it comes: a
+	// write's is the whole file, too long to cut every frame.
+	Details [][]DiffLine
+}
+
+type DiffKind int
+
+const (
+	DiffPlain DiffKind = iota
+	// A file's name or a hunk's head.
+	DiffMeta
+	DiffAdded
+	DiffRemoved
+)
+
+// DiffLine is a line of a command or a diff, and what it is.
+type DiffLine struct {
+	Text string
+	Kind DiffKind
+}
+
+// diffLines cuts text into its lines, telling added from removed.
+func diffLines(text string) []DiffLine {
+	lines := strings.Split(text, "\n")
+	out := make([]DiffLine, len(lines))
+	for i, line := range lines {
+		out[i].Text = line
+		switch {
+		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"), strings.HasPrefix(line, "@@"):
+			out[i].Kind = DiffMeta
+		case strings.HasPrefix(line, "+"):
+			out[i].Kind = DiffAdded
+		case strings.HasPrefix(line, "-"):
+			out[i].Kind = DiffRemoved
+		}
+	}
+	return out
 }
 
 // Transcript is everything the service said since the last reset.
@@ -84,7 +124,8 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 		t.extend(KindThinking, e.Delta)
 		t.doing("Thinking")
 	case "tool_start":
-		t.add(&Item{Kind: KindTool, Tool: &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args}})
+		call := &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args, Summary: format.OneLine(format.Head(e.Args, 512))}
+		t.add(&Item{Kind: KindTool, Tool: call})
 		if t.running == nil {
 			t.running = map[string]string{}
 		}
@@ -100,7 +141,13 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 		}
 		call.Done, call.OK, call.Output, call.MS = true, e.OK, e.Output, e.MS
 	case "ask":
-		t.Asking = &Asking{ID: e.ID, Tool: e.Tool, Outside: e.Outside, Questions: e.Questions}
+		details := make([][]DiffLine, len(e.Questions))
+		for i, q := range e.Questions {
+			if q.Detail != "" {
+				details[i] = diffLines(q.Detail)
+			}
+		}
+		t.Asking = &Asking{ID: e.ID, Tool: e.Tool, Outside: e.Outside, Questions: e.Questions, Details: details}
 		t.doing("Waiting for your answer")
 	case "ask_closed":
 		if t.Asking != nil && t.Asking.ID == e.ID {

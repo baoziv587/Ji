@@ -82,7 +82,6 @@ func Button(c *ui.Context, label string, style ButtonStyle) ui.Element {
 		if t.Dark {
 			fill, border, hover = p.Input.Alpha(0.3), p.Input, p.Input.Alpha(0.5)
 		}
-		b.Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.05))
 	case Ghost:
 		if t.Dark {
 			hover = p.Accent.Alpha(0.5)

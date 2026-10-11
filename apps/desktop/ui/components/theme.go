@@ -1,12 +1,15 @@
-// Package components draws the window as shadcn/ui (new-york-v4) does: its
-// neutral theme, its tokens as they are there and the theme the widgets of
-// MyGo draw with made from them; and its controls, their variants, sizes and
-// states in the palette's colors, built on the widgets' bases.
+// Package components draws the window's controls on shadcn/ui's
+// (new-york-v4) anatomy, in Ji's own palette: a graphite console, light
+// and dark, divided by 1px seams, where color stands for state or action.
+// The theme the widgets of MyGo draw with is made from the palette.
 package components
 
 import "github.com/egoist/mygo/ui"
 
-// Palette holds shadcn/ui's tokens, by their names there.
+// Palette holds shadcn/ui's tokens, by their names there, and the colors
+// of what a session is doing. Hue is kept for meaning: blue is the brand,
+// what to do and what runs; orange only what waits for the user; green
+// done; red failed or destructive; violet thinking.
 type Palette struct {
 	Background, Foreground     ui.Color
 	Card, Popover              ui.Color
@@ -17,51 +20,58 @@ type Palette struct {
 	Border, Input, Ring        ui.Color
 	Sidebar, SidebarAccent     ui.Color
 	SidebarBorder              ui.Color
-	// shadcn/ui has no token of it: Tailwind's sky, for what the
-	// terminal shows in cyan.
-	Info ui.Color
+	Info, Warning              ui.Color
+	Waiting, Success, Thinking ui.Color
 }
 
 var lightPalette = Palette{
-	Background:        ui.Oklch(1, 0, 0),
-	Foreground:        ui.Oklch(0.145, 0, 0),
-	Card:              ui.Oklch(1, 0, 0),
-	Popover:           ui.Oklch(1, 0, 0),
-	Primary:           ui.Oklch(0.205, 0, 0),
-	PrimaryForeground: ui.Oklch(0.985, 0, 0),
-	Secondary:         ui.Oklch(0.97, 0, 0),
-	Muted:             ui.Oklch(0.97, 0, 0),
-	Accent:            ui.Oklch(0.97, 0, 0),
-	MutedForeground:   ui.Oklch(0.556, 0, 0),
-	Destructive:       ui.Oklch(0.577, 0.245, 27.325),
-	Border:            ui.Oklch(0.922, 0, 0),
-	Input:             ui.Oklch(0.922, 0, 0),
-	Ring:              ui.Oklch(0.708, 0, 0),
-	Sidebar:           ui.Oklch(0.985, 0, 0),
-	SidebarAccent:     ui.Oklch(0.97, 0, 0),
-	SidebarBorder:     ui.Oklch(0.922, 0, 0),
-	Info:              ui.Oklch(0.588, 0.158, 241.966),
+	Background:        ui.Hex("#F7F8FA"),
+	Foreground:        ui.Hex("#1A1D24"),
+	Card:              ui.Hex("#FFFFFF"),
+	Popover:           ui.Hex("#FFFFFF"),
+	Primary:           ui.Hex("#2E5BDA"),
+	PrimaryForeground: ui.Hex("#FFFFFF"),
+	Secondary:         ui.Hex("#ECEEF3"),
+	Muted:             ui.Hex("#F0F2F5"),
+	Accent:            ui.Hex("#E6E9EF"),
+	MutedForeground:   ui.Hex("#5C6475"),
+	Destructive:       ui.Hex("#C8324C"),
+	Border:            ui.Hex("#DDE1E8"),
+	Input:             ui.Hex("#CDD2DC"),
+	Ring:              ui.Hex("#2E5BDA"),
+	Sidebar:           ui.Hex("#EFF1F5"),
+	SidebarAccent:     ui.Hex("#DCE5FA"),
+	SidebarBorder:     ui.Hex("#DDE1E8"),
+	Info:              ui.Hex("#0B72A8"),
+	Waiting:           ui.Hex("#B8500C"),
+	Success:           ui.Hex("#2B7F3A"),
+	Thinking:          ui.Hex("#7347CC"),
+	Warning:           ui.Hex("#8F6400"),
 }
 
 var darkPalette = Palette{
-	Background:        ui.Oklch(0.145, 0, 0),
-	Foreground:        ui.Oklch(0.985, 0, 0),
-	Card:              ui.Oklch(0.205, 0, 0),
-	Popover:           ui.Oklch(0.205, 0, 0),
-	Primary:           ui.Oklch(0.922, 0, 0),
-	PrimaryForeground: ui.Oklch(0.205, 0, 0),
-	Secondary:         ui.Oklch(0.269, 0, 0),
-	Muted:             ui.Oklch(0.269, 0, 0),
-	Accent:            ui.Oklch(0.269, 0, 0),
-	MutedForeground:   ui.Oklch(0.708, 0, 0),
-	Destructive:       ui.Oklch(0.704, 0.191, 22.216),
-	Border:            ui.Oklch(1, 0, 0).Alpha(0.1),
-	Input:             ui.Oklch(1, 0, 0).Alpha(0.15),
-	Ring:              ui.Oklch(0.556, 0, 0),
-	Sidebar:           ui.Oklch(0.205, 0, 0),
-	SidebarAccent:     ui.Oklch(0.269, 0, 0),
-	SidebarBorder:     ui.Oklch(1, 0, 0).Alpha(0.1),
-	Info:              ui.Oklch(0.746, 0.16, 232.661),
+	Background:        ui.Hex("#16181D"),
+	Foreground:        ui.Hex("#D6DAE2"),
+	Card:              ui.Hex("#1E2128"),
+	Popover:           ui.Hex("#1E2128"),
+	Primary:           ui.Hex("#7AA2F7"),
+	PrimaryForeground: ui.Hex("#0F1420"),
+	Secondary:         ui.Hex("#252932"),
+	Muted:             ui.Hex("#13151A"),
+	Accent:            ui.Hex("#2A2E38"),
+	MutedForeground:   ui.Hex("#8E96A7"),
+	Destructive:       ui.Hex("#F7768E"),
+	Border:            ui.Hex("#2A2E37"),
+	Input:             ui.Hex("#343946"),
+	Ring:              ui.Hex("#7AA2F7"),
+	Sidebar:           ui.Hex("#1B1E24"),
+	SidebarAccent:     ui.Hex("#24314D"),
+	SidebarBorder:     ui.Hex("#2A2E37"),
+	Info:              ui.Hex("#7DCFFF"),
+	Waiting:           ui.Hex("#FF9E64"),
+	Success:           ui.Hex("#9ECE6A"),
+	Thinking:          ui.Hex("#BB9AF7"),
+	Warning:           ui.Hex("#E0AF68"),
 }
 
 // PaletteOf is the palette that goes with a theme, light or dark.
@@ -81,15 +91,10 @@ func Theme(system *ui.Theme) *ui.Theme {
 	t.Background, t.Text, t.TextMuted, t.Border = p.Background, p.Foreground, p.MutedForeground, p.Border
 	t.Surface, t.SurfaceHover, t.SurfacePressed = p.Secondary, p.Accent, p.Accent
 	t.Accent, t.AccentHover, t.AccentPressed, t.AccentText = p.Primary, p.Primary.Alpha(0.9), p.Primary.Alpha(0.8), p.PrimaryForeground
-	t.Danger = p.Destructive
-	// shadcn/ui has no tokens of these: Tailwind's green and amber
-	t.Success, t.Warning = ui.Oklch(0.627, 0.194, 149.214), ui.Oklch(0.666, 0.179, 58.318)
-	if t.Dark {
-		t.Success, t.Warning = ui.Oklch(0.723, 0.219, 149.579), ui.Oklch(0.769, 0.188, 70.08)
-	}
+	t.Danger, t.Success, t.Warning = p.Destructive, p.Success, p.Warning
 	// Tooltips as theirs: bg-foreground text-background
 	t.Inverse, t.InverseText = p.Foreground, p.Background
-	t.Selection, t.Focus, t.Scrollbar = p.Ring.Alpha(0.35), p.Ring.Alpha(0.5), p.Foreground.Alpha(0.25)
+	t.Selection, t.Focus, t.Scrollbar = p.Primary.Alpha(0.3), p.Ring.Alpha(0.5), p.Foreground.Alpha(0.25)
 	// rounded-md: --radius, 0.625rem, less 2px
 	t.Radius, t.Spacing = 8, 4
 	return &t

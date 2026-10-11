@@ -3,11 +3,9 @@ package components
 // What shows and does nothing: Badge, Kbd, Spinner and Empty's head.
 
 import (
-	"time"
+	"math"
 
 	"github.com/egoist/mygo/ui"
-
-	"desktop/ui/icons"
 )
 
 // Badge is shadcn/ui's Badge: a short text in a pill.
@@ -34,21 +32,55 @@ func Badge(c *ui.Context, text string, v Variant) ui.Element {
 	return b
 }
 
+// Tag names a state in its color: the text in it, on a faint fill of it
+// inside a seam of it.
+func Tag(c *ui.Context, text string, color ui.Color) ui.Element {
+	t := c.Theme()
+	tag := ui.Row(c).AlignItems(ui.Center).Height(20).Padding(0, 6).Radius(4).Background(color.Alpha(0.1)).Border(1, color.Alpha(0.45)).Shrink(0)
+	tag.Children(func() {
+		ui.Text(c, text).FontSize(TextXS(t)).FontWeight(500).LetterSpacing(0.2).TextColor(color).SingleLine()
+	})
+	return tag
+}
+
 // Kbd is shadcn/ui's Kbd: a key to press.
 func Kbd(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
 	p := PaletteOf(t)
-	k := ui.Row(c).Height(20).MinWidth(20).Padding(0, 4).Radius(6).Background(p.Muted).Justify(ui.Center).AlignItems(ui.Center).Shrink(0)
+	k := ui.Row(c).Height(20).MinWidth(20).Padding(0, 4).Radius(4).Background(p.Accent).Justify(ui.Center).AlignItems(ui.Center).Shrink(0)
 	k.Children(func() {
 		ui.Text(c, key).FontSize(TextXS(t)).FontWeight(500).TextColor(p.MutedForeground).SingleLine()
 	})
 	return k
 }
 
-// Spinner is shadcn/ui's Spinner: a turning Loader2, named by label.
-func Spinner(c *ui.Context, label string) ui.Element {
-	spin := ui.Icon(c, icons.Loader).FontSize(16).TextColor(PaletteOf(c.Theme()).MutedForeground).Label(label)
-	return spin.Rotate(spin.Loop("spin", time.Second, ui.Linear) * 360)
+// Spinner is shadcn/ui's Spinner, Lucide's Loader2 turning once a second,
+// size wide, in color or else muted, named by label. It turns from its
+// Draw, not with Loop: Loop builds the whole view anew every frame, as many
+// times a second as the display shows, and a long conversation then takes
+// longer than a frame to build.
+func Spinner(c *ui.Context, label string, size float32, color ui.Color) ui.Element {
+	if color.A == 0 {
+		color = PaletteOf(c.Theme()).MutedForeground
+	}
+	return ui.Box(c).Size(size, size).Shrink(0).Role(ui.RoleProgress).Label(label).Draw(func(p *ui.Painter, r ui.Rect) {
+		p.AnimationFrame()
+		turn := float64(p.Now().UnixMilli()%1000) / 1000 * 2 * math.Pi
+		// Loader2's arc: radius 9 of 24, from 3 o'clock round to 72° short of it
+		cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, r.W*9/24
+		var arc ui.Path
+		const steps = 36
+		for i := 0; i <= steps; i++ {
+			a := turn + float64(i)/steps*1.6*math.Pi
+			x, y := cx+radius*float32(math.Cos(a)), cy+radius*float32(math.Sin(a))
+			if i == 0 {
+				arc.MoveTo(x, y)
+			} else {
+				arc.LineTo(x, y)
+			}
+		}
+		p.StrokePath(&arc, r.W/12, color)
+	})
 }
 
 // EmptyHeader is the head of shadcn/ui's Empty: an icon on a tile, a

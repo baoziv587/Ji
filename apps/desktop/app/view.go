@@ -55,7 +55,7 @@ func (a *App) noSession(c *ui.Context) {
 					ui.Text(c, "Trying again…").TextColor(p.MutedForeground)
 					return
 				}
-				components.Spinner(c, "Connecting")
+				components.Spinner(c, "Connecting", 16, ui.Color{})
 				ui.Text(c, "Connecting to the agent…").TextColor(p.MutedForeground)
 			})
 			return
@@ -84,7 +84,7 @@ func (a *App) noSession(c *ui.Context) {
 func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 	view.startAnswering()
 	a.header(c, s, view)
-	conversation.View(c.Key("conversation:"+s.ID), &view.scroll, &view.t)
+	conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t)
 	if view.t.Asking != nil && !s.Archived {
 		a.questions(c.Key("questions:"+s.ID), s.ID, view)
 	}

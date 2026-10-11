@@ -13,7 +13,6 @@ var (
 	ChevronRight   = lucide(`<path d="m9 18 6-6-6-6"/>`)
 	FolderOpen     = lucide(`<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>`)
 	Info           = lucide(`<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>`)
-	Loader         = lucide(`<path d="M21 12a9 9 0 1 1-6.219-8.56"/>`)
 	Plus           = lucide(`<path d="M5 12h14"/><path d="M12 5v14"/>`)
 	Square         = lucide(`<rect width="14" height="14" x="5" y="5" rx="2" fill="currentColor"/>`)
 	TriangleAlert  = lucide(`<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>`)

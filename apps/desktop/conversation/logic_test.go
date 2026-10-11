@@ -61,3 +61,34 @@ func TestTranscriptGivesBackWhatAFailedReplyWasSent(t *testing.T) {
 		t.Errorf("notice %+v", last)
 	}
 }
+
+func TestAskingCutsDetailsIntoLines(t *testing.T) {
+	var tr Transcript
+	tr.Apply(agent.Event{Type: "ask", ID: "1", Questions: []agent.Question{
+		{Title: "Edit a.go", Detail: "--- a.go\n+++ a.go\n@@ -1 +1 @@\n-old\n+new\n same"},
+		{Title: "Pick one"},
+	}})
+	want := []DiffLine{
+		{"--- a.go", DiffMeta}, {"+++ a.go", DiffMeta}, {"@@ -1 +1 @@", DiffMeta},
+		{"-old", DiffRemoved}, {"+new", DiffAdded}, {" same", DiffPlain},
+	}
+	details := tr.Asking.Details
+	if len(details) != 2 || !reflect.DeepEqual(details[0], want) || details[1] != nil {
+		t.Errorf("details %+v", details)
+	}
+}
+
+func TestPiecesStayAsTextGrows(t *testing.T) {
+	line := strings.Repeat("x", 300) + "\n"
+	text := strings.Repeat(line, 40)
+	before := pieces(text)
+	after := pieces(text + "more\nand more")
+	if len(before) < 4 || strings.Join(before, "\n") != text || strings.Join(after, "\n") != text+"more\nand more" {
+		t.Fatalf("pieces do not make the text: %d", len(before))
+	}
+	for i := range before[:len(before)-1] {
+		if before[i] != after[i] {
+			t.Fatalf("piece %d changed as the text grew", i)
+		}
+	}
+}
