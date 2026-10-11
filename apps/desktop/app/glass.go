@@ -31,18 +31,17 @@ func (r ramp) at(transparency float64) float32 {
 	return r.standard + (r.clear-r.standard)*(t-1)
 }
 
-// glasses are the surfaces the transparency reaches, each standard as it
-// was before there was a setting: what covers what shows through them,
+// glasses are the surfaces the transparency reaches: what covers what shows through them,
 // and how much that blurs. A clearer bar blurs more, so that what scrolls
 // under it never reads as its title.
 var glasses = struct {
 	sidebar   ramp // of the scheme's sidebar color over the window's material
-	selection ramp // of the brand's tint under the chosen session
+	selection ramp // of the selection's color under the chosen session
 	bar       ramp // of the background over the content under a title bar
 	barBlur   ramp // of the content under a title bar, in DIPs
 }{
-	sidebar:   ramp{1, 0.6, 0.3},
-	selection: ramp{0.16, 0.16, 0.12},
+	sidebar:   ramp{1, 0.6, 0.4},
+	selection: ramp{1, 0.9, 0.8},
 	bar:       ramp{1, scrollEdgeCover, 0.55},
 	barBlur:   ramp{scrollEdgeBlur, scrollEdgeBlur, 10},
 }

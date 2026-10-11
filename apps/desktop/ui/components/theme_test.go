@@ -164,6 +164,25 @@ func TestCodeColorsRead(t *testing.T) {
 	}
 }
 
+// Code in a sentence reads on its tint over every surface a reply is on,
+// at 4.5:1 at least, in the brand's hue.
+func TestEmphasisReads(t *testing.T) {
+	for _, s := range Schemes {
+		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
+			for ground, g := range map[string]ui.Color{"Secondary": p.Secondary, "Muted": p.Muted, "Card": p.Card, "Background": p.Background} {
+				if r := contrast(p.Emphasis, p.CodeSpan().Over(g)); r < 4.5 {
+					t.Errorf("%s %s Emphasis on CodeSpan on %s: %.2f:1, at least 4.5:1", s.Name, mode, ground, r)
+				}
+			}
+			_, c, hue := oklch(p.Emphasis)
+			_, _, brand := oklch(p.Primary)
+			if c < 0.04 || math.Abs(hue-brand) > 10 {
+				t.Errorf("%s %s Emphasis: chroma %.3f at %.0f°, at least 0.04 at the brand's %.0f°", s.Name, mode, c, hue, brand)
+			}
+		}
+	}
+}
+
 // contrast is WCAG's contrast ratio of a and b.
 func contrast(a, b ui.Color) float64 {
 	luminance := func(c ui.Color) float64 {
