@@ -392,6 +392,8 @@ func TestSnapshot(t *testing.T) {
 	}
 	tt := ui.NewTester(a.View, 1180, 780)
 	tt.SetDark(os.Getenv("DARK") == "1")
+	// The traffic lights of a hidden-inset title bar, as on macOS
+	tt.SetTitleBar(ui.TitleBar{Height: TitleBarHeight, Left: 78})
 	tt.Frame()
 	if os.Getenv("TOAST") == "1" {
 		// The session asks no more, so it can be archived, and the toast shows
