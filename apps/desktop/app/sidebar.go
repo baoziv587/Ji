@@ -24,7 +24,11 @@ func (a *App) sidebar(c *ui.Context) {
 	// behind it, and a warm wallpaper would turn the panel warm
 	background := p.Sidebar
 	if a.seeThrough(c) {
-		background = p.Sidebar.Alpha(glasses.sidebar.at(a.Settings.Transparency))
+		veil := glasses.sidebar
+		if !t.Dark {
+			veil = glasses.sidebarLight
+		}
+		background = p.Sidebar.Alpha(veil.at(a.Settings.Transparency))
 	}
 	ui.Column(c).Fill().Background(background).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
 		// Clear of the window controls, whose room ends at the zoom button's

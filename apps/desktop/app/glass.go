@@ -35,15 +35,17 @@ func (r ramp) at(transparency float64) float32 {
 // and how much that blurs. A clearer bar blurs more, so that what scrolls
 // under it never reads as its title.
 var glasses = struct {
-	sidebar   ramp // of the scheme's sidebar color over the window's material
-	selection ramp // of the selection's color under the chosen session
-	bar       ramp // of the background over the content under a title bar
-	barBlur   ramp // of the content under a title bar, in DIPs
+	sidebar      ramp // of the scheme's sidebar color over the window's material, in the dark
+	sidebarLight ramp // and in the light, whose material is already washed pale, so it lets as much through
+	selection    ramp // of the selection's color under the chosen session
+	bar          ramp // of the background over the content under a title bar
+	barBlur      ramp // of the content under a title bar, in DIPs
 }{
-	sidebar:   ramp{1, 0.6, 0.4},
-	selection: ramp{1, 0.9, 0.8},
-	bar:       ramp{1, scrollEdgeCover, 0.55},
-	barBlur:   ramp{scrollEdgeBlur, scrollEdgeBlur, 10},
+	sidebar:      ramp{1, 0.6, 0.4},
+	sidebarLight: ramp{1, 0.35, 0.15},
+	selection:    ramp{1, 0.9, 0.8},
+	bar:          ramp{1, scrollEdgeCover, 0.55},
+	barBlur:      ramp{scrollEdgeBlur, scrollEdgeBlur, 10},
 }
 
 // How much of the background macOS's hard scroll edge lays over the

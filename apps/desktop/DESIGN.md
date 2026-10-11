@@ -232,7 +232,7 @@ Code in a well is colored as it reads, the one place hue names no state: **Code 
 ### Neutral
 
 - **Graphite Ground** (`background`): the conversation canvas; cool off-white `#F7F8FA` in light, near-black graphite in dark.
-- **Sidebar Panel** (`sidebar`): the session list, one step off the ground. Over the window's material it is a 60% veil of that color, so the panel keeps the scheme's hue whatever the wallpaper tints the material, and stays translucent.
+- **Sidebar Panel** (`sidebar`): the session list, one step off the ground. Over the window's material it is a veil of that color, 60% in dark and 35% in light, as the light material is already washed pale, so the panel keeps the scheme's hue whatever the wallpaper tints the material, and stays translucent.
 - **Raised Panel** (`card`, `popover`): the inspector, the approval panel, the composer, inputs, menus and toasts.
 - **Secondary Fill** (`secondary`): user messages and secondary buttons.
 - **Muted Well** (`muted`): code and diff wells, the empty-state tile; in dark it sits below the ground, a recessed well.
