@@ -28,11 +28,11 @@ ui.List(c, list, len(t.Items), func(i int) {
 
 **原因**：mygo 的文字排版缓存按**整段文本**作键（`internal/text` 的 `layouts map[Params]*cached`，`Params` 包含完整文本、宽度和样式）。文本每变一次，缓存就失效，整段都要交给 CoreText 重新排版。`ui.List` 帮不上忙，因为这一个条目本身就一直在视野里。另外，超过 8MB 的排版结果根本不进缓存。
 
-**做法**：见 [conversation/view.go](../conversation/view.go) 的 `streamed` / `pieces`：
+**做法**：见 [conversation/markdown.go](../conversation/markdown.go) 的 `pieces`：
 
-- 每过约 2KB，在下一个换行处切开，每段一个 `ui.Text`。
-- 切点只由前面已有的文本决定。文本变长时，已经切出的段落不变，直接用缓存，只有最后一段需要重新排版。修改后，80KB 的 thinking 每帧约 4ms。
-- 把 `Selectable()` 设在外层 Column 上，不要设在各个 Text 上。这样拖动选择可以跨段，复制时各段之间用换行连接，正好补回切掉的换行，复制出来的内容和原文一致。
+- 回复和 thinking 按 Markdown 分块，每块一个 `RichText`，块与块天然切开。一个段落超过约 2KB 时，在下一个换行处再切开，切出来的每段作为一个 gap 为 0 的块。
+- 切点只由前面已有的文本决定。文本变长时，已经切出的段落不变，直接用缓存，只有最后一段需要重新排版。检查器里 2KB 到 80KB 的 thinking 边写边看，每帧耗时不变。
+- 把 `Selectable()` 设在外层 Column（或 `ui.List`）上，不要设在各个块上。这样拖动选择可以跨块，复制时各块之间用换行连接，正好补回切掉的换行，复制出来的内容和原文一致。
 - 不要按"内容是否变化"来切分（例如每帧按当前长度均分），否则切点会移动，每段的缓存都会失效。
 
 ## 3. 和负载大小成正比的计算，在事件到来时算一次
@@ -48,6 +48,14 @@ Summary: format.OneLine(format.Head(e.Args, 512))
 ```
 
 `format.Head` 截取前 n 个字节，不会把多字节字符切断。视图函数里只读算好的字段。凡是对完整输出、参数或文件内容做的处理（解析、换行统计、diff），都按这个办法处理。
+
+**流式 Markdown 也一样**：goldmark 只能整篇解析，所以不能每来一个增量就把整条回复重新解析一遍。见 [conversation/markdown.go](../conversation/markdown.go) 的 `markdown.update`：
+
+- 在"空行之后、顶格开始、不在围栏里"的行前切开。这样的切点前后不会有块跨过去（缩进的行可能是列表项的续行，围栏里的空行属于代码，都不切）。
+- 切点之前的部分只解析一次，结果固定下来；只有最后一个切点之后、还在写的那几块，随文本增长重新解析。每个增量约 30µs，和回复长度无关。
+- 重新解析时，代码块按出现顺序复用上一次的 `*fenced`，它的 `syntax.Block` 跟着保留，已经着好的颜色不会丢。
+
+**也不要在视图里新建要在后台计算的东西**。检查器以前每帧为运行中的调用重新算一遍行，每次都 `syntax.NewBlock`：新 Block 要在后台 lex，lex 完调用 `Ready` 触发下一帧，下一帧又建新 Block，结果是调用运行多久，就空转多久。现在在调用开始、结束时各算一次（`inspectLines`）。同理，代码块把 token 转成 span 的结果缓存在 `fenced.chunks` 里，行没变就不重算。
 
 ## 4. 持续动画只重绘，不要每帧重建视图
 

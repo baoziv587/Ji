@@ -10,6 +10,7 @@ import (
 
 	"desktop/agent"
 	"desktop/format"
+	"desktop/syntax"
 )
 
 type ItemKind int
@@ -36,8 +37,12 @@ type Item struct {
 	Level string
 	Help  []agent.HelpSection
 	Tool  *ToolCall
-	// Whether the thinking or the tool's output is shown; the window's own.
-	Open bool
+	// Where it is among the blocks, and among the steps when it is one: the
+	// thinking or a call.
+	Block, Step int
+	// The reply's text or the thinking in Markdown's blocks, parsed as it
+	// comes (markdown.go).
+	md markdown
 }
 
 // ToolCall is a call the agent made, and how it ended once it has.
@@ -48,6 +53,20 @@ type ToolCall struct {
 	Summary  string
 	Done, OK bool
 	MS       int
+	// Stopped is a call the reply ended before it did.
+	Stopped bool
+	// What the call worked on: the file, the command or the pattern; and
+	// the line a read starts at.
+	Target string
+	Offset int
+	// An edit's lines added and removed, and its diff, read from its
+	// arguments as it starts.
+	Edit           bool
+	Added, Removed int
+	Diff           []DiffLine
+	// What the inspector shows of it, and whether it had ended then.
+	lines     []inspectLine
+	linesDone bool
 }
 
 // Asking is the questions waiting for the person's answer.
@@ -71,10 +90,15 @@ const (
 	DiffRemoved
 )
 
-// DiffLine is a line of a command or a diff, and what it is.
+// DiffLine is a line of a command or a diff, and what it is; and, once
+// colored, the block its code is colored in, which line of it it is there,
+// and the part of it a change made, in bytes of its code.
 type DiffLine struct {
-	Text string
-	Kind DiffKind
+	Text    string
+	Kind    DiffKind
+	Code    *syntax.Block
+	At      int
+	Changed [2]int
 }
 
 // diffLines cuts text into its lines, telling added from removed.
@@ -97,9 +121,15 @@ func diffLines(text string) []DiffLine {
 
 // Transcript is everything the service said since the last reset.
 type Transcript struct {
-	Items  []*Item
-	Asking *Asking
-	State  agent.State
+	Items []*Item
+	// What the conversation shows in order, and the thinking and calls
+	// among the items, which the inspector steps through.
+	Blocks []Block
+	Steps  []*Item
+	// The step the inspector shows, nil for none; the window's own.
+	Inspected *Item
+	Asking    *Asking
+	State     agent.State
 	// What a reply that did not finish was sent, for the input to take back.
 	Unsent string
 	// What the reply in progress is doing, as the terminal's status line
@@ -122,9 +152,13 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 		t.doing("Writing")
 	case "thinking":
 		t.extend(KindThinking, e.Delta)
+		if w := t.work(); w != nil {
+			w.Glimpse = glimpse(t.Items[len(t.Items)-1].md.last())
+		}
 		t.doing("Thinking")
 	case "tool_start":
 		call := &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args, Summary: format.OneLine(format.Head(e.Args, 512))}
+		describe(call)
 		t.add(&Item{Kind: KindTool, Tool: call})
 		if t.running == nil {
 			t.running = map[string]string{}
@@ -134,17 +168,21 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 	case "tool_end":
 		delete(t.running, e.ID)
 		t.doing(t.runningLabel())
-		call := t.tool(e.ID)
-		if call == nil {
-			call = &ToolCall{ID: e.ID, Name: e.Name}
-			t.add(&Item{Kind: KindTool, Tool: call})
+		item := t.tool(e.ID)
+		if item == nil {
+			item = &Item{Kind: KindTool, Tool: &ToolCall{ID: e.ID, Name: e.Name}}
+			t.add(item)
 		}
+		call := item.Tool
 		call.Done, call.OK, call.Output, call.MS = true, e.OK, e.Output, e.MS
+		t.ended(item)
 	case "ask":
 		details := make([][]DiffLine, len(e.Questions))
+		lang := t.askedIn(e.Tool)
 		for i, q := range e.Questions {
 			if q.Detail != "" {
 				details[i] = diffLines(q.Detail)
+				colorDiff(details[i], lang)
 			}
 		}
 		t.Asking = &Asking{ID: e.ID, Tool: e.Tool, Outside: e.Outside, Questions: e.Questions, Details: details}
@@ -162,8 +200,17 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 	case "help":
 		t.add(&Item{Kind: KindHelp, Help: e.Sections})
 	case "reply_end":
+		t.settle()
 		t.doing("")
+		// What still runs, the reply ended before
+		for id := range t.running {
+			if item := t.tool(id); item != nil {
+				item.Tool.Done, item.Tool.Stopped = true, true
+				t.ended(item)
+			}
+		}
 		clear(t.running)
+		t.rest()
 		switch e.Outcome {
 		case "stopped":
 			t.add(&Item{Kind: KindNotice, Text: "Stopped. Your message is back in the input."})
@@ -182,7 +229,68 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 	return false
 }
 
-func (t *Transcript) add(item *Item) { t.Items = append(t.Items, item) }
+// add puts an item at the end: a step joins the work at the end, or starts
+// one; anything else ends that work and is a block of its own.
+func (t *Transcript) add(item *Item) {
+	t.settle()
+	t.Items = append(t.Items, item)
+	if item.Kind != KindThinking && item.Kind != KindTool {
+		t.rest()
+		item.Block = len(t.Blocks)
+		t.Blocks = append(t.Blocks, Block{Item: item})
+		return
+	}
+
+	w := t.work()
+	if w == nil {
+		w = &Work{}
+		t.Blocks = append(t.Blocks, Block{Work: w})
+	}
+	item.Block, item.Step = len(t.Blocks)-1, len(t.Steps)
+	t.Steps = append(t.Steps, item)
+	w.Steps = append(w.Steps, item)
+	// Thinking ends as a call starts
+	thinking := w.Current != nil && w.Current.Kind == KindThinking
+	w.Current, w.Glimpse = item, ""
+	if thinking {
+		w.tally(t.State.Root)
+	}
+}
+
+// work is the work at the end of the conversation, nil when it ends with
+// something else.
+func (t *Transcript) work() *Work {
+	if n := len(t.Blocks); n > 0 {
+		return t.Blocks[n-1].Work
+	}
+	return nil
+}
+
+// ended takes in a call that ended: the step in progress is then another
+// still running, or none.
+func (t *Transcript) ended(item *Item) {
+	w := t.Blocks[item.Block].Work
+	if w.Current == item {
+		w.Current = nil
+		for i := len(w.Steps) - 1; i >= 0; i-- {
+			if call := w.Steps[i].Tool; call != nil && !call.Done {
+				w.Current = w.Steps[i]
+				break
+			}
+		}
+	}
+	w.tally(t.State.Root)
+}
+
+// rest ends the thinking of the work at the end, as what follows it comes.
+func (t *Transcript) rest() {
+	w := t.work()
+	if w == nil || w.Current == nil || w.Current.Kind != KindThinking {
+		return
+	}
+	w.Current, w.Glimpse = nil, ""
+	w.tally(t.State.Root)
+}
 
 // doing says what the reply does now; a new label starts its own count.
 func (t *Transcript) doing(label string) {
@@ -210,17 +318,44 @@ func (t *Transcript) runningLabel() string {
 
 // extend adds to the text or the thinking being written, or starts one.
 func (t *Transcript) extend(kind ItemKind, delta string) {
+	item := &Item{Kind: kind}
 	if n := len(t.Items); n > 0 && t.Items[n-1].Kind == kind {
-		t.Items[n-1].Text += delta
-		return
+		item = t.Items[n-1]
+	} else {
+		t.add(item)
 	}
-	t.add(&Item{Kind: kind, Text: delta})
+	item.Text += delta
+	item.md.update(item.Text, false)
 }
 
-func (t *Transcript) tool(id string) *ToolCall {
+// settle shows the text or the thinking at the end whole, the line held
+// back as it was written too, as no more of it comes.
+func (t *Transcript) settle() {
+	if n := len(t.Items); n > 0 {
+		if it := t.Items[n-1]; it.Kind == KindText || it.Kind == KindThinking {
+			it.md.update(it.Text, true)
+		}
+	}
+}
+
+// askedIn is the language of what a call asked about shows in: a command
+// as shell, a diff as the file it changes.
+func (t *Transcript) askedIn(tool string) *syntax.Lang {
+	if tool == "bash" {
+		return syntax.Language("bash")
+	}
+	for i := len(t.Steps) - 1; i >= 0; i-- {
+		if call := t.Steps[i].Tool; call != nil && call.Name == tool && !call.Done {
+			return syntax.Language(call.Target)
+		}
+	}
+	return nil
+}
+
+func (t *Transcript) tool(id string) *Item {
 	for i := len(t.Items) - 1; i >= 0; i-- {
 		if call := t.Items[i].Tool; call != nil && call.ID == id {
-			return call
+			return t.Items[i]
 		}
 	}
 	return nil

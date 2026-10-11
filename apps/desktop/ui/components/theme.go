@@ -11,7 +11,9 @@ import "github.com/egoist/mygo/ui"
 // to do and what runs; orange only what waits for the user; green done;
 // red failed or destructive. Thinking is the brand's hue, quieter, and
 // nothing is violet. A scheme whose brand sits on one of these hues moves
-// that one aside.
+// that one aside. Code is in four hues more, the brand's for its keywords
+// and three apart from it, as light as the text is dark enough to read on
+// any surface.
 type Palette struct {
 	Background, Foreground     ui.Color
 	Card, Popover              ui.Color
@@ -24,6 +26,9 @@ type Palette struct {
 	SidebarBorder              ui.Color
 	Info, Warning              ui.Color
 	Waiting, Success, Thinking ui.Color
+	// Code's keywords, strings, numbers and types.
+	CodeKeyword, CodeString ui.Color
+	CodeNumber, CodeType    ui.Color
 }
 
 type Scheme struct {
@@ -86,13 +91,23 @@ func Theme(system *ui.Theme, s *Scheme, dark bool) *ui.Theme {
 	p := s.Of(dark)
 	t := *system
 	t.Dark = dark
+
 	t.Background, t.Text, t.TextMuted, t.Border = p.Background, p.Foreground, p.MutedForeground, p.Border
 	t.Surface, t.SurfaceHover, t.SurfacePressed = p.Secondary, p.Accent, p.Accent
-	t.Accent, t.AccentHover, t.AccentPressed, t.AccentText = p.Primary, p.Primary.Alpha(0.9), p.Primary.Alpha(0.8), p.PrimaryForeground
+
+	t.Accent = p.Primary
+	t.AccentHover = p.Primary.Alpha(0.9)
+	t.AccentPressed = p.Primary.Alpha(0.8)
+	t.AccentText = p.PrimaryForeground
+
 	t.Danger, t.Success, t.Warning = p.Destructive, p.Success, p.Warning
 	// Tooltips as theirs: bg-foreground text-background
 	t.Inverse, t.InverseText = p.Foreground, p.Background
-	t.Selection, t.Focus, t.Scrollbar = p.Primary.Alpha(0.3), p.Ring.Alpha(0.25), p.Foreground.Alpha(0.25)
+
+	t.Selection = p.Primary.Alpha(0.3)
+	t.Focus = p.Ring.Alpha(0.25)
+	t.Scrollbar = p.Foreground.Alpha(0.25)
+
 	// rounded-md: --radius, 0.625rem, less 2px
 	t.Radius, t.Spacing = 8, 4
 	return &t

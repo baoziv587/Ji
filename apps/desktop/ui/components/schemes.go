@@ -32,6 +32,10 @@ var forest = Scheme{
 		Success:           ui.Hex("#0E7C66"),
 		Thinking:          ui.Hex("#597059"),
 		Warning:           ui.Hex("#8B651E"),
+		CodeKeyword:       ui.Hex("#3D6C3D"),
+		CodeString:        ui.Hex("#7E5D1D"),
+		CodeNumber:        ui.Hex("#915140"),
+		CodeType:          ui.Hex("#166989"),
 	},
 	Dark: Palette{
 		Background:        ui.Hex("#1C2A1F"),
@@ -56,6 +60,10 @@ var forest = Scheme{
 		Success:           ui.Hex("#6DC9AC"),
 		Thinking:          ui.Hex("#A0B9A0"),
 		Warning:           ui.Hex("#DDB06F"),
+		CodeKeyword:       ui.Hex("#92BF91"),
+		CodeString:        ui.Hex("#CCAC76"),
+		CodeNumber:        ui.Hex("#DF9F8F"),
+		CodeType:          ui.Hex("#7ABBDA"),
 	},
 }
 
@@ -85,6 +93,10 @@ var graphite = Scheme{
 		Success:           ui.Hex("#427B49"),
 		Thinking:          ui.Hex("#5C6984"),
 		Warning:           ui.Hex("#8B651E"),
+		CodeKeyword:       ui.Hex("#4D669B"),
+		CodeString:        ui.Hex("#48713F"),
+		CodeNumber:        ui.Hex("#93573B"),
+		CodeType:          ui.Hex("#067272"),
 	},
 	Dark: Palette{
 		Background:        ui.Hex("#16181D"),
@@ -109,6 +121,10 @@ var graphite = Scheme{
 		Success:           ui.Hex("#A7CA86"),
 		Thinking:          ui.Hex("#A3B1CE"),
 		Warning:           ui.Hex("#DDB06F"),
+		CodeKeyword:       ui.Hex("#97B1E5"),
+		CodeString:        ui.Hex("#96BE8E"),
+		CodeNumber:        ui.Hex("#DDA187"),
+		CodeType:          ui.Hex("#70C1C1"),
 	},
 }
 
@@ -139,6 +155,10 @@ var lagoon = Scheme{
 		Success:           ui.Hex("#427B49"),
 		Thinking:          ui.Hex("#4A726D"),
 		Warning:           ui.Hex("#8B651E"),
+		CodeKeyword:       ui.Hex("#07736B"),
+		CodeString:        ui.Hex("#826122"),
+		CodeNumber:        ui.Hex("#975646"),
+		CodeType:          ui.Hex("#3B6998"),
 	},
 	Dark: Palette{
 		Background:        ui.Hex("#0F1A1C"),
@@ -163,6 +183,10 @@ var lagoon = Scheme{
 		Success:           ui.Hex("#A7CA86"),
 		Thinking:          ui.Hex("#92BBB3"),
 		Warning:           ui.Hex("#DDB06F"),
+		CodeKeyword:       ui.Hex("#74C2B4"),
+		CodeString:        ui.Hex("#CCAC76"),
+		CodeNumber:        ui.Hex("#DF9F8F"),
+		CodeType:          ui.Hex("#8AB5E3"),
 	},
 }
 
@@ -193,6 +217,10 @@ var slate = Scheme{
 		Success:           ui.Hex("#427B49"),
 		Thinking:          ui.Hex("#536C82"),
 		Warning:           ui.Hex("#8B651E"),
+		CodeKeyword:       ui.Hex("#2E6590"),
+		CodeString:        ui.Hex("#486A34"),
+		CodeNumber:        ui.Hex("#8E503A"),
+		CodeType:          ui.Hex("#7C5B1B"),
 	},
 	Dark: Palette{
 		Background:        ui.Hex("#232934"),
@@ -217,5 +245,9 @@ var slate = Scheme{
 		Success:           ui.Hex("#A4BF8D"),
 		Thinking:          ui.Hex("#92B9C4"),
 		Warning:           ui.Hex("#EBCB8B"),
+		CodeKeyword:       ui.Hex("#73BED3"),
+		CodeString:        ui.Hex("#9BBD8A"),
+		CodeNumber:        ui.Hex("#DEA08B"),
+		CodeType:          ui.Hex("#CCAC76"),
 	},
 }

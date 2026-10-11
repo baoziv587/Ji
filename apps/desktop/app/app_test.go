@@ -6,6 +6,7 @@ import (
 	"image/png"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
+	"desktop/syntax"
 	"desktop/ui/components"
 )
 
@@ -79,6 +81,10 @@ var testCommands = []agent.Command{
 	{Name: "/exit", Hint: "quits"},
 	{Name: "/login", Arg: "<provider>", Hint: "signs in: in the browser, or with a key typed in", Choices: []string{"deepseek", "openai", "openai-codex"}},
 	{Name: "/impeccable", Arg: "[command]", Hint: "designs and polishes interfaces", Group: "Skills"},
+}
+
+func init() {
+	syntax.Background = func(fn func()) { fn() }
 }
 
 // testApp runs every action at once, on the test's goroutine, with three
@@ -186,6 +192,56 @@ func TestDraftsStayWithTheirSessions(t *testing.T) {
 
 	if a.views["a"].draft != "half a thought" || a.views["c"].draft != "" {
 		t.Errorf("drafts %q and %q", a.views["a"].draft, a.views["c"].draft)
+	}
+}
+
+func TestInspectorShowsAStepAndStepsThroughThem(t *testing.T) {
+	a, _ := testApp()
+	view := a.views["a"]
+	for _, e := range []agent.Event{
+		{Type: "user", Text: "find the form"},
+		{Type: "tool_start", ID: "1", Name: "grep", Args: `{"pattern":"onSubmit"}`},
+		{Type: "tool_end", ID: "1", OK: true, Output: "src/Login.tsx:14", MS: 40},
+		{Type: "tool_start", ID: "2", Name: "bash", Args: `{"command":"pnpm test"}`},
+		{Type: "tool_end", ID: "2", OK: true, Output: "1 passed", MS: 900},
+		{Type: "text", Delta: "Found it."},
+	} {
+		a.apply(view, e)
+	}
+	tt := ui.NewTester(a.View, 1180, 700)
+
+	// Folded: the work is one line, its steps out of sight
+	if !tt.HasText(`Searched for "onSubmit", ran pnpm test`) || tt.HasText("src/Login.tsx:14") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if err := tt.Click(`Searched for "onSubmit", ran pnpm test`); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Show grep"); err != nil {
+		t.Fatal(err)
+	}
+	if view.t.Inspected != view.t.Steps[0] || !tt.HasText("src/Login.tsx:14") || !tt.HasText("1 of 2") {
+		t.Fatalf("inspected %+v, texts %q", view.t.Inspected, tt.Texts())
+	}
+
+	// The step shown, clicked again, closes the inspector in that frame
+	if err := tt.Click("Show grep"); err != nil {
+		t.Fatal(err)
+	}
+	if view.t.Inspected != nil || tt.HasText("1 of 2") {
+		t.Fatalf("after a second click, inspected %+v", view.t.Inspected)
+	}
+	if err := tt.Click("Show grep"); err != nil {
+		t.Fatal(err)
+	}
+
+	tt.Key(0, ui.KeyDown)
+	if view.t.Inspected != view.t.Steps[1] || !tt.HasText("1 passed") {
+		t.Errorf("after Down, inspected %+v", view.t.Inspected)
+	}
+	tt.Key(0, ui.KeyEscape)
+	if view.t.Inspected != nil || tt.HasText("1 passed") {
+		t.Errorf("after Esc, inspected %+v", view.t.Inspected)
 	}
 }
 
@@ -366,14 +422,27 @@ func TestSnapshot(t *testing.T) {
 	for _, e := range []agent.Event{
 		{Type: "state", State: &agent.State{ID: "a", Root: "/code/web", Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}, Replying: true, Tools: []string{"bash", "grep", "read", "edit", "ask_user"}, Commands: testCommands}},
 		{Type: "user", Text: "The login form submits twice. Find out why and fix it."},
-		{Type: "thinking", Delta: "Probably a double event binding."},
+		{Type: "thinking", Delta: "Probably a **double event binding**:\n\n- `onSubmit` on the form\n- `onClick` on the button\n\nLet me find where the form submits."},
 		{Type: "tool_start", ID: "1", Name: "grep", Args: "{\n  \"pattern\": \"onSubmit\"\n}"},
-		{Type: "tool_end", ID: "1", Name: "grep", OK: true, Output: "src/Login.tsx:14", MS: 41},
-		{Type: "text", Delta: "`Login.tsx` binds `onSubmit` on the form and `onClick` on the button, so one press submits twice. I'll keep the form's handler."},
-		{Type: "tool_start", ID: "2", Name: "edit", Args: "{\n  \"path\": \"src/Login.tsx\"\n}"},
+		{Type: "tool_end", ID: "1", Name: "grep", OK: true, Output: "src/Login.tsx:14\nsrc/Form.tsx:31", MS: 41},
+		{Type: "tool_start", ID: "2", Name: "read", Args: "{\n  \"path\": \"/code/web/src/Login.tsx\"\n}"},
+		{Type: "tool_end", ID: "2", Name: "read", OK: true, Output: "export function Login() {\n  const submit = useSubmit()\n  return (\n    <form onSubmit={submit}>\n      <button onClick={submit}>Sign in</button>\n    </form>\n  )\n}", MS: 12},
+		{Type: "tool_start", ID: "3", Name: "read", Args: "{\n  \"path\": \"/code/web/src/Form.tsx\"\n}"},
+		{Type: "tool_end", ID: "3", Name: "read", OK: true, Output: "…", MS: 9},
+		{Type: "tool_start", ID: "4", Name: "bash", Args: "{\n  \"command\": \"pnpm test login\"\n}"},
+		{Type: "tool_end", ID: "4", Name: "bash", OK: false, Output: "FAIL src/Login.test.tsx\n  expected submit to be called 1 time, but it was called 2 times", MS: 2140},
+		{Type: "text", Delta: "`Login.tsx` binds `onSubmit` on the form and `onClick` on the button, so one press submits twice, as the failing test shows:\n\n```tsx\n<form onSubmit={submit}>\n  {/* both run on a press */}\n  <button onClick={submit}>Sign in</button>\n</form>\n```\n\nI'll keep the form's handler."},
+		{Type: "tool_start", ID: "5", Name: "edit", Args: "{\"path\":\"/code/web/src/Login.tsx\",\"edits\":[{\"old_text\":\"      <button onClick={submit}>Sign in</button>\\n\",\"new_text\":\"      <button type=\\\"submit\\\">Sign in</button>\\n\"}]}"},
+		{Type: "tool_end", ID: "5", Name: "edit", OK: true, Output: "Edited src/Login.tsx", MS: 6},
+		{Type: "tool_start", ID: "6", Name: "bash", Args: "{\n  \"command\": \"pnpm test login\"\n}"},
+		{Type: "tool_end", ID: "6", Name: "bash", OK: true, Output: "PASS src/Login.test.tsx\n  ✓ submits once (18 ms)\n\nTests  1 passed", MS: 1870},
+		{Type: "text", Delta: "Fixed: the button is now `type=\"submit\"`, so the form's handler runs once. The login test passes.\n\n### What changed\n\n1. **Login.tsx**: the button submits the form; its `onClick` is gone.\n2. *Login.test.tsx*: a test for a double click.\n\n> The other forms bind only `onSubmit`, as [React's guide](https://react.dev/reference/react-dom/components/form) does.\n\n| File | Lines |\n|---|--:|\n| src/Login.tsx | 1 |\n| src/Login.test.tsx | 4 |\n\n- [x] The login test passes\n- [ ] Check the signup form"},
+		{Type: "user", Text: "Also cover the double click in a test."},
+		{Type: "thinking", Delta: "A test that clicks twice quickly."},
+		{Type: "tool_start", ID: "7", Name: "edit", Args: "{\n  \"path\": \"src/Login.test.tsx\"\n}"},
 		{Type: "ask", ID: "4", Tool: "edit", Questions: []agent.Question{{
-			Title:   "Edit src/Login.tsx",
-			Detail:  "--- src/Login.tsx\n+++ src/Login.tsx\n-  <button onClick={submit}>Sign in</button>\n+  <button type=\"submit\">Sign in</button>",
+			Title:   "Edit src/Login.test.tsx",
+			Detail:  "--- src/Login.test.tsx\n+++ src/Login.test.tsx\n+  it('submits once on a double click', async () => {\n+    await user.dblClick(button)\n+    expect(submit).toHaveBeenCalledTimes(1)\n+  })",
 			Options: []agent.Option{{Value: "yes", Label: "Yes"}, {Value: "auto", Label: "Yes, and approve the rest inside the folder"}, {Value: "no", Label: "No"}},
 		}}},
 	} {
@@ -390,7 +459,21 @@ func TestSnapshot(t *testing.T) {
 	if os.Getenv("SETTINGS") == "1" {
 		a.OpenSettings()
 	}
-	tt := ui.NewTester(a.View, 1180, 780)
+	if os.Getenv("OPEN") == "1" {
+		view.t.Blocks[1].Work.Open = true
+	}
+	if os.Getenv("INSPECT") == "1" {
+		step := 2
+		if n, err := strconv.Atoi(os.Getenv("STEP")); err == nil {
+			step = n
+		}
+		view.t.Inspected = view.t.Steps[step]
+	}
+	height := 780
+	if h, err := strconv.Atoi(os.Getenv("HEIGHT")); err == nil {
+		height = h
+	}
+	tt := ui.NewTester(a.View, 1180, height)
 	tt.SetDark(os.Getenv("DARK") == "1")
 	// The traffic lights of a hidden-inset title bar, as on macOS
 	tt.SetTitleBar(ui.TitleBar{Height: TitleBarHeight, Left: 78})

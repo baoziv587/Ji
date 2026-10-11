@@ -4,6 +4,7 @@ package app
 
 import (
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -22,6 +23,13 @@ type sessionView struct {
 	bottom float32
 	// The menu of commands, open while one is typed.
 	menu commands.State
+	// The inspector's place among the lines of the step it shows, which
+	// starts at the top for each step; when Copy was last pressed; and
+	// whether the input takes the keys back, as the inspector closes.
+	inspectList   ui.ListState
+	inspectedLast *conversation.Item
+	copied        time.Time
+	refocus       bool
 	// The answer being put together to the open questions: for each, the
 	// values picked and the text typed instead.
 	answering string
