@@ -24,10 +24,10 @@ colors:
   success: '#067C66'
   thinking: '#557255'
   warning: '#8F6402'
-  code-keyword: '#2B702E'
-  code-string: '#825C01'
-  code-number: '#9E4730'
-  code-type: '#00698C'
+  code-keyword: '#0F5917'
+  code-string: '#654703'
+  code-number: '#86311B'
+  code-type: '#045370'
   background-dark: '#1C2A1F'
   foreground-dark: '#EAE5DF'
   card-dark: '#273929'
@@ -50,10 +50,10 @@ colors:
   success-dark: '#40CFA9'
   thinking-dark: '#9CBB9C'
   warning-dark: '#E9AC4C'
-  code-keyword-dark: '#85C385'
-  code-string-dark: '#D5A95D'
-  code-number-dark: '#ED9782'
-  code-type-dark: '#5FBEE8'
+  code-keyword-dark: '#94D394'
+  code-string-dark: '#E9BD71'
+  code-number-dark: '#FFB09D'
+  code-type-dark: '#70CFF9'
 typography:
   headline:
     fontFamily: 'SF Pro Text, -apple-system, system-ui, sans-serif'
@@ -227,7 +227,7 @@ A cool graphite neutral ramp with seven semantic hues, each tuned per appearance
 
 ### Code
 
-Code in a well is colored as it reads, the one place hue names no state: **Code Keyword** (`code-keyword`, the brand's own hue), **Code String** (`code-string`), **Code Number** (`code-number`, numbers, literals and constants) and **Code Type** (`code-type`, types, builtins and attributes), three hues apart from the brand and from each other, each 4.5:1 or more on the well, the card and the ground. Comments are quiet ink, punctuation halfway to it, the rest ink. Each scheme tunes its own four, never violet.
+Code in a well is colored as it reads, the one place hue names no state: **Code Keyword** (`code-keyword`, the brand's own hue), **Code String** (`code-string`), **Code Number** (`code-number`, numbers, literals and constants) and **Code Type** (`code-type`, types, builtins and attributes), three hues apart from the brand and from each other, each 7:1 or more on the well, the card and the ground, as code is set a step under the body. Comments are quiet ink, punctuation halfway to it, the rest ink. Each scheme tunes its own four, never violet.
 
 ### Neutral
 
@@ -266,7 +266,7 @@ Code in a well is colored as it reads, the one place hue names no state: **Code 
 - **Title** (600, 13px): the window title, the Sessions header, a question's title.
 - **Body** (400, 13px): conversation text, sidebar rows (500 when selected), buttons (500).
 - **Label** (500, 11px): tags (0.2px tracking), badges, Kbd caps, extra-small buttons, help section titles, times ago.
-- **Code** (SF Mono 400, 13px for tool names at 500; 11px for args, output and diffs).
+- **Code** (SF Mono 400, 13px for tool names at 500; 12px in a reply's wells; 11px for args, output and diffs).
 - **Figures** (SF Mono, 11px, tabular): durations, status-line counts, usage line.
 
 ### Named Rules
@@ -326,8 +326,8 @@ Quiet, compact, shadcn anatomy.
 - **Inspector:** raised panel at the right with a 1px seam; a frosted 48px bar with the step's state, SF Mono name, duration, "3 of 9", previous and next, copy (a green check for 1.5s once copied) and close. Under it the subject in SF Mono 13px, then 11px/500 headings (Input, Changes, Output, Error) over muted wells of numbered lines in color (a read in its file's language, numbered from where it started; the input as JSON; a command as shell), an edit's diff on its bands; thinking reads at body size.
 - **Approval / question panel:** raised panel, 16px padding, seamed in waiting orange at 70%, an 8px waiting dot before the title; the only panel in that colour.
 - **User message:** secondary fill, 1px seam, 8x12 padding, right-aligned.
-- **Code well:** muted fill, SF Mono 11px at 1.5 line height, 12px sides. In the reply, a fenced block has a 32px head with its language in quiet ink and a quiet Copy (a green check for 1.5s once copied); its lines take their colors as each ends while the reply streams in.
-- **Reply text:** the reply and the thinking read as Markdown (goldmark, with GitHub's tables, task lists and strikethrough) at body size and 1.625 line height, 12px between blocks. Headings at 600 (17px, 15px, then body size) with 24px (20px from the third level) above and 8px below. List items hang from a 20px gutter of quiet bullets (•, ◦, ▪ by depth) or tabular numbers, 4px apart in a tight list and 8px under the line that leads in; a task shows a 14px box, filled with the brand and a check once done. A quote has a 2px seam-coloured bar 12px before its text in quiet ink. Inline code is SF Mono 1px under the body on the muted fill; a link is in the brand and opens in the browser; a table sits in a 1px seam with its head on the muted fill, its columns only as wide as they need. A line that may still turn into a fence, heading, item, rule or table row waits until it ends, so marks never flash as text. Tool output is never Markdown: it is shown as it came.
+- **Code well:** muted fill, SF Mono 11px at 1.5 line height, 12px sides. In the reply, a fenced block is 12px inside a 1px seam, with a 32px head with its language in quiet ink and a quiet Copy (a green check for 1.5s once copied); its lines take their colors as each ends while the reply streams in.
+- **Reply text:** the reply and the thinking read as Markdown (goldmark, with GitHub's tables, task lists and strikethrough) at body size and 1.625 line height, 12px between blocks, its prose at most 43 times the body size wide (about 85 characters, 43 of CJK) while code and tables take the column; the text reads at 11:1 to 14:1 on the ground. Headings at 600 (20px, 17px, 15px, then body size) with 24px (20px from the third level) above and 8px below. List items hang from a 20px gutter of quiet bullets (•, ◦, ▪ by depth) or tabular numbers, 4px apart in a tight list and 8px under the line that leads in; a task shows a 14px box, filled with the brand and a check once done. A quote has a 2px bar of quiet ink at 50% 12px before its text, in ink 40% of the way to quiet ink. Inline code is SF Mono 1px under the body, in the hue of what it names, each on its own hue at 14%: a path, glob or file name in Code String, a call or member in Code Type, any other word in Emphasis on the brand; a link is in the brand drawn 30% toward the ink and opens in the browser; a table sits in a 1px seam with its head on the muted fill, its columns only as wide as they need. A line that may still turn into a fence, heading, item, rule or table row waits until it ends, so marks never flash as text. Tool output is never Markdown: it is shown as it came.
 
 ### Inputs / Fields
 

@@ -20,7 +20,7 @@ const chunk = 32
 func fencedWell(c *ui.Context, code *fenced) {
 	th := c.Theme()
 	p := components.PaletteOf(th)
-	ui.Column(c).Background(p.Muted).Radius(th.Radius).Padding(0, 0, 10).Children(func() {
+	ui.Column(c).Background(p.Muted).Border(1, p.Border).Radius(th.Radius).Padding(0, 0, 10).Children(func() {
 		ui.Row(c).Height(32).Padding(0, 4, 0, 12).AlignItems(ui.Center).Unselectable().Children(func() {
 			ui.Text(c, code.lang).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.MutedForeground).Grow(1)
 			style := components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall}
@@ -31,7 +31,7 @@ func fencedWell(c *ui.Context, code *fenced) {
 		})
 
 		for i, spans := range code.chunks(p) {
-			ui.RichText(c.Key(i), spans...).Font("monospace").FontSize(components.TextXS(th)).LineHeight(1.5).Padding(0, 12)
+			ui.RichText(c.Key(i), spans...).Font("monospace").FontSize(components.TextCode(th)).LineHeight(1.5).Padding(0, 12)
 		}
 	})
 }
