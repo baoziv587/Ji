@@ -6,7 +6,7 @@ import type { FakeReply } from '@ji.dev/testing'
 import type { AddressInfo } from 'node:net'
 import type { ServiceEvent } from '../src/server/events.ts'
 import type { SessionSummary } from '../src/server/sessions.ts'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
@@ -124,6 +124,48 @@ describe('agent HTTP service', () => {
     expect(texts(replayed.seen)).toBe('first answersecond answer')
     // The second call saw the first exchange: hello, first answer, and again
     expect(seen).toEqual([3])
+  })
+
+  it('should list the sessions without reading their logs, one that cannot be read back included', () => {
+    // Arrange
+    const store = createSessionStore(scratch())
+    const meta = store.create(scratch())
+    const records = vi.spyOn(store, 'records').mockImplementation(() => {
+      throw new RangeError('Cannot create a string longer than 0x1fffffe8 characters')
+    })
+    const fake = createFakeModel([])
+    onTestFinished(() => fake.dispose())
+    const hub = createSessionHub({ store, open: createSessionOpener({ store, model: fake.model, thinking: 'off' }) })
+
+    // Act
+    const listed = hub.list()
+    const opening = (): unknown => hub.session(meta.id)
+
+    // Assert
+    expect(listed).toMatchObject([{ id: meta.id, status: 'idle' }])
+    expect(records).not.toHaveBeenCalled()
+    expect(opening).toThrow('Cannot create a string')
+    expect(hub.list()).toMatchObject([{ id: meta.id, status: 'idle' }])
+  })
+
+  it('should read back a log longer than a chunk with its deltas joined, skipping a line cut short', () => {
+    // Arrange: a write logged a line a delta, as before the deltas were joined
+    const sessions = scratch()
+    const piece = '写个页面 '.repeat(100)
+    const call = { type: 'toolCall', id: 'c1', name: 'write', arguments: {} }
+    const lines = Array.from({ length: 3000 }, (_, t) =>
+      JSON.stringify({ run: 'r', session: 's', t, type: 'tool_call_delta', call, delta: piece }),
+    )
+    lines.push('{"run":"r","session":"s","t":3000,"type":"tool_call"')
+    lines.push(JSON.stringify({ run: 'r', session: 's', t: 3001, type: 'text', delta: 'done' }))
+    writeFileSync(join(sessions, 'a.jsonl'), `${lines.join('\n')}\n`)
+
+    // Act
+    const records = createSessionStore(sessions).records('a')
+
+    // Assert
+    expect(records.map(r => r.type)).toEqual(['tool_call_delta', 'text'])
+    expect(records[0]).toMatchObject({ t: 2999, delta: piece.repeat(3000) })
   })
 
   it("should start a session's events with its state, new or read back from its log", async () => {

@@ -6,6 +6,7 @@
 // Nothing is ever deleted: an archived session keeps both files.
 
 import type { LogRecord } from './history.ts'
+import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
 import {
   closeSync,
@@ -14,10 +15,12 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  readSync,
   writeFileSync,
   writeSync,
 } from 'node:fs'
 import { join } from 'node:path'
+import { compact } from '@ji.dev/plugin-jsonl'
 
 export interface SessionMeta {
   id: string
@@ -35,7 +38,10 @@ export interface SessionStore {
   list: () => SessionMeta[]
   create: (root: string) => SessionMeta
   save: (meta: SessionMeta) => void
-  /** The session's log, read back; a line that does not parse (cut short by a crash, say) is skipped. */
+  /**
+   * The session's log, read back with its deltas joined; a line that does not parse (cut short by a crash, say) is
+   * skipped.
+   */
   records: (id: string) => LogRecord[]
   /** Appends a line to the session's log. */
   append: (id: string, line: string) => void
@@ -75,18 +81,7 @@ export function createSessionStore(dir: string): SessionStore {
       if (!existsSync(logPath(id))) {
         return []
       }
-      return readFileSync(logPath(id), 'utf8')
-        .split('\n')
-        .flatMap(line => {
-          if (line.trim() === '') {
-            return []
-          }
-          try {
-            return [JSON.parse(line) as LogRecord]
-          } catch {
-            return []
-          }
-        })
+      return [...compact(parsed(linesOf(logPath(id))))]
     },
     append: (id, line) => {
       let fd = logs.get(id)
@@ -102,5 +97,53 @@ export function createSessionStore(dir: string): SessionStore {
       }
       logs.clear()
     },
+  }
+}
+
+/** The records of a log's lines; a line that does not parse is skipped. */
+function* parsed(lines: Iterable<string>): Generator<LogRecord> {
+  for (const line of lines) {
+    if (line.trim() === '') {
+      continue
+    }
+    let record: LogRecord
+    try {
+      record = JSON.parse(line) as LogRecord
+    } catch {
+      continue
+    }
+    yield record
+  }
+}
+
+const CHUNK_SIZE = 1 << 20
+const NEWLINE = 0x0a
+
+/**
+ * The lines of a file, read a chunk at a time: a log written a line a delta, before plugin-jsonl joined them, can be
+ * longer than a string can be.
+ */
+function* linesOf(path: string): Generator<string> {
+  const fd = openSync(path, 'r')
+  try {
+    const chunk = Buffer.alloc(CHUNK_SIZE)
+    // The line read so far, copied out of the chunk as it is read again
+    const parts: Buffer[] = []
+    for (let n = readSync(fd, chunk); n > 0; n = readSync(fd, chunk)) {
+      const data = chunk.subarray(0, n)
+      let start = 0
+      for (let end = data.indexOf(NEWLINE); end !== -1; end = data.indexOf(NEWLINE, start)) {
+        parts.push(data.subarray(start, end))
+        yield Buffer.concat(parts).toString('utf8')
+        parts.length = 0
+        start = end + 1
+      }
+      parts.push(Buffer.from(data.subarray(start)))
+    }
+    if (parts.length > 0) {
+      yield Buffer.concat(parts).toString('utf8')
+    }
+  } finally {
+    closeSync(fd)
   }
 }

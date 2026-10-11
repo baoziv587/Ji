@@ -2,13 +2,14 @@
 // client shows for it. A reply that did not finish took the conversation back to before it (agent/conversation.ts),
 // so only the steps of runs that ended done count toward the history; a client still sees what the others did.
 
-import type { AgentState, Message, RunEvent, Turn } from '@ji.dev/llm'
+import type { AgentState, Message, Turn } from '@ji.dev/llm'
+import type { JsonlRecord } from '@ji.dev/plugin-jsonl'
 import type { Outcome, Unnumbered } from './events.ts'
 import { UsageMeter } from '../agent/meter.ts'
 import { eventOf, outcomeOf, usageOf } from './events.ts'
 
 /** One line of a session's log. */
-export type LogRecord = RunEvent & { run: string; session: string }
+export type LogRecord = JsonlRecord
 
 export interface History {
   state: AgentState
