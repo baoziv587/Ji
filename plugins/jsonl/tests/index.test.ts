@@ -1,16 +1,17 @@
 import type { Api, Model } from '@ji.dev/llm'
 import type { FakeReply } from '@ji.dev/testing'
+import type { JsonlRecord } from '../src/index.ts'
 import { createAgent, createSession, definePlugin, tool, Type } from '@ji.dev/llm'
-import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
+import { assistantMessage, createFakeModel, textBlock, thinkingBlock, toolUse } from '@ji.dev/testing'
 import { afterEach, describe, expect, it } from 'vitest'
-import { jsonl } from '../src/index.ts'
+import { compact, jsonl } from '../src/index.ts'
 
 describe('jsonl', () => {
   it('should write one parsable line per event, tagged with the run and the session', async () => {
     // Arrange
     const lines: string[] = []
     const chat = createSession(
-      createAgent({ model: faux([assistantMessage('hello')]), plugins: [jsonl(l => lines.push(l))] }),
+      createAgent({ model: faux([assistantMessage('hello')]), plugins: [jsonl(l => lines.push(l), { interval: 0 })] }),
     )
 
     // Act
@@ -111,6 +112,102 @@ describe('jsonl', () => {
       .map(l => JSON.parse(l) as { type: string; data?: unknown })
       .filter(r => r.type === 'tool_update')
     expect(updates.map(u => u.data)).toEqual([0.5, { message: 'half', done: 1, total: 2 }])
+  })
+
+  it('should join what is streamed in an interval into one line, each kind and call apart', async () => {
+    // Arrange
+    const lines: string[] = []
+    const thinking = 'step by step '.repeat(50)
+    const text = 'saving both files '.repeat(50)
+    const [a, b] = ['first '.repeat(100), 'second '.repeat(100)]
+    const save = tool({
+      name: 'save',
+      description: 'saves a file',
+      parameters: Type.Object({ content: Type.String() }),
+      run: async () => 'saved',
+    })
+    const model = faux([
+      assistantMessage([
+        thinkingBlock(thinking),
+        textBlock(text),
+        toolUse('save', { content: a }, { id: 'a' }),
+        toolUse('save', { content: b }, { id: 'b' }),
+      ]),
+      assistantMessage('ok'),
+    ])
+    const agent = createAgent({ model, tools: [save], plugins: [jsonl(l => lines.push(l), { interval: 60_000 })] })
+
+    // Act
+    const events = await collect(createSession(agent).send('go'))
+
+    // Assert
+    expect(events.filter(e => e.type === 'tool_call_delta').length).toBeGreaterThan(2)
+    const records = lines.map(l => JSON.parse(l) as Record<string, any>)
+    const streamed = records.filter(r => ['thinking', 'text', 'tool_call_delta'].includes(r.type))
+    expect(streamed.map(r => [r.type, r.call?.id])).toEqual([
+      ['thinking', undefined],
+      ['text', undefined],
+      ['tool_call_delta', 'a'],
+      ['tool_call_delta', 'b'],
+      ['text', undefined],
+    ])
+    expect(streamed[0].delta).toBe(thinking)
+    expect(streamed[1].delta).toBe(text)
+    expect(JSON.parse(streamed[2].delta)).toEqual({ content: a })
+    expect(streamed[3].call.arguments).toEqual({ content: b })
+  })
+
+  it('should write each delta when the interval is 0', async () => {
+    // Arrange
+    const lines: string[] = []
+    const model = faux([assistantMessage('a reply long enough to stream in more than one piece '.repeat(10))])
+    const agent = createAgent({ model, plugins: [jsonl(l => lines.push(l), { interval: 0 })] })
+
+    // Act
+    const events = await collect(createSession(agent).send('go'))
+
+    // Assert
+    const texts = lines.map(l => JSON.parse(l) as { type: string }).filter(r => r.type === 'text')
+    expect(texts.length).toBe(events.filter(e => e.type === 'text').length)
+    expect(texts.length).toBeGreaterThan(1)
+  })
+})
+
+describe('compact', () => {
+  it('should join each run of deltas of one run, kind and call, and keep the rest as they were', () => {
+    // Arrange
+    const call = (id: string, content: string): object => ({
+      type: 'toolCall',
+      id,
+      name: 'save',
+      arguments: { content },
+    })
+    const records = [
+      { run: 'r', session: 's', t: 1, type: 'thinking', delta: 'a' },
+      { run: 'r', session: 's', t: 1, type: 'thinking', delta: 'b' },
+      { run: 'r', session: 's', t: 1, type: 'text', delta: 'c' },
+      { run: 'q', session: 's', t: 1, type: 'text', delta: 'd' },
+      { run: 'r', session: 's', t: 1, type: 'tool_call_delta', call: call('x', 'e'), delta: 'e' },
+      { run: 'r', session: 's', t: 1, type: 'tool_call_delta', call: call('x', 'ef'), delta: 'f' },
+      { run: 'r', session: 's', t: 1, type: 'tool_call_delta', call: call('y', 'g'), delta: 'g' },
+      { run: 'r', session: 's', t: 1, type: 'tool_call', call: call('y', 'g') },
+      { run: 'r', session: 's', t: 2, type: 'text', delta: 'h' },
+    ] as JsonlRecord[]
+
+    // Act
+    const compacted = [...compact(records)]
+
+    // Assert
+    expect(compacted.map(r => [r.type, r.run, 'delta' in r ? r.delta : undefined])).toEqual([
+      ['thinking', 'r', 'ab'],
+      ['text', 'r', 'c'],
+      ['text', 'q', 'd'],
+      ['tool_call_delta', 'r', 'ef'],
+      ['tool_call_delta', 'r', 'g'],
+      ['tool_call', 'r', undefined],
+      ['text', 'r', 'h'],
+    ])
+    expect(compacted[3]).toMatchObject({ call: { arguments: { content: 'ef' } } })
   })
 })
 
