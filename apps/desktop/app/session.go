@@ -40,8 +40,10 @@ type sessionView struct {
 	copied        components.Copied
 	refocus       bool
 	answer        answerDraft
-	// Whether what the session has spent is open over its gauge.
-	usageOpen bool
+	// Whether what the session has spent is open over its gauge, and where
+	// the gauge's arc runs down from.
+	usageOpen  bool
+	usageDrain components.Drain
 }
 
 // restore puts back what was typed and not sent, unless something else

@@ -84,3 +84,46 @@ func TestAskingCutsDetailsIntoLines(t *testing.T) {
 		t.Errorf("details %+v", got)
 	}
 }
+
+func TestCompactionRunsThenSaysWhatTheHistoryBecame(t *testing.T) {
+	var tr Transcript
+	tr.Apply(agent.Event{Type: "user", Text: "go on"})
+	tr.Apply(agent.Event{Type: "compacting", Tokens: 180_000})
+	seam := tr.Items[len(tr.Items)-1]
+	if seam.Kind != KindCompaction || seam.After != 0 || tr.Activity != "Compacting 180k tokens" {
+		t.Fatalf("running: %+v, activity %q", seam, tr.Activity)
+	}
+
+	tr.Apply(agent.Event{Type: "compacted", Before: 180_000, After: 32_000})
+	if seam.Before != 180_000 || seam.After != 32_000 || len(tr.Items) != 2 {
+		t.Errorf("done: %+v, %d items", seam, len(tr.Items))
+	}
+}
+
+func TestCompactionKeptAsItWasSaysWhy(t *testing.T) {
+	var tr Transcript
+	tr.Apply(agent.Event{Type: "compacting", Tokens: 180_000})
+	tr.Apply(agent.Event{Type: "compacted", Before: 180_000, After: 180_000, Error: "timed out"})
+	// Asked for with nothing new: no summary was tried
+	tr.Apply(agent.Event{Type: "compacted", Before: 40_000, After: 40_000, Error: "nothing new since the last summary"})
+	tr.Apply(agent.Event{Type: "compacting", Tokens: 50_000})
+	tr.Apply(agent.Event{Type: "reply_end", Outcome: "done"})
+
+	var got [][2]string
+	for _, it := range tr.Items {
+		got = append(got, [2]string{it.Level, it.Text})
+	}
+	want := [][2]string{
+		{"warn", "Couldn't compact: timed out. The conversation goes on in full."},
+		{"info", "Not compacted: nothing new since the last summary."},
+		{"warn", "Stopped compacting. The conversation goes on in full."},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("notices %q, want %q", got, want)
+	}
+	for _, it := range tr.Items {
+		if it.Kind != KindNotice {
+			t.Errorf("a %v left after the compaction kept the history", it.Kind)
+		}
+	}
+}

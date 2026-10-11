@@ -51,6 +51,25 @@ describe('historyOf', () => {
     expect(state.messages.map(textOf)[0]).toBe(kept)
   })
 
+  it('should give a client a compaction as it starts, and why it kept the history when it did', () => {
+    // Arrange
+    const records = [
+      ...run('a', 'hello', 'hi', 'done'),
+      record('b', { type: 'compaction:start', tokens: 180_000 }),
+      record('b', { type: 'compaction:end', before: 180_000, after: 180_000, error: 'timed out' }),
+      ...run('b', 'next', 'ok', 'done'),
+    ]
+
+    // Act
+    const { events } = historyOf(records)
+
+    // Assert
+    expect(events.filter(e => e.type.startsWith('compact'))).toEqual([
+      expect.objectContaining({ type: 'compacting', tokens: 180_000 }),
+      expect.objectContaining({ type: 'compacted', before: 180_000, after: 180_000, error: 'timed out' }),
+    ])
+  })
+
   it('should take a rewrite as the whole history from then on', () => {
     // Arrange
     const summary: Message = { role: 'user', content: 'summary of before', timestamp: 0 }

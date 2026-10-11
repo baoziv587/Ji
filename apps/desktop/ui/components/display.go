@@ -4,6 +4,7 @@ package components
 
 import (
 	"math"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -85,24 +86,30 @@ func Spinner(c *ui.Context, label string, size float32, color ui.Color) ui.Eleme
 
 // Gauge is how full something is, value between 0 and 1: a ring filled
 // clockwise from the top in color, on a track of quiet ink, size wide,
-// named by label.
-func Gauge(c *ui.Context, label string, value float64, size float32, color ui.Color) ui.Element {
+// named by label. The arc runs down to a lower value along drain, as the
+// history is compacted, and up to a higher one at once.
+func Gauge(c *ui.Context, label string, value float64, size float32, color ui.Color, drain *Drain) ui.Element {
 	value = min(max(value, 0), 1)
 	track := PaletteOf(c.Theme()).MutedForeground.Alpha(0.25)
+	drain.toward(value, c.Now(), c.Preferences().ReduceMotion)
 	return ui.Box(c).Size(size, size).Shrink(0).Role(ui.RoleProgress).Range(0, 1, value).Label(label).Draw(func(p *ui.Painter, r ui.Rect) {
+		shown := drain.at(p.Now())
+		if shown != value {
+			p.AnimationFrame()
+		}
 		width := r.W / 7
 		cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, (r.W-width)/2
 		var ring ui.Path
 		ring.Circle(cx, cy, radius)
 		p.StrokePath(&ring, width, track)
-		if value == 0 {
+		if shown == 0 {
 			return
 		}
 
 		var arc ui.Path
-		steps := int(math.Ceil(value * 48))
+		steps := int(math.Ceil(shown * 48))
 		for i := 0; i <= steps; i++ {
-			a := (float64(i)/float64(steps)*value - 0.25) * 2 * math.Pi
+			a := (float64(i)/float64(steps)*shown - 0.25) * 2 * math.Pi
 			x, y := cx+radius*float32(math.Cos(a)), cy+radius*float32(math.Sin(a))
 			if i == 0 {
 				arc.MoveTo(x, y)
@@ -112,6 +119,40 @@ func Gauge(c *ui.Context, label string, value float64, size float32, color ui.Co
 		}
 		p.StrokePath(&arc, width, color)
 	})
+}
+
+// drainTime is how long a Gauge's arc takes to run down.
+const drainTime = 320 * time.Millisecond
+
+// Drain is where a Gauge's arc runs down from and since when, kept by
+// whoever shows the gauge from frame to frame. It moves in the Draw, whose
+// frames do not build the view, as Animate's would, the whole window
+// again for every one of them.
+type Drain struct {
+	from, to float64
+	start    time.Time
+}
+
+// toward starts the arc running from where it is now to value; up, or
+// with less motion, it is there at once.
+func (d *Drain) toward(value float64, now time.Time, still bool) {
+	if value == d.to {
+		return
+	}
+	from := d.at(now)
+	if value > from || still {
+		from = value
+	}
+	d.from, d.to, d.start = from, value, now
+}
+
+// at is where the arc is at now.
+func (d *Drain) at(now time.Time) float64 {
+	t := float32(now.Sub(d.start)) / float32(drainTime)
+	if t >= 1 {
+		return d.to
+	}
+	return d.from + (d.to-d.from)*float64(EaseOutExpo(max(t, 0)))
 }
 
 // EmptyHeader is the head of shadcn/ui's Empty: an icon on a tile, a

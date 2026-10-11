@@ -121,5 +121,7 @@ func item(c *ui.Context, item *Item) {
 		}, item.Text)
 	case KindHelp:
 		help(c, item.Help)
+	case KindCompaction:
+		compaction(c, item)
 	}
 }
