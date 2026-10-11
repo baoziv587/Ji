@@ -5,6 +5,7 @@ package app
 import (
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/egoist/mygo/ui"
 
@@ -17,8 +18,12 @@ import (
 // sessionView is what the window keeps of a session it opened: its
 // conversation, and what is typed and picked in it.
 type sessionView struct {
-	id    string
-	stop  func()
+	id   string
+	stop func()
+	// The events come in and not yet applied, and whether the session is
+	// the one shown, which takes them in at once.
+	inbox inbox
+	shown atomic.Bool
 	t     conversation.Transcript
 	draft string
 	list  ui.ListState

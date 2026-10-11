@@ -239,6 +239,26 @@ describe('agent HTTP service', () => {
     expect(switched.mode).toBe('auto')
     expect(other.mode).toBe('ask')
   })
+
+  it('should set every session to a mode, one opened later and one set back out of yolo included', async () => {
+    // Arrange
+    const { url } = await serve([])
+    const opened = await create(url)
+    await fetch(`${url}/api/sessions/${opened.id}/state`)
+
+    // Act
+    const set = await post(url, '/api/mode', { mode: 'yolo' })
+    const later = await create(url)
+    const states = [await modeOf(url, opened.id), await modeOf(url, later.id)]
+    const back = (await post(url, `/api/sessions/${opened.id}/mode`, { mode: 'ask' })) as { mode: string }
+    const wrong = await fetch(`${url}/api/mode`, { method: 'POST', body: JSON.stringify({ mode: 'never' }) })
+
+    // Assert
+    expect(set).toEqual({ mode: 'yolo' })
+    expect(states).toEqual(['yolo', 'yolo'])
+    expect(back.mode).toBe('ask')
+    expect(wrong.status).toBe(400)
+  })
 })
 
 /** A service on a folder of sessions, a new one by default, whose sessions work in a new folder of their own. */
@@ -418,6 +438,12 @@ async function subscribe<E = ServiceEvent>(
         check()
       }),
   }
+}
+
+async function modeOf(url: string, id: string): Promise<string> {
+  const response = await fetch(`${url}/api/sessions/${id}/state`)
+  const state = (await response.json()) as { mode: string }
+  return state.mode
 }
 
 async function post(url: string, path: string, body: unknown): Promise<unknown> {

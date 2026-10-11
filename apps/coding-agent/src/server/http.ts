@@ -2,6 +2,8 @@
 // needs nothing but an HTTP library.
 //
 //   GET  /api/events                                the list of sessions, at once and again whenever it changes
+//   POST /api/mode                    {mode}        every session's mode, those opened later included: ask, auto or
+//                                                   yolo
 //   GET  /api/sessions                              {sessions, defaultRoot}
 //   POST /api/sessions                {root?}       a new session, working in root (default: defaultRoot)
 //   POST /api/sessions/:id/archive    {archived}    out of the list's way, or back
@@ -14,13 +16,15 @@
 //                                                   'ran'}, or a skill's sent as a message ('started' | 'steered')
 //   POST /api/sessions/:id/questions/:q  {answers: string[][]} | {dismissed: true}
 //   POST /api/sessions/:id/stop
-//   POST /api/sessions/:id/mode                     switches between ask and auto
+//   POST /api/sessions/:id/mode       {mode?}       sets the session's mode; without one, switches between ask and
+//                                                   auto
 //   POST /api/sessions/:id/thinking   {level}
 //
 // An error is {error: message} with a 4xx status.
 
 import type { Reply } from '@ji.dev/plugin-choices'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
+import type { Mode } from '../features/permissions.ts'
 import type { ServiceEvent } from './events.ts'
 import type { SessionHub, SessionSummary } from './sessions.ts'
 import { Buffer } from 'node:buffer'
@@ -73,6 +77,11 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
   if (collection === 'events' && method === 'GET') {
     return streamList(hub, defaultRoot, req, res)
   }
+  if (collection === 'mode' && method === 'POST') {
+    const mode = modeOf(await readJson(req))
+    hub.setMode(mode)
+    return sendJson(res, 200, { mode })
+  }
   if (collection !== 'sessions') {
     throw new HttpError(404, `no route for ${method} ${url.pathname}`)
   }
@@ -123,7 +132,11 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
       service.stop()
       return sendJson(res, 200, { ok: true })
     case 'mode':
-      service.switchMode()
+      if (isRecord(body) && body.mode !== undefined) {
+        service.setMode(modeOf(body))
+      } else {
+        service.switchMode()
+      }
       return sendJson(res, 200, service.state())
     case 'thinking':
       service.think(stringField(body, 'level'))
@@ -203,6 +216,17 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   } catch {
     throw new HttpError(400, 'the request body is not JSON')
   }
+}
+
+const MODES: readonly Mode[] = ['ask', 'auto', 'yolo']
+
+function modeOf(body: unknown): Mode {
+  const value = isRecord(body) ? body.mode : undefined
+  const mode = MODES.find(m => m === value)
+  if (mode === undefined) {
+    throw new HttpError(400, '"mode" must be ask, auto or yolo')
+  }
+  return mode
 }
 
 function stringField(body: unknown, name: string): string {

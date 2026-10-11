@@ -42,6 +42,8 @@ type Work struct {
 	// written, whose last words are Glimpse. Nil once the work rests.
 	Current *Item
 	Glimpse string
+	// The steps built while it is open; the window's own.
+	window stepsWindow
 }
 
 // FileChange is a file the work's calls changed: the lines they added and

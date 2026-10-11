@@ -5,7 +5,9 @@
 //   create    a new session working in a folder
 //   session   one session's service, opened if need be
 //   archive   out of the list's way, or back in it: nothing is deleted
+//   setMode   what waits for a yes in every session, those opened later included
 
+import type { Mode } from '../features/permissions.ts'
 import type { AgentService } from './service.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
 import { statSync } from 'node:fs'
@@ -21,7 +23,9 @@ export interface SessionSummary extends SessionMeta {
 export interface SessionHubOptions {
   store: SessionStore
   /** The session's service, its tools working in its root, its log written to the store. */
-  open: (meta: SessionMeta) => AgentService
+  open: (meta: SessionMeta, mode: Mode) => AgentService
+  /** The mode a session opens in until setMode: ask by default. */
+  mode?: Mode
 }
 
 export interface SessionHub {
@@ -33,6 +37,8 @@ export interface SessionHub {
   session: (id: string) => AgentService
   /** Throws while the session is replying: stop it first. */
   archive: (id: string, archived: boolean) => SessionSummary
+  /** Every session's mode, and the one the sessions opened from now on start in. */
+  setMode: (mode: Mode) => void
   /** Called with the list whenever a session is added, archived, or starts or stops doing something. */
   subscribe: (listener: (sessions: SessionSummary[]) => void) => () => void
   /** Stops every reply and closes the logs. */
@@ -49,7 +55,8 @@ export class SessionNotFoundError extends Error {
 /** A title is the first line of the first message, this long at most. */
 const TITLE_LENGTH = 80
 
-export function createSessionHub({ store, open }: SessionHubOptions): SessionHub {
+export function createSessionHub({ store, open, mode: initial = 'ask' }: SessionHubOptions): SessionHub {
+  let mode = initial
   const metas = new Map(store.list().map(meta => [meta.id, meta]))
   const opened = new Map<string, AgentService>()
   const listeners = new Set<(sessions: SessionSummary[]) => void>()
@@ -101,7 +108,7 @@ export function createSessionHub({ store, open }: SessionHubOptions): SessionHub
       return existing
     }
 
-    const service = open(metaOf(id))
+    const service = open(metaOf(id), mode)
     opened.set(id, service)
     service.subscribe(e => {
       if (e.type === 'user') {
@@ -136,6 +143,12 @@ export function createSessionHub({ store, open }: SessionHubOptions): SessionHub
       const meta = update(metaOf(id), { archived })
       changed()
       return summaryOf(meta)
+    },
+    setMode: next => {
+      mode = next
+      for (const service of opened.values()) {
+        service.setMode(next)
+      }
     },
     subscribe: listener => {
       listeners.add(listener)

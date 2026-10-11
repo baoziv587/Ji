@@ -24,8 +24,10 @@ type App struct {
 	agent agent.Agent
 	// update runs fn on the main thread, then draws: Window.Update.
 	update func(fn func())
-	// async runs fn off the main thread: a goroutine, or at once in tests.
+	// async runs fn off the main thread: a goroutine, or at once in tests;
+	// after does it once d has passed.
 	async func(fn func())
+	after func(d time.Duration, fn func())
 	// ChooseFolder asks for a folder to start a session in: "" when the
 	// person cancels. Nil leaves the choice out.
 	ChooseFolder func() (string, error)
@@ -120,6 +122,7 @@ func New(service agent.Agent, update func(func())) *App {
 		agent:  service,
 		update: update,
 		async:  func(fn func()) { go fn() },
+		after:  func(d time.Duration, fn func()) { time.AfterFunc(d, fn) },
 		ctx:    context.Background(),
 		views:  map[string]*sessionView{},
 		opened: map[string]*bool{},
@@ -134,7 +137,13 @@ func (a *App) Follow(ctx context.Context) {
 	a.agent.FollowSessions(ctx, func(s agent.Sessions) {
 		a.update(func() { a.setList(s) })
 	}, func(err error) {
-		a.update(func() { a.link.set(err) })
+		a.update(func() {
+			a.link.set(err)
+			// The service keeps no mode of the window's, and may have started again
+			if err == nil {
+				a.applyApprovals()
+			}
+		})
 	})
 }
 
@@ -159,8 +168,15 @@ func (a *App) Select(id string) {
 }
 
 func (a *App) show(id string) {
+	if was := a.views[a.selected]; was != nil {
+		was.shown.Store(false)
+	}
 	a.selected = id
 	a.open(id)
+	if view := a.views[id]; view != nil {
+		view.shown.Store(true)
+		a.drain(view)
+	}
 	a.keep(id)
 }
 
@@ -207,18 +223,30 @@ func (a *App) open(id string) {
 	view := &sessionView{id: id, stop: stop}
 	a.views[id] = view
 
-	var events inbox
+	drain := func() { a.update(func() { a.drain(view) }) }
 	a.async(func() {
 		a.agent.Follow(ctx, id, 0, func(e agent.Event) {
-			if events.put(e) {
-				a.update(func() {
-					for _, e := range events.take() {
-						a.apply(view, e)
-					}
-				})
+			switch {
+			case !view.inbox.put(e):
+			case view.shown.Load():
+				drain()
+			default:
+				a.after(backgroundEvery, drain)
 			}
 		})
 	})
+}
+
+// backgroundEvery is how often a session not shown takes in its events:
+// one writing a reply behind the one shown would else build the window
+// again for each delta of it, which none sees.
+const backgroundEvery = 250 * time.Millisecond
+
+// drain applies the events of the session come in since the last time.
+func (a *App) drain(view *sessionView) {
+	for _, e := range view.inbox.take() {
+		a.apply(view, e)
+	}
 }
 
 // close stops following a session and lets go of what the window keeps of it.

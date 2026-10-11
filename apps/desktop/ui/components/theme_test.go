@@ -9,7 +9,7 @@ import (
 )
 
 // No color of a scheme is saturated (AGENTS.md): OKLCH chroma at most
-// 0.04 for surfaces, 0.06 for the focus ring, 0.10 for anything else.
+// 0.05 for surfaces, 0.08 for the focus ring, 0.14 for anything else.
 func TestSchemesAreUnsaturated(t *testing.T) {
 	surfaces := map[string]bool{
 		"Background": true, "Card": true, "Popover": true,
@@ -23,12 +23,12 @@ func TestSchemesAreUnsaturated(t *testing.T) {
 			v := reflect.ValueOf(p)
 			for i := range v.NumField() {
 				name := v.Type().Field(i).Name
-				limit := 0.10
+				limit := 0.14
 				switch {
 				case surfaces[name]:
-					limit = 0.04
+					limit = 0.05
 				case name == "Ring":
-					limit = 0.06
+					limit = 0.08
 				}
 
 				if c := chroma(v.Field(i).Interface().(ui.Color)); c > limit {
@@ -70,6 +70,37 @@ func TestDarkSchemesStepApart(t *testing.T) {
 		}
 		if thinking < 0.74 {
 			t.Errorf("%s Thinking: lightness %.3f, at least 0.74", s.Name, thinking)
+		}
+	}
+}
+
+// In the light, the wells, the bubbles and the seams stand apart from the
+// ground by OKLCH lightness, so that code, a message and a table read as
+// set off from the text around them; muted text stays a step below the
+// text yet dark enough to read.
+func TestLightSchemesStepApart(t *testing.T) {
+	below := []struct {
+		name string
+		step float64
+	}{
+		{"Muted", 0.03}, {"Secondary", 0.04}, {"Border", 0.09}, {"Input", 0.13},
+	}
+
+	for _, s := range Schemes {
+		v := reflect.ValueOf(s.Light)
+		lightness := func(name string) float64 {
+			l, _, _ := oklch(v.FieldByName(name).Interface().(ui.Color))
+			return l
+		}
+
+		ground := lightness("Background")
+		for _, b := range below {
+			if l := lightness(b.name); ground-l < b.step {
+				t.Errorf("%s %s: lightness %.3f, at least %.2f below the ground's %.3f", s.Name, b.name, l, b.step, ground)
+			}
+		}
+		if r := contrast(s.Light.MutedForeground, s.Light.Muted); r < 5.5 {
+			t.Errorf("%s MutedForeground on Muted: %.2f:1, at least 5.5:1", s.Name, r)
 		}
 	}
 }

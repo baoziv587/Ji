@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLanguageByFenceOrPath(t *testing.T) {
@@ -87,6 +88,46 @@ func TestBlockPastTheLimitIsLexedOnce(t *testing.T) {
 	want := []Line{{{"y := 2", Plain}}, {{"    z", Plain}}, {{"return", Plain}}}
 	if got := lines[len(lines)-3:]; !reflect.DeepEqual(got, want) {
 		t.Errorf("the last lines %+v", got)
+	}
+}
+
+// A block that is slow to lex rests before it is lexed again, its new
+// lines plain meanwhile, and is drawn again once it may be.
+func TestASlowBlockRestsBetweenLexings(t *testing.T) {
+	lexed := 0
+	Background = func(fn func()) { lexed++; fn() }
+	defer func() { Background = func(fn func()) { go fn() } }()
+	ready := make(chan struct{}, 1)
+	Ready = func() {
+		select {
+		case ready <- struct{}{}:
+		default:
+		}
+	}
+	defer func() { Ready = func() {} }()
+
+	text := strings.Repeat("x := \"a string\" + 1 // and a comment\n", 1200)
+	b := &Block{Lang: Language("go")}
+	b.Grow(text, false)
+	b.Lines()
+	<-ready
+	if b.next.IsZero() {
+		t.Skip("lexed faster than slowLex here")
+	}
+
+	text += "return\n"
+	b.Grow(text, false)
+	lines := b.Lines()
+	if lexed != 1 || lines[len(lines)-2][0] != (Span{"return", Plain}) {
+		t.Fatalf("lexed %d times, the new line %+v", lexed, lines[len(lines)-2])
+	}
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("not drawn again once it may be lexed")
+	}
+	if lines := b.Lines(); lexed != 2 || lines[len(lines)-2][0].Kind != Keyword {
+		t.Errorf("lexed %d times, the new line %+v", lexed, lines[len(lines)-2])
 	}
 }
 

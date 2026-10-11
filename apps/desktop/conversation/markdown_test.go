@@ -1,9 +1,13 @@
 package conversation
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/egoist/mygo/ui"
+	gmtext "github.com/yuin/goldmark/text"
 
 	"desktop/agent"
 	"desktop/syntax"
@@ -260,5 +264,93 @@ func BenchmarkADeltaToALongParagraph(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		m.update(text+"more", false)
+	}
+}
+
+// Streamed a byte at a time, cut where it can be and a fence at the margin
+// written to its code as it comes, a reply shows at every step what
+// goldmark makes of all of it at once.
+func TestAStreamedReplyShowsAsItsWholeParse(t *testing.T) {
+	docs := []string{
+		"Intro text\n```go\nfunc main() {\n\tx := 1\n\n}\n```\nAfter text\n\n- item\n```\nplain\n```\n1. one\n2. two\n\n> quote\n```py\nprint(1)\n```\n",
+		"# Head\n```\ncode\n\n\nmore\n````\n```\n\n~~~ sh extra\nls\n~~~\n- a\n  ```\n  in the item\n  ```\n",
+		"<div>\n```\nnot a fence\n```\n</div>\n\nText\n```js\nlet a\n",
+	}
+	for _, doc := range docs {
+		var m markdown
+		for i := range len(doc) + 1 {
+			m.update(doc[:i], false)
+			if got, want := shapes(m.blocks), shapes(wholeParse(doc[:i], false)); !reflect.DeepEqual(got, want) {
+				t.Fatalf("after %q:\n got %+v\nwant %+v", doc[:i], got, want)
+			}
+		}
+		m.update(doc, true)
+		if got, want := shapes(m.blocks), shapes(wholeParse(doc, true)); !reflect.DeepEqual(got, want) {
+			t.Fatalf("done %q:\n got %+v\nwant %+v", doc, got, want)
+		}
+	}
+}
+
+// wholeParse is the blocks of text parsed at once, without cuts. goldmark
+// ends the line being written in an open fence with a line break, which
+// the fence written to as it comes leaves out, so that the line is not
+// colored before it ends.
+func wholeParse(text string, done bool) []mdBlock {
+	if !done {
+		start := strings.LastIndexByte(text, '\n') + 1
+		if held.MatchString(text[start:]) {
+			text = text[:start]
+		}
+	}
+	f := flattener{src: []byte(text), whole: done, pending: -1}
+	f.children(parser.Parse(gmtext.NewReader(f.src)))
+	if n := len(f.out); !done && n > 0 && f.out[n-1].code != nil && !strings.HasSuffix(text, "\n") {
+		code := f.out[n-1].code
+		code.text = strings.TrimSuffix(code.text, "\n")
+	}
+	return f.out
+}
+
+type shape struct {
+	kind       mdKind
+	level      int
+	runs       []mdRun
+	lang, code string
+	in         []mdBox
+	gap        float32
+}
+
+func shapes(blocks []mdBlock) []shape {
+	var out []shape
+	for _, b := range blocks {
+		s := shape{kind: b.kind, level: b.level, runs: b.runs, in: b.in, gap: b.gap}
+		if b.code != nil {
+			s.lang, s.code = b.code.lang, b.code.text
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// A fence of 2000 lines, written 20 bytes a delta, its lines shown as each
+// delta comes.
+func BenchmarkStreamingALongFence(b *testing.B) {
+	var doc strings.Builder
+	doc.WriteString("Here it is:\n```txt\n")
+	for i := range 2000 {
+		fmt.Fprintf(&doc, "line %4d of the file, padded to forty..\n", i)
+	}
+	doc.WriteString("```\n")
+	text := doc.String()
+
+	b.ReportAllocs()
+	for b.Loop() {
+		var m markdown
+		for end := 20; end < len(text)+20; end += 20 {
+			m.update(text[:min(end, len(text))], false)
+			if last := m.blocks[len(m.blocks)-1]; last.code != nil {
+				last.code.chunks(components.PaletteOf(&ui.Theme{}))
+			}
+		}
 	}
 }

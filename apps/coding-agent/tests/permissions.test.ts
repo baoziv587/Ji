@@ -54,7 +54,7 @@ describe('permissions', () => {
 
   it('should ask about nothing in yolo mode, outside the workspace included, and stay in it', async () => {
     // Arrange
-    const { permissions, outside } = await setup({ yolo: true })
+    const { permissions, outside } = await setup({ mode: 'yolo' })
 
     // Act
     permissions.switchMode()
@@ -68,6 +68,24 @@ describe('permissions', () => {
     expect(permissions.mode).toBe('yolo')
     expect(askedAbout).toEqual([false, false, false])
     expect(permissions.describeMode()).toMatch(/^yolo:/)
+  })
+
+  it('should leave yolo mode only when set to another, and allow nothing a yes allowed once back in ask', async () => {
+    // Arrange
+    const { permissions } = await setup()
+    const command = call('bash', { command: 'pnpm test' })
+    const approval = await permissions.approval(command)
+    approval.take([['commands']])
+
+    // Act
+    permissions.setMode('yolo')
+    const inYolo = await asked(permissions, command)
+    permissions.setMode('ask')
+    const backInAsk = await asked(permissions, command)
+
+    // Assert
+    expect([inYolo, backInAsk]).toEqual([false, true])
+    expect(permissions.mode).toBe('ask')
   })
 })
 

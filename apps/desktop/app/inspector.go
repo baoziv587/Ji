@@ -198,7 +198,7 @@ func (a *App) inspectStep(view *sessionView, s *conversation.Item, by int) {
 		return
 	}
 	view.t.Inspected = steps[i]
-	view.list.ScrollIntoView(steps[i].Block)
+	view.list.ScrollIntoView(view.t.RowOf(steps[i].Block))
 }
 
 // closeInspector hides the inspector and gives the keys back to the input.

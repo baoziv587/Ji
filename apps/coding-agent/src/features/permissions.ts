@@ -3,8 +3,8 @@
 //
 //   ask        before every command, file read and file change
 //   auto       approves file calls inside the workspace; commands, and any file call outside it, are still asked about
-//   yolo       nothing: every command and file call runs, outside the workspace too. Chosen at start (--yolo), for the
-//              whole session: Shift+Tab does not leave it
+//   yolo       nothing: every command and file call runs, outside the workspace too. Chosen at start (--yolo), or set
+//              by a client of the service (setMode): Shift+Tab does not leave it
 //   shortcuts  a yes that also changes what is asked from now on: switch to auto, stop asking about reads, allow every
 //              command, or allow reads in the folder of a file outside. Switching back to ask takes the last two back
 
@@ -19,8 +19,8 @@ import { DISMISSED } from '@ji.dev/plugin-choices'
 export type Mode = 'ask' | 'auto' | 'yolo'
 
 export interface PermissionsOptions {
-  /** Starts in yolo mode, which nothing leaves. */
-  yolo?: boolean
+  /** The mode it starts in: ask by default. */
+  mode?: Mode
 }
 
 /** A call about to be asked about, and what a reply to it does. */
@@ -58,7 +58,7 @@ export class Permissions {
 
   /** `workspace` is the one the files plugin was given: it must reach every file, the root's or not. */
   constructor(workspace: Resolver, fileTools: FilesPlugin, shellTools: ShellPlugin, options: PermissionsOptions = {}) {
-    this.current = options.yolo === true ? 'yolo' : 'ask'
+    this.current = options.mode ?? 'ask'
     this.workspace = workspace
     this.fileTools = fileTools
     this.shellTools = shellTools
@@ -70,14 +70,18 @@ export class Permissions {
     return this.current
   }
 
-  /** Back in ask mode, nothing is allowed that a yes allowed before: the way to take it back. Yolo stays yolo. */
+  /** Between ask and auto, as Shift+Tab does. Yolo stays yolo: only setMode leaves it. */
   switchMode(): void {
     if (this.current === 'yolo') {
       return
     }
+    this.setMode(this.current === 'ask' ? 'auto' : 'ask')
+  }
 
-    this.current = this.current === 'ask' ? 'auto' : 'ask'
-    if (this.current === 'ask') {
+  /** Back in ask mode, nothing is allowed that a yes allowed before: the way to take it back. */
+  setMode(mode: Mode): void {
+    this.current = mode
+    if (mode === 'ask') {
       this.allowed.commands = false
       this.allowed.folders.clear()
     }

@@ -195,7 +195,10 @@ type Agent interface {
 	// to dismiss them.
 	Answer(ctx context.Context, id, question string, answers [][]string) error
 	Stop(ctx context.Context, id string) error
-	SwitchMode(ctx context.Context, id string) (State, error)
+	// SetMode sets a session's mode: ask, auto or yolo.
+	SetMode(ctx context.Context, id, mode string) (State, error)
+	// SetModes sets every session's mode, those started later included.
+	SetModes(ctx context.Context, mode string) error
 	Think(ctx context.Context, id, level string) (State, error)
 	// Follow calls fn with every event of the session after seq, in order,
 	// until ctx ends, connecting again after a drop.

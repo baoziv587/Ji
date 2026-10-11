@@ -76,8 +76,9 @@ func (a *App) applyTheme(c *ui.Context) {
 	c.SetTheme(a.theme)
 }
 
-// vibrant is whether the window shows the system's material, which is
-// light or dark as the system is: not while it is set the other way.
+// vibrant is whether the window shows the system's material, light or
+// dark as the app's appearance is (main sets it from the settings): not in
+// the frame a change of the settings is drawn in, before it follows.
 func (a *App) vibrant(c *ui.Context) bool {
 	return c.Vibrancy() && a.theme.Dark == a.systemDark
 }
