@@ -34,69 +34,76 @@ export interface SessionMeta {
   archived: boolean
 }
 
-export interface SessionStore {
-  list: () => SessionMeta[]
-  create: (root: string) => SessionMeta
-  save: (meta: SessionMeta) => void
+export class SessionStore {
+  private readonly dir: string
+  /** The logs open for appending, by session id. */
+  private readonly logs = new Map<string, number>()
+
+  /** `dir` is made if it is not there. */
+  constructor(dir: string) {
+    this.dir = dir
+    mkdirSync(dir, { recursive: true })
+  }
+
+  list(): SessionMeta[] {
+    return readdirSync(this.dir)
+      .filter(name => name.endsWith('.json'))
+      .flatMap(name => {
+        try {
+          return [JSON.parse(readFileSync(join(this.dir, name), 'utf8')) as SessionMeta]
+        } catch {
+          return []
+        }
+      })
+  }
+
+  create(root: string): SessionMeta {
+    const now = Date.now()
+    const meta: SessionMeta = { id: randomUUID(), root, title: '', created: now, updated: now, archived: false }
+    this.save(meta)
+    return meta
+  }
+
+  save(meta: SessionMeta): void {
+    writeFileSync(this.metaPath(meta.id), `${JSON.stringify(meta, null, 2)}\n`)
+  }
+
   /**
    * The session's log, read back with its deltas joined; a line that does not parse (cut short by a crash, say) is
    * skipped.
    */
-  records: (id: string) => LogRecord[]
-  /** Appends a line to the session's log. */
-  append: (id: string, line: string) => void
-  /** Closes the logs open for appending. */
-  close: () => void
-}
-
-export function createSessionStore(dir: string): SessionStore {
-  mkdirSync(dir, { recursive: true })
-  const logs = new Map<string, number>()
-  const metaPath = (id: string): string => join(dir, `${id}.json`)
-  const logPath = (id: string): string => join(dir, `${id}.jsonl`)
-
-  const save = (meta: SessionMeta): void => {
-    writeFileSync(metaPath(meta.id), `${JSON.stringify(meta, null, 2)}\n`)
+  records(id: string): LogRecord[] {
+    const path = this.logPath(id)
+    if (!existsSync(path)) {
+      return []
+    }
+    return [...compact(parsed(linesOf(path)))]
   }
 
-  return {
-    list: () =>
-      readdirSync(dir)
-        .filter(name => name.endsWith('.json'))
-        .flatMap(name => {
-          try {
-            return [JSON.parse(readFileSync(join(dir, name), 'utf8')) as SessionMeta]
-          } catch {
-            return []
-          }
-        }),
-    create: root => {
-      const now = Date.now()
-      const meta: SessionMeta = { id: randomUUID(), root, title: '', created: now, updated: now, archived: false }
-      save(meta)
-      return meta
-    },
-    save,
-    records: id => {
-      if (!existsSync(logPath(id))) {
-        return []
-      }
-      return [...compact(parsed(linesOf(logPath(id))))]
-    },
-    append: (id, line) => {
-      let fd = logs.get(id)
-      if (fd === undefined) {
-        fd = openSync(logPath(id), 'a')
-        logs.set(id, fd)
-      }
-      writeSync(fd, `${line}\n`)
-    },
-    close: () => {
-      for (const fd of logs.values()) {
-        closeSync(fd)
-      }
-      logs.clear()
-    },
+  /** Appends a line to the session's log. */
+  append(id: string, line: string): void {
+    let fd = this.logs.get(id)
+    if (fd === undefined) {
+      fd = openSync(this.logPath(id), 'a')
+      this.logs.set(id, fd)
+    }
+    writeSync(fd, `${line}\n`)
+  }
+
+  /** Closes the logs open for appending. */
+  close(): void {
+    for (const fd of this.logs.values()) {
+      closeSync(fd)
+    }
+    this.logs.clear()
+  }
+
+  private metaPath(id: string): string {
+    return join(this.dir, `${id}.json`)
+  }
+
+  private logPath(id: string): string {
+    return join(this.dir, `${id}.jsonl`)
   }
 }
 

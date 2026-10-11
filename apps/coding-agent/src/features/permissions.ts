@@ -16,7 +16,9 @@ import { homedir } from 'node:os'
 import { dirname, sep } from 'node:path'
 import { DISMISSED } from '@ji.dev/plugin-choices'
 
-export type Mode = 'ask' | 'auto' | 'yolo'
+export const MODES = ['ask', 'auto', 'yolo'] as const
+
+export type Mode = (typeof MODES)[number]
 
 export interface PermissionsOptions {
   /** The mode it starts in: ask by default. */

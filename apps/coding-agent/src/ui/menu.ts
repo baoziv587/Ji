@@ -12,7 +12,7 @@ import type { Menu } from './bars.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
 import { editingText, EMPTY_EDITING } from '@ji.dev/tui'
-import { commandOf, hintOf } from '../agent/commands.ts'
+import { hintOf, runCommand } from '../agent/commands.ts'
 
 /** What a key of the menu's did: the input after it, and whether what is in it is to be sent. */
 export interface MenuKey {
@@ -88,22 +88,7 @@ export class CommandMenu {
    * has nothing to run here, so the message is sent as it is.
    */
   run(message: string): boolean {
-    const named = commandOf(this.commands(), message)
-    if (named === undefined) {
-      return false
-    }
-
-    const { command, name, arg } = named
-    if (command === undefined) {
-      log.warn(`No such command: ${name}. /help lists them.`)
-      return true
-    }
-    if (command.run === undefined) {
-      return false
-    }
-
-    command.run(arg)
-    return true
+    return runCommand(this.commands(), message, text => log.warn(text)) === 'ran'
   }
 
   /** The commands with what is typed in their name or hint, best matches first, while a command is being typed. */

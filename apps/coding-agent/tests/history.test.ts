@@ -2,6 +2,7 @@
 // ended is left out of it as the conversation went back on it, and a client still sees every run
 import type { Message } from '@ji.dev/llm'
 import type { LogRecord } from '../src/server/history.ts'
+import { formatSkillCall } from '@ji.dev/plugin-skills'
 import { assistantMessage } from '@ji.dev/testing'
 import { describe, expect, it } from 'vitest'
 import { historyOf } from '../src/server/history.ts'
@@ -35,6 +36,19 @@ describe('historyOf', () => {
     expect(events.map(e => e.type)).toEqual(['user', 'text', 'reply_end', 'user', 'text', 'reply_end'])
     expect(events.filter(e => e.type === 'reply_end')).toMatchObject([{ outcome: 'done' }, { outcome: 'stopped' }])
     expect(outcome).toBe('stopped')
+  })
+
+  it('should give a client a skill call as the line that was typed', () => {
+    // Arrange
+    const kept = formatSkillCall({ name: 'review', hash: '0123456789ab', args: 'the diff' })
+    const records = run('a', kept, 'reviewed', 'done')
+
+    // Act
+    const { state, events } = historyOf(records)
+
+    // Assert
+    expect(events[0]).toMatchObject({ type: 'user', text: '/review the diff' })
+    expect(state.messages.map(textOf)[0]).toBe(kept)
   })
 
   it('should take a rewrite as the whole history from then on', () => {

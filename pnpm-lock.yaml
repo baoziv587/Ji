@@ -241,6 +241,9 @@ importers:
       '@ji.dev/tui':
         specifier: workspace:*
         version: link:../../packages/tui
+      '@ji.dev/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
     devDependencies:
       '@ji.dev/testing':
         specifier: workspace:*

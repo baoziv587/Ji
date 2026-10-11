@@ -30,6 +30,8 @@ import type { SessionHub, SessionSummary } from './sessions.ts'
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
 import { DISMISSED } from '@ji.dev/plugin-choices'
+import { errorMessage } from '@ji.dev/utils'
+import { MODES } from '../features/permissions.ts'
 import { SessionNotFoundError } from './sessions.ts'
 
 /** A comment line on an idle stream, so neither side takes the connection for dead. */
@@ -37,15 +39,6 @@ const HEARTBEAT_MS = 15_000
 
 /** The most a request body may hold: a message is text, not a file. */
 const MAX_BODY = 1_000_000
-
-class HttpError extends Error {
-  readonly status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-  }
-}
 
 export interface AgentHttpOptions {
   hub: SessionHub
@@ -56,12 +49,11 @@ export interface AgentHttpOptions {
 export function createAgentHttpServer(options: AgentHttpOptions): Server {
   return createServer((req, res) => {
     route(options, req, res).catch((error: unknown) => {
-      const status = error instanceof HttpError ? error.status : error instanceof SessionNotFoundError ? 404 : 400
       if (res.headersSent) {
         res.end()
         return
       }
-      sendJson(res, status, { error: error instanceof Error ? error.message : String(error) })
+      sendJson(res, statusOf(error), { error: errorMessage(error) })
     })
   })
 }
@@ -69,30 +61,30 @@ export function createAgentHttpServer(options: AgentHttpOptions): Server {
 async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost')
   const method = req.method ?? 'GET'
+  const noRoute = (): HttpError => new HttpError(404, `no route for ${method} ${url.pathname}`)
   const [, api, collection, id, action, question] = url.pathname.split('/')
   if (api !== 'api') {
-    throw new HttpError(404, `no route for ${method} ${url.pathname}`)
+    throw noRoute()
   }
 
   if (collection === 'events' && method === 'GET') {
     return streamList(hub, defaultRoot, req, res)
   }
   if (collection === 'mode' && method === 'POST') {
-    const mode = modeOf(await readJson(req))
+    const mode = (await RequestBody.read(req)).mode()
     hub.setMode(mode)
     return sendJson(res, 200, { mode })
   }
   if (collection !== 'sessions') {
-    throw new HttpError(404, `no route for ${method} ${url.pathname}`)
+    throw noRoute()
   }
 
   if (id === undefined) {
     if (method === 'GET') {
       return sendJson(res, 200, { sessions: hub.list(), defaultRoot })
     }
-    const body = await readJson(req)
-    const root = isRecord(body) && typeof body.root === 'string' && body.root !== '' ? body.root : defaultRoot
-    return sendJson(res, 200, hub.create(root))
+    const body = await RequestBody.read(req)
+    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot)))
   }
 
   const sessionId = decodeURIComponent(id)
@@ -104,27 +96,27 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
     return streamSession(hub, sessionId, Number.isFinite(after) ? after : 0, req, res)
   }
   if (method !== 'POST') {
-    throw new HttpError(404, `no route for ${method} ${url.pathname}`)
+    throw noRoute()
   }
 
-  const body = await readJson(req)
+  const body = await RequestBody.read(req)
   if (action === 'archive') {
-    return sendJson(res, 200, hub.archive(sessionId, isRecord(body) ? body.archived !== false : true))
+    return sendJson(res, 200, hub.archive(sessionId, body.get('archived') !== false))
   }
 
   const service = hub.session(sessionId)
   switch (action) {
     case 'messages': {
-      const text = stringField(body, 'text').trim()
+      const text = body.string('text').trim()
       if (text === '') {
         throw new HttpError(400, 'the message is empty')
       }
       return sendJson(res, 200, { result: await service.send(text) })
     }
     case 'commands':
-      return sendJson(res, 200, { result: await service.command(stringField(body, 'line').trim()) })
+      return sendJson(res, 200, { result: await service.command(body.string('line').trim()) })
     case 'questions':
-      if (question === undefined || !service.answer(decodeURIComponent(question), replyOf(body))) {
+      if (question === undefined || !service.answer(decodeURIComponent(question), body.reply())) {
         throw new HttpError(404, `no question ${question} waits for an answer`)
       }
       return sendJson(res, 200, { ok: true })
@@ -132,109 +124,159 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
       service.stop()
       return sendJson(res, 200, { ok: true })
     case 'mode':
-      if (isRecord(body) && body.mode !== undefined) {
-        service.setMode(modeOf(body))
-      } else {
+      if (body.get('mode') === undefined) {
         service.switchMode()
+      } else {
+        service.setMode(body.mode())
       }
       return sendJson(res, 200, service.state())
     case 'thinking':
-      service.think(stringField(body, 'level'))
+      service.think(body.string('level'))
       return sendJson(res, 200, service.state())
     default:
-      throw new HttpError(404, `no route for ${method} ${url.pathname}`)
+      throw noRoute()
   }
 }
 
 /** The list, then the list again whenever it changes, until the client hangs up. */
 function streamList(hub: SessionHub, defaultRoot: string, req: IncomingMessage, res: ServerResponse): void {
-  const write = (sessions: SessionSummary[]): void => {
-    res.write(`data: ${JSON.stringify({ type: 'sessions', sessions, defaultRoot })}\n\n`)
-  }
-  openStream(res)
-  write(hub.list())
-  keepOpen(req, res, hub.subscribe(write))
+  const stream = new EventStream(res)
+  const send = (sessions: SessionSummary[]): void => stream.send({ type: 'sessions', sessions, defaultRoot })
+
+  send(hub.list())
+  stream.keepOpen(req, hub.subscribe(send))
 }
 
 /** The events the client missed, then each as it happens, until it hangs up. */
 function streamSession(hub: SessionHub, id: string, after: number, req: IncomingMessage, res: ServerResponse): void {
   const service = hub.session(id)
-  const write = (e: ServiceEvent): void => {
-    res.write(`id: ${e.seq}\ndata: ${JSON.stringify(e)}\n\n`)
+  const stream = new EventStream(res)
+  const send = (e: ServiceEvent): void => stream.send(e, e.seq)
+
+  service.eventsAfter(after).forEach(send)
+  stream.keepOpen(req, service.subscribe(send))
+}
+
+class HttpError extends Error {
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
   }
-  openStream(res)
-  service.eventsAfter(after).forEach(write)
-  keepOpen(req, res, service.subscribe(write))
 }
 
-function openStream(res: ServerResponse): void {
-  res.writeHead(200, {
-    'content-type': 'text/event-stream; charset=utf-8',
-    'cache-control': 'no-cache',
-    connection: 'keep-alive',
-  })
-  // Sent before any event, so a client knows it is connected even with nothing to read yet
-  res.flushHeaders()
-}
-
-function keepOpen(req: IncomingMessage, res: ServerResponse, unsubscribe: () => void): void {
-  const heartbeat = setInterval(() => res.write(': ping\n\n'), HEARTBEAT_MS)
-  req.on('close', () => {
-    clearInterval(heartbeat)
-    unsubscribe()
-  })
-}
-
-function replyOf(body: unknown): Reply {
-  if (isRecord(body) && body.dismissed === true) {
-    return DISMISSED
+function statusOf(error: unknown): number {
+  if (error instanceof HttpError) {
+    return error.status
   }
-  const answers = isRecord(body) ? body.answers : undefined
-  if (!Array.isArray(answers) || !answers.every(a => Array.isArray(a) && a.every(v => typeof v === 'string'))) {
-    throw new HttpError(400, 'an answer is {answers: string[][]} or {dismissed: true}')
+  if (error instanceof SessionNotFoundError) {
+    return 404
   }
-  return answers as string[][]
+  return 400
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
-  let size = 0
-  const chunks: Buffer[] = []
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length
-    if (size > MAX_BODY) {
-      throw new HttpError(413, 'the request body is too large')
+/** A request's JSON body, its fields read as a route needs them: a body that is not an object has none. */
+class RequestBody {
+  private readonly fields: Record<string, unknown>
+
+  private constructor(fields: Record<string, unknown>) {
+    this.fields = fields
+  }
+
+  static async read(req: IncomingMessage): Promise<RequestBody> {
+    let size = 0
+    const chunks: Buffer[] = []
+    for await (const chunk of req) {
+      size += (chunk as Buffer).length
+      if (size > MAX_BODY) {
+        throw new HttpError(413, 'the request body is too large')
+      }
+      chunks.push(chunk as Buffer)
     }
-    chunks.push(chunk as Buffer)
+
+    const text = Buffer.concat(chunks).toString('utf8')
+    if (text.trim() === '') {
+      return new RequestBody({})
+    }
+
+    let value: unknown
+    try {
+      value = JSON.parse(text)
+    } catch {
+      throw new HttpError(400, 'the request body is not JSON')
+    }
+
+    return new RequestBody(isRecord(value) ? value : {})
   }
 
-  const text = Buffer.concat(chunks).toString('utf8')
-  if (text.trim() === '') {
-    return {}
+  get(name: string): unknown {
+    return this.fields[name]
   }
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    throw new HttpError(400, 'the request body is not JSON')
+
+  string(name: string): string {
+    const value = this.fields[name]
+    if (typeof value !== 'string') {
+      throw new HttpError(400, `"${name}" must be a string`)
+    }
+    return value
+  }
+
+  /** The field when it is a string with something in it; `fallback` otherwise. */
+  stringOr(name: string, fallback: string): string {
+    const value = this.fields[name]
+    return typeof value === 'string' && value !== '' ? value : fallback
+  }
+
+  mode(): Mode {
+    const mode = MODES.find(m => m === this.fields.mode)
+    if (mode === undefined) {
+      throw new HttpError(400, '"mode" must be ask, auto or yolo')
+    }
+    return mode
+  }
+
+  reply(): Reply {
+    if (this.fields.dismissed === true) {
+      return DISMISSED
+    }
+
+    const { answers } = this.fields
+    if (!Array.isArray(answers) || !answers.every(a => Array.isArray(a) && a.every(v => typeof v === 'string'))) {
+      throw new HttpError(400, 'an answer is {answers: string[][]} or {dismissed: true}')
+    }
+    return answers as string[][]
   }
 }
 
-const MODES: readonly Mode[] = ['ask', 'auto', 'yolo']
+/** A Server-Sent Events response: open from the start, so a client knows it is connected with nothing to read yet. */
+class EventStream {
+  private readonly res: ServerResponse
 
-function modeOf(body: unknown): Mode {
-  const value = isRecord(body) ? body.mode : undefined
-  const mode = MODES.find(m => m === value)
-  if (mode === undefined) {
-    throw new HttpError(400, '"mode" must be ask, auto or yolo')
+  constructor(res: ServerResponse) {
+    this.res = res
+    res.writeHead(200, {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    })
+    res.flushHeaders()
   }
-  return mode
-}
 
-function stringField(body: unknown, name: string): string {
-  const value = isRecord(body) ? body[name] : undefined
-  if (typeof value !== 'string') {
-    throw new HttpError(400, `"${name}" must be a string`)
+  /** `id` is what the client sends back as Last-Event-ID when it connects again. */
+  send(data: unknown, id?: number): void {
+    const head = id === undefined ? '' : `id: ${id}\n`
+    this.res.write(`${head}data: ${JSON.stringify(data)}\n\n`)
   }
-  return value
+
+  /** Beats while the client is connected; once it hangs up, stops what `unsubscribe` stops. */
+  keepOpen(req: IncomingMessage, unsubscribe: () => void): void {
+    const heartbeat = setInterval(() => this.res.write(': ping\n\n'), HEARTBEAT_MS)
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      unsubscribe()
+    })
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

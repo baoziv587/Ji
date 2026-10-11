@@ -8,6 +8,7 @@
 //   setMode   what waits for a yes in every session, those opened later included
 
 import type { Mode } from '../features/permissions.ts'
+import type { ServiceState } from './events.ts'
 import type { AgentService } from './service.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
 import { statSync } from 'node:fs'
@@ -20,29 +21,16 @@ export interface SessionSummary extends SessionMeta {
   status: SessionStatus
 }
 
-export interface SessionHubOptions {
-  store: SessionStore
-  /** The session's service, its tools working in its root, its log written to the store. */
+/** Opens a session's service: its tools working in its root, its log written to the store. */
+export interface Opener {
   open: (meta: SessionMeta, mode: Mode) => AgentService
-  /** The mode a session opens in until setMode: ask by default. */
-  mode?: Mode
 }
 
-export interface SessionHub {
-  /** Most recently used first. */
-  list: () => SessionSummary[]
-  /** Throws when `root` is not a folder. */
-  create: (root: string) => SessionSummary
-  /** Throws SessionNotFoundError for an id no session has. */
-  session: (id: string) => AgentService
-  /** Throws while the session is replying: stop it first. */
-  archive: (id: string, archived: boolean) => SessionSummary
-  /** Every session's mode, and the one the sessions opened from now on start in. */
-  setMode: (mode: Mode) => void
-  /** Called with the list whenever a session is added, archived, or starts or stops doing something. */
-  subscribe: (listener: (sessions: SessionSummary[]) => void) => () => void
-  /** Stops every reply and closes the logs. */
-  close: () => Promise<void>
+export interface SessionHubOptions {
+  store: SessionStore
+  opener: Opener
+  /** The mode a session opens in until setMode: ask by default. */
+  mode?: Mode
 }
 
 export class SessionNotFoundError extends Error {
@@ -55,113 +43,140 @@ export class SessionNotFoundError extends Error {
 /** A title is the first line of the first message, this long at most. */
 const TITLE_LENGTH = 80
 
-export function createSessionHub({ store, open, mode: initial = 'ask' }: SessionHubOptions): SessionHub {
-  let mode = initial
-  const metas = new Map(store.list().map(meta => [meta.id, meta]))
-  const opened = new Map<string, AgentService>()
-  const listeners = new Set<(sessions: SessionSummary[]) => void>()
+export class SessionHub {
+  private readonly store: SessionStore
+  private readonly opener: Opener
+  private mode: Mode
+  private readonly metas: Map<string, SessionMeta>
+  private readonly opened = new Map<string, AgentService>()
+  private readonly listeners = new Set<(sessions: SessionSummary[]) => void>()
 
-  const statusOf = (id: string): SessionStatus => {
-    const service = opened.get(id)
-    if (service === undefined) {
-      return 'idle'
-    }
-    const { asking, replying, outcome } = service.state()
-    if (asking.length > 0) {
-      return 'asking'
-    }
-    if (replying) {
-      return 'running'
-    }
-    return outcome === 'failed' ? 'failed' : 'idle'
+  constructor({ store, opener, mode = 'ask' }: SessionHubOptions) {
+    this.store = store
+    this.opener = opener
+    this.mode = mode
+    this.metas = new Map(store.list().map(meta => [meta.id, meta]))
   }
 
-  const summaryOf = (meta: SessionMeta): SessionSummary => ({ ...meta, status: statusOf(meta.id) })
+  /** Most recently used first. */
+  list(): SessionSummary[] {
+    return [...this.metas.values()].sort((a, b) => b.updated - a.updated).map(meta => this.summaryOf(meta))
+  }
 
-  const list = (): SessionSummary[] => [...metas.values()].sort((a, b) => b.updated - a.updated).map(summaryOf)
+  /** Throws when `folder` is not a folder. */
+  create(folder: string): SessionSummary {
+    const root = resolve(folder)
+    if (!isFolder(root)) {
+      throw new Error(`${root} is not a folder`)
+    }
 
-  const changed = (): void => {
-    const sessions = list()
-    for (const listener of listeners) {
+    const meta = this.store.create(root)
+    this.metas.set(meta.id, meta)
+    this.changed()
+    return this.summaryOf(meta)
+  }
+
+  /** The session's service, opened if need be. Throws SessionNotFoundError for an id no session has. */
+  session(id: string): AgentService {
+    const existing = this.opened.get(id)
+    if (existing !== undefined) {
+      return existing
+    }
+
+    const service = this.opener.open(this.metaOf(id), this.mode)
+    this.opened.set(id, service)
+    service.subscribe(e => {
+      if (e.type === 'user') {
+        this.used(id, e.text)
+      }
+      if (e.type === 'state' || e.type === 'user' || e.type === 'reply_end') {
+        this.changed()
+      }
+    })
+    return service
+  }
+
+  /** Throws while the session is replying: stop it first. */
+  archive(id: string, archived: boolean): SessionSummary {
+    if (this.opened.get(id)?.state().replying === true) {
+      throw new Error('the session is replying: stop it before archiving it')
+    }
+
+    const meta = this.update(this.metaOf(id), { archived })
+    this.changed()
+    return this.summaryOf(meta)
+  }
+
+  /** Every session's mode, and the one the sessions opened from now on start in. */
+  setMode(mode: Mode): void {
+    this.mode = mode
+    for (const service of this.opened.values()) {
+      service.setMode(mode)
+    }
+  }
+
+  /** Called with the list whenever a session is added, archived, or starts or stops doing something. */
+  subscribe(listener: (sessions: SessionSummary[]) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
+  /** Stops every reply and closes the logs. */
+  async close(): Promise<void> {
+    const services = [...this.opened.values()]
+    for (const service of services) {
+      service.stop()
+    }
+    await Promise.all(services.map(service => service.settled()))
+    this.store.close()
+  }
+
+  private summaryOf(meta: SessionMeta): SessionSummary {
+    return { ...meta, status: statusOf(this.opened.get(meta.id)?.state()) }
+  }
+
+  private changed(): void {
+    const sessions = this.list()
+    for (const listener of this.listeners) {
       listener(sessions)
     }
   }
 
-  const metaOf = (id: string): SessionMeta => {
-    const meta = metas.get(id)
+  private metaOf(id: string): SessionMeta {
+    const meta = this.metas.get(id)
     if (meta === undefined) {
       throw new SessionNotFoundError(id)
     }
     return meta
   }
 
-  const update = (meta: SessionMeta, patch: Partial<SessionMeta>): SessionMeta => {
+  /** A message was sent: the session moves to the top, titled by it if it was the first. */
+  private used(id: string, text: string): void {
+    const meta = this.metaOf(id)
+    const title = meta.title === '' ? titleOf(text) : meta.title
+    this.update(meta, { title, updated: Date.now() })
+  }
+
+  private update(meta: SessionMeta, patch: Partial<SessionMeta>): SessionMeta {
     const next = { ...meta, ...patch }
-    metas.set(next.id, next)
-    store.save(next)
+    this.metas.set(next.id, next)
+    this.store.save(next)
     return next
   }
+}
 
-  const session = (id: string): AgentService => {
-    const existing = opened.get(id)
-    if (existing !== undefined) {
-      return existing
-    }
-
-    const service = open(metaOf(id), mode)
-    opened.set(id, service)
-    service.subscribe(e => {
-      if (e.type === 'user') {
-        const meta = metaOf(id)
-        const title = meta.title === '' ? titleOf(e.text) : meta.title
-        update(meta, { title, updated: Date.now() })
-      }
-      if (e.type === 'state' || e.type === 'user' || e.type === 'reply_end') {
-        changed()
-      }
-    })
-    return service
+/** What a session is doing, from its state; idle until it is opened. */
+function statusOf(state: ServiceState | undefined): SessionStatus {
+  if (state === undefined) {
+    return 'idle'
   }
-
-  return {
-    list,
-    create: folder => {
-      const root = resolve(folder)
-      if (!isFolder(root)) {
-        throw new Error(`${root} is not a folder`)
-      }
-      const meta = store.create(root)
-      metas.set(meta.id, meta)
-      changed()
-      return summaryOf(meta)
-    },
-    session,
-    archive: (id, archived) => {
-      if (opened.get(id)?.state().replying === true) {
-        throw new Error('the session is replying: stop it before archiving it')
-      }
-      const meta = update(metaOf(id), { archived })
-      changed()
-      return summaryOf(meta)
-    },
-    setMode: next => {
-      mode = next
-      for (const service of opened.values()) {
-        service.setMode(next)
-      }
-    },
-    subscribe: listener => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    close: async () => {
-      for (const service of opened.values()) {
-        service.stop()
-      }
-      await Promise.all([...opened.values()].map(service => service.settled()))
-      store.close()
-    },
+  if (state.asking.length > 0) {
+    return 'asking'
   }
+  if (state.replying) {
+    return 'running'
+  }
+  return state.outcome === 'failed' ? 'failed' : 'idle'
 }
 
 function titleOf(text: string): string {

@@ -25,9 +25,9 @@ import { parseArgs } from 'node:util'
 import { findModel, UnsupportedThinkingError, useCredentialStore } from '@ji.dev/llm'
 import { createFileCredentialStore } from '@ji.dev/plugin-auth'
 import { createAgentHttpServer } from './server/http.ts'
-import { createSessionOpener } from './server/open.ts'
-import { createSessionHub } from './server/sessions.ts'
-import { createSessionStore } from './server/store.ts'
+import { SessionOpener } from './server/open.ts'
+import { SessionHub } from './server/sessions.ts'
+import { SessionStore } from './server/store.ts'
 
 const { values: ARGS } = parseArgs({
   options: {
@@ -51,10 +51,10 @@ if (!info.thinkingLevels.includes(thinking)) {
 
 useCredentialStore(createFileCredentialStore(join(homedir(), '.ji', 'auth.json')))
 
-const store = createSessionStore(ARGS.sessions)
-const hub = createSessionHub({
+const store = new SessionStore(ARGS.sessions)
+const hub = new SessionHub({
   store,
-  open: createSessionOpener({
+  opener: new SessionOpener({
     store,
     model: ARGS.model,
     thinking,
