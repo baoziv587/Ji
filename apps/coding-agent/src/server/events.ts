@@ -76,7 +76,10 @@ export type ServiceEvent = { seq: number } & (
   | { type: 'tool_end'; id: string; name: string; ok: boolean; output: string; ms: number }
   | { type: 'ask'; id: string; tool?: string; outside: boolean; questions: QuestionView[] }
   | { type: 'ask_closed'; id: string }
-  | { type: 'compacted'; before: number; after: number }
+  /** The history is being summarized, from its size now. */
+  | { type: 'compacting'; tokens: number }
+  /** `error` says why the history was kept as it was. */
+  | { type: 'compacted'; before: number; after: number; error?: string }
   | { type: 'reply_end'; outcome: Outcome; error?: string; unsent?: string; usage: Usage }
   | { type: 'state'; state: ServiceState }
   /** What a command said, by how it went. */
@@ -132,8 +135,10 @@ export function eventOf(e: RunEvent): Unnumbered | undefined {
         output: cut(textOfResult(e.result)),
         ms: Math.round(e.ms),
       }
+    case 'compaction:start':
+      return { type: 'compacting', tokens: e.tokens }
     case 'compaction:end':
-      return { type: 'compacted', before: e.before, after: e.after }
+      return { type: 'compacted', before: e.before, after: e.after, error: e.error }
     case 'step_end':
       if (e.turn.kind !== 'input') {
         return undefined

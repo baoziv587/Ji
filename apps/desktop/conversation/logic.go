@@ -4,7 +4,6 @@ package conversation
 // one at a time: no drawing here, so it is tested as plain data.
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -26,6 +25,8 @@ const (
 	KindNotice
 	// What /help lists.
 	KindHelp
+	// Where the history became a summary, and while it does.
+	KindCompaction
 )
 
 // Item is one block of the conversation.
@@ -40,6 +41,8 @@ type Item struct {
 	Level string
 	Help  []agent.HelpSection
 	Tool  *ToolCall
+	// The history's size before a compaction and after, 0 while it runs.
+	Before, After int
 	// Where it is among the blocks, and among the steps when it is one: the
 	// thinking or a call.
 	Block, Step int
@@ -204,8 +207,11 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 			t.Asking = nil
 		}
 		t.doing(t.runningLabel())
+	case "compacting":
+		t.add(&Item{Kind: KindCompaction, Before: e.Tokens})
+		t.doing("Compacting " + format.Count(e.Tokens) + " tokens")
 	case "compacted":
-		t.add(&Item{Kind: KindNotice, Text: fmt.Sprintf("Compacted the history: %s → %s tokens", format.Count(e.Before), format.Count(e.After))})
+		t.compacted(e)
 		t.doing("Waiting")
 	case "notice":
 		t.add(&Item{Kind: KindNotice, Level: e.Level, Failed: e.Level == "error", Text: e.Text})
@@ -214,6 +220,9 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 	case "reply_end":
 		t.settle()
 		t.doing("")
+		if item := t.compacting(); item != nil {
+			item.keptInFull("Stopped compacting.")
+		}
 		// What still runs, the reply ended before
 		for id := range t.running {
 			if item := t.tool(id); item != nil {
@@ -239,6 +248,43 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 		}
 	}
 	return false
+}
+
+// compacted ends the compaction that runs: its seam then says what the
+// history became. One kept as it was turns into a notice that says why, a
+// warning when a summary was tried, and a note when there was nothing to
+// summarize.
+func (t *Transcript) compacted(e agent.Event) {
+	item := t.compacting()
+	switch {
+	case e.Error == "" && item != nil:
+		item.Before, item.After = e.Before, e.After
+	case e.Error == "":
+		t.add(&Item{Kind: KindCompaction, Before: e.Before, After: e.After})
+	case item != nil:
+		item.keptInFull("Couldn't compact: " + e.Error + ".")
+	default:
+		t.add(&Item{Kind: KindNotice, Level: "info", Text: "Not compacted: " + e.Error + "."})
+	}
+}
+
+// compacting is the compaction that runs, if one does.
+func (t *Transcript) compacting() *Item {
+	for i := len(t.Items) - 1; i >= 0; i-- {
+		if it := t.Items[i]; it.Kind == KindCompaction {
+			if it.After == 0 {
+				return it
+			}
+			return nil
+		}
+	}
+	return nil
+}
+
+// keptInFull turns a compaction that ran into a warning that it did not
+// end in a summary, and why.
+func (it *Item) keptInFull(why string) {
+	it.Kind, it.Level, it.Text = KindNotice, "warn", why+" The conversation goes on in full."
 }
 
 // add puts an item at the end: a step joins the work at the end, or starts

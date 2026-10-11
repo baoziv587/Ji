@@ -156,6 +156,8 @@ type Event struct {
 	Outside   bool       `json:"outside,omitempty"`
 	Questions []Question `json:"questions,omitempty"`
 
+	// A compaction's size before and after; Tokens as it starts.
+	Tokens int `json:"tokens,omitempty"`
 	Before int `json:"before,omitempty"`
 	After  int `json:"after,omitempty"`
 

@@ -123,7 +123,7 @@ func keysOf(st agent.State, view *sessionView, entries []commands.Entry) [][2]st
 // the pointer, what the session has spent and how much of the input the
 // cache gave; pressed, it opens the rest. Blank until the first call has
 // ended.
-func usageGauge(c *ui.Context, u agent.UsageReading, open *bool) {
+func usageGauge(c *ui.Context, u agent.UsageReading, open *bool, drain *components.Drain) {
 	if u.Calls == 0 {
 		return
 	}
@@ -141,7 +141,7 @@ func usageGauge(c *ui.Context, u agent.UsageReading, open *bool) {
 	spent := fmt.Sprintf("%s, cache %d%%", cost(u.Cost), u.Cache)
 	trigger.Children(func() {
 		if ctx != nil {
-			components.Gauge(c, "Context", full, 14, color)
+			components.Gauge(c, "Context", full, 14, color, drain)
 			figures(c, fmt.Sprintf("%s%d%%", estimated(ctx), int(full*100)), color)
 			barText(c, "·", p.MutedForeground)
 		}

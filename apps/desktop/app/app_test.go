@@ -496,7 +496,7 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 // DARK=1 for the dark theme, TOAST=1 once the session is archived, MENU=/th
 // with the menu of commands open on what is typed, APPROVALS=yolo with
 // that mode chosen in the settings, USAGE=1 with the history 3/4 full and
-// what was spent open.
+// what was spent open, COMPACT=1 with a compaction done and one running.
 func TestSnapshot(t *testing.T) {
 	out := os.Getenv("SNAPSHOT")
 	if out == "" {
@@ -531,7 +531,15 @@ func TestSnapshot(t *testing.T) {
 			Options: []agent.Option{{Value: "yes", Label: "Yes"}, {Value: "auto", Label: "Yes, and approve the rest inside the folder"}, {Value: "no", Label: "No"}},
 		}}},
 	} {
+		if os.Getenv("COMPACT") == "1" && e.Text == "Also cover the double click in a test." {
+			a.apply(view, agent.Event{Type: "compacting", Tokens: 182_400})
+			a.apply(view, agent.Event{Type: "compacted", Before: 182_400, After: 31_200})
+		}
 		a.apply(view, e)
+	}
+	if os.Getenv("COMPACT") == "1" {
+		a.apply(view, agent.Event{Type: "ask_closed", ID: "4"})
+		a.apply(view, agent.Event{Type: "compacting", Tokens: 164_000})
 	}
 	a.list.Sessions[0].Status = "asking"
 	a.list.Sessions[2].Status = "running"

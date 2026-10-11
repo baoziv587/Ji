@@ -28,6 +28,18 @@ func UntilTick(now time.Time) time.Duration {
 	return Tick - time.Duration(now.UnixNano())%Tick
 }
 
+// UntilHalfTick is how long from now to the next half of a Tick, 60 a
+// second: for a light gliding across the window, which steps visibly at a
+// Tick, and half the frames of a ProMotion screen. Every other one is a
+// Tick, so the spinner's steps come in the same frames.
+func UntilHalfTick(now time.Time) time.Duration {
+	until := UntilTick(now)
+	if until > Tick/2 {
+		return until - Tick/2
+	}
+	return until
+}
+
 // Rise brings an element in from a little below as it appears, and sends
 // it up and away as it goes: a line of text taking another's place.
 var Rise = ui.ElementTransition{

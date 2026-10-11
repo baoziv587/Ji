@@ -56,7 +56,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					area.SetTextSelection(runeCount(view.draft), runeCount(view.draft))
 				}
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					usageGauge(c, st.Usage, &view.usageOpen)
+					usageGauge(c, st.Usage, &view.usageOpen, &view.usageDrain)
 					ui.Box(c).Grow(1)
 					if st.Replying {
 						if components.Button(c, "Stop", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall, Icon: icons.Square}).Tooltip("Esc").Clicked() {
