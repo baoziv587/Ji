@@ -10,15 +10,15 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// The transparencies the slider snaps to: solid, as the window is with
-// no material; standard, as it ships; and clear.
+// The transparencies the glass is set at: solid, as the window is with
+// no material; standard, as it ships; clear; and the step the slider
+// snaps by between them.
 const (
 	transparencySolid    = 0
 	transparencyStandard = 50
 	transparencyClear    = 100
+	transparencyStep     = 10
 )
-
-var transparencyDetents = [...]float64{transparencySolid, transparencyStandard, transparencyClear}
 
 // ramp is a value of a surface at each detent, linear between them.
 type ramp struct{ solid, standard, clear float32 }
