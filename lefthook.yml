@@ -12,6 +12,17 @@ pre-push:
   jobs:
     - name: format
       run: pnpm format:check
+    - name: go-format
+      root: apps/desktop/
+      run: |
+        unformatted=$(gofmt -l .) || exit $?
+        if [ -n "$unformatted" ]; then
+          printf 'Go files need formatting:\n%s\n' "$unformatted"
+          exit 1
+        fi
+    - name: go-lint
+      root: apps/desktop/
+      run: go vet ./...
     - name: knip
       run: pnpm knip
     - name: typecheck

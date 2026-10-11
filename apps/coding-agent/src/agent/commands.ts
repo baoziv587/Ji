@@ -82,7 +82,7 @@ export function createCommands(options: CommandOptions): () => Command[] {
 }
 
 /** The command a line names, with what follows its name; undefined for a line that is no command. */
-export function commandOf(
+function commandOf(
   commands: readonly Command[],
   line: string,
 ): { command?: Command; name: string; arg: string } | undefined {
