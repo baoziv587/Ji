@@ -165,7 +165,20 @@ func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 	a.Select("a")
 	tt := ui.NewTester(a.View, 1100, 760)
 
-	for _, text := range []string{"Running bash", "auto", "allows commands", "2 queued", "steers", "ctx 150k/200k", "$0.0123 · in 48.2k · out 3.1k · cache 86% · 41 tok/s"} {
+	for _, text := range []string{"Running bash", "auto", "allows commands", "2 queued", "steers", "75%", "$0.01", "cache 86%"} {
+		if !tt.HasText(text) {
+			t.Errorf("no %q in %q", text, tt.Texts())
+		}
+	}
+	if tt.HasText("Cache hit") {
+		t.Error("what was spent shows before the gauge is pressed")
+	}
+
+	if err := tt.Click("Usage: context 75% used, $0.01, cache 86%"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	for _, text := range []string{"150k / 200k", "Compacts at 200k", "$0.01", "48.2k", "3.1k", "86%", "41 tok/s"} {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
 		}

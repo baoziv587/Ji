@@ -267,7 +267,7 @@ Code in a well is colored as it reads, the one place hue names no state: **Code 
 - **Body** (400, 13px): conversation text, sidebar rows (500 when selected), buttons (500).
 - **Label** (500, 11px): tags (0.2px tracking), badges, Kbd caps, extra-small buttons, help section titles, times ago.
 - **Code** (SF Mono 400, 13px for tool names at 500; 12px in a reply's wells; 11px for args, output and diffs).
-- **Figures** (SF Mono, 11px, tabular): durations, status-line counts, usage line.
+- **Figures** (SF Mono, 11px, tabular): durations, status-line counts, the context gauge's percentage; 12px in the usage popover.
 
 ### Named Rules
 
@@ -277,7 +277,7 @@ Code in a well is colored as it reads, the one place hue names no state: **Code 
 
 ## Layout
 
-Two panes: a sidebar of sessions grouped by project folder (48px header row, 32px session rows padded 8px, sections collapsible) and the session pane (48px header with a bottom seam carrying title, model, thinking select and folder separated by middle dots). The conversation, the approval panel and the composer share one centred column, max 768px, with user messages right-aligned at up to 80% of it. A step chosen opens the inspector at the right (400px by default, 320px at least, dragged wider from its edge); with less than 440px left for the conversation it covers the conversation instead, with a back button. Below the composer sit two 20px/16px lines: the status line (activity, mode, queue, menu position, then right-aligned key hints) and the usage line.
+Two panes: a sidebar of sessions grouped by project folder (48px header row, 32px session rows padded 8px, sections collapsible) and the session pane (48px header with a bottom seam carrying title, model, thinking select and folder separated by middle dots). The conversation, the approval panel and the composer share one centred column, max 768px, with user messages right-aligned at up to 80% of it. A step chosen opens the inspector at the right (400px by default, 320px at least, dragged wider from its edge); with less than 440px left for the conversation it covers the conversation instead, with a back button. The composer carries the 20px status line above its text (activity, mode, queue, menu position, then right-aligned key hints) and, under it, the context gauge at the left of the row that holds Stop and Send.
 
 Spacing runs on a 4px unit; recurring steps are 4, 6, 8, 12, 16 and 24 (empty states pad 48 with a 24 gap). The approval panel pads 16 with a 12 gap; work lines and step rows pad 0x8, pulled out by 8 so their text keeps the column's edge.
 
@@ -338,6 +338,7 @@ Quiet, compact, shadcn anatomy.
 ### Navigation
 
 - **Sidebar rows:** 32px, title left, state at right (orange Approval tag, blue spinner, red Failed tag, or tabular time ago). Selected row: sidebar-accent blue tint, foreground text at 500.
+- **Context gauge:** the terminal's usage line folded into one 24px trigger at the left of the composer's button row: a 14px ring filled clockwise from the top on a track of quiet ink at 25%, and the percentage in figures (`~` while estimated), both in quiet ink, Caution Amber past 70% and Signal Red past 90%, then, after middle dots in quiet ink, the cost to the cent and `cache 99%`; the terminal's `ctx 149k/200k` under the pointer. Pressed, a popover opens over it (240px, popover skin): Context with its tokens against the limit, a 4px bar in the gauge's color and when it compacts, then a seam, then Cost to the cent (`<$0.01` under one), Input, Output, Cache hit and Speed, names in quiet ink and values in ink at 12px figures. Blank until the first call has ended.
 - **Inline select:** reads as text in quiet ink with a small chevron at 60%, accent fill on hover; its popover marks the chosen option with a check.
 - **Slash-command menu:** popover above the composer, 32px items at 6px radius, accent highlight, matched letters in primary.
 
