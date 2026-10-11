@@ -19,9 +19,16 @@ import (
 func (a *App) sidebar(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
-	ui.Column(c).Fill().Background(p.Sidebar).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
-		// Lined up with the items' text, the sidebar's padding and theirs
-		ui.Row(c).Height(48).Padding(0, 10, 0, 18).Gap(8).AlignItems(ui.Center).Children(func() {
+	// Over the window's material where it shows one, as a macOS sidebar
+	vibrant := c.Vibrancy()
+	background := p.Sidebar
+	if vibrant {
+		background = ui.Transparent
+	}
+	ui.Column(c).Fill().Background(background).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
+		// Under the window controls, then lined up with the items' text
+		bar := c.TitleBar()
+		ui.Row(c).Height(TitleBarHeight).Shrink(0).Padding(0, 10, 0, max(bar.Left, 18)).Gap(8).AlignItems(ui.Center).DragWindow().Children(func() {
 			dot := p.Destructive
 			if a.connected {
 				dot = p.Success
@@ -47,7 +54,7 @@ func (a *App) sidebar(c *ui.Context) {
 					}
 				})
 			}
-		}).Background(p.Sidebar).Grow(1).Changed() {
+		}).Background(background).Grow(1).Changed() {
 			a.open(a.selected)
 		}
 
@@ -120,8 +127,13 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 	status := a.status(s)
 	item := ui.SidebarItem(c.Key(s.ID), s.ID, nil, titleOf(s)).Height(32).Padding(0, 8).Transition(components.ColorTransition)
 	if s.ID == a.selected {
-		// The active item, focused or not, on the selection's tint
-		item.Background(p.SidebarAccent).TextColor(p.Foreground).FontWeight(500)
+		// The active item, focused or not, on the selection's tint; over the
+		// material, a tint of the brand that lets it show through
+		tint := p.SidebarAccent
+		if c.Vibrancy() {
+			tint = p.Primary.Alpha(0.16)
+		}
+		item.Background(tint).TextColor(p.Foreground).FontWeight(500)
 	}
 	item.Children(func() {
 		switch status {

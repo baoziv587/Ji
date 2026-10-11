@@ -16,6 +16,11 @@ import (
 	"desktop/ui/icons"
 )
 
+// TitleBarHeight is how tall the window's title bar is, which the view
+// draws under the window controls: the sidebar's top, and the session's
+// header beside it.
+const TitleBarHeight = 52
+
 // View builds the window from the app's state.
 func (a *App) View(c *ui.Context) {
 	if system := c.Theme(); a.theme == nil || a.theme.Dark != system.Dark || a.theme.FontSize != system.FontSize {
@@ -29,11 +34,15 @@ func (a *App) View(c *ui.Context) {
 		c.ToastAction(shown.message, shown.action, shown.run)
 	}
 
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	}
 	toasts(c, a.SidebarSize)
 	ui.Split(c, &a.SidebarSize, func() { a.sidebar(c) }, func() {
 		ui.Column(c).Fill().Background(p.Background).Children(func() {
 			s, view, ok := a.current()
 			if !ok {
+				ui.Box(c).Height(TitleBarHeight).Shrink(0).DragWindow()
 				a.noSession(c)
 				return
 			}
@@ -83,10 +92,23 @@ func (a *App) noSession(c *ui.Context) {
 
 func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 	view.startAnswering()
-	a.header(c, s, view)
-	conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t)
-	if view.t.Asking != nil && !s.Archived {
-		a.questions(c.Key("questions:"+s.ID), s.ID, view)
-	}
-	a.composer(c.Key("composer:"+s.ID), s, view)
+	// The conversation scrolls under the header, which frosts it, and under
+	// the input, of frosted glass, at its end
+	ui.Box(c).Grow(1).MinHeight(0).Children(func() {
+		conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t).Fill().
+			Padding(TitleBarHeight+24, 24, view.bottom+24).ScrollbarInsets(TitleBarHeight, 0, view.bottom)
+		a.header(c, s, view)
+		bottom := ui.Column(c).Absolute().Bottom(0).Left(0).Right(0).PassThrough().Children(func() {
+			if view.t.Asking != nil && !s.Archived {
+				a.questions(c.Key("questions:"+s.ID), s.ID, view)
+			}
+			a.composer(c.Key("composer:"+s.ID), s, view)
+		})
+		// Known only once laid out: the conversation makes room for it a
+		// frame later
+		if h := bottom.Bounds().H; h != view.bottom {
+			view.bottom = h
+			c.AnimationFrame()
+		}
+	})
 }

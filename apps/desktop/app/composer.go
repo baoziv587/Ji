@@ -4,6 +4,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
@@ -15,10 +16,9 @@ import (
 
 // composer is where the next message is typed, between the terminal's two
 // bars: above it the status line, what the reply does, the mode and the
-// keys that work now; below it the usage. The input is shadcn/ui's
-// InputGroup: the text area, and under it in the same border the buttons
-// that send and stop. The menu of commands opens over the conversation as
-// a `/` is typed.
+// keys that work now; below it the usage. The three share one pane of
+// glass, the text area with the buttons that send and stop under it. The
+// menu of commands opens over the conversation as a `/` is typed.
 func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -35,22 +35,23 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 				return
 			}
 			entries := view.menu.Entries(st.Commands, view.draft)
-			a.statusLine(c, s, view, entries)
-
-			group := ui.Column(c).Radius(t.Radius).Border(1, p.Input).Background(p.Card).Transition(components.ColorTransition)
-			group.Children(func() {
+			// One pane of frosted glass, untoned, the conversation blurred
+			// through it: the status line, the input, the usage
+			pane := ui.Column(c).Gap(4).Padding(8).Radius(16).Border(1, p.Input).Material(glass.Blur{Radius: 12}).Transition(components.ColorTransition)
+			pane.Children(func() {
+				a.statusLine(c, s, view, entries)
 				placeholder := "Ask anything, or type / for commands"
 				if st.Replying {
 					placeholder = "Steer the reply: it reads this after the step in progress"
 				}
 				// The menu's keys, Enter and Shift+Tab, before the text area takes them; Shift+Enter is left to it
-				area := ui.TextAreaBase(c.Key("draft"), &view.draft).Lines(2, 8).Placeholder(placeholder).Label("Message").AutoFocus().Padding(12, 12, 4).
+				area := ui.TextAreaBase(c.Key("draft"), &view.draft).Lines(2, 8).Placeholder(placeholder).Label("Message").AutoFocus().Padding(4, 4, 0).
 					HandleInput(func(ev ui.InputEvent) bool { return a.composerKey(s, view, ev) })
 				if view.menu.ToEnd {
 					view.menu.ToEnd = false
 					area.SetTextSelection(runeCount(view.draft), runeCount(view.draft))
 				}
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Justify(ui.End).Padding(4, 12, 12).Children(func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Justify(ui.End).Children(func() {
 					if st.Replying {
 						if components.Button(c, "Stop", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall, Icon: icons.Square}).Tooltip("Esc").Clicked() {
 							a.stop(s.ID)
@@ -65,16 +66,16 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 						a.send(s.ID, view)
 					}
 				})
+				usageLine(c, st.Usage)
 			})
-			if group.FocusWithin() {
-				group.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.5))
+			if pane.FocusWithin() {
+				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.5))
 			}
 
 			// Esc closes the menu first
 			if st.Replying && len(entries) == 0 && c.Shortcut(0, ui.KeyEscape) {
 				a.stop(s.ID)
 			}
-			usageLine(c, st.Usage)
 			// Over the conversation, as wide as the input
 			if len(entries) > 0 {
 				commands.List(c, entries, &view.menu, view.t.State, func(e commands.Entry) { a.choose(s.ID, view, e) }).Attach(ui.AnchorTopLeft, ui.AnchorBottomLeft).Top(-4)

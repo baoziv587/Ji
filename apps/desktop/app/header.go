@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
@@ -18,8 +19,9 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 	p := components.PaletteOf(t)
 	st := view.t.State
 	dot := func() ui.Element { return ui.Text(c, "·").TextColor(p.MutedForeground).Shrink(0) }
-	// As tall as the sidebar's own header, so the two read as one bar
-	ui.Row(c).Height(48).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Children(func() {
+	// The window's title bar, as tall as the sidebar's top, so the two read as one bar
+	ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).
+		Material(glass.ScrollEdge{Hard: true}).DragWindow().Children(func() {
 		ui.Text(c, titleOf(s)).FontWeight(600).SingleLine().Shrink(1)
 		if st.Model != "" {
 			dot()

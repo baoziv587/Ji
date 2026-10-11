@@ -17,6 +17,9 @@ type sessionView struct {
 	t     conversation.Transcript
 	draft string
 	list  ui.ListState
+	// How tall what floats over the end of the conversation was in the
+	// last frame: the questions and the input.
+	bottom float32
 	// The menu of commands, open while one is typed.
 	menu commands.State
 	// The answer being put together to the open questions: for each, the

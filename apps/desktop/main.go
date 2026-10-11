@@ -98,7 +98,12 @@ func main() {
 			MinWidth:  720,
 			MinHeight: 460,
 			StateKey:  "main",
-			Content:   ui.View(a.View),
+			// The view draws the title bar under the traffic lights, over the
+			// sidebar's material
+			TitleBarStyle:  mygo.TitleBarHiddenInset,
+			TitleBarHeight: app.TitleBarHeight,
+			Vibrancy:       mygo.VibrancySidebar,
+			Content:        ui.View(a.View),
 		})
 		go a.Follow(ctx)
 	})
