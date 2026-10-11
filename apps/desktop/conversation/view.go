@@ -30,11 +30,11 @@ func Centered(c *ui.Context, gap float32, fn func()) ui.Element {
 // View is the conversation, kept at its end as it grows unless scrolled up
 // from it. A list, which builds only the items in view: built whole, a long
 // session took longer than a frame for every delta of a reply.
-func View(c *ui.Context, list *ui.ListState, t *Transcript) {
+func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
 	theme := c.Theme()
 	p := components.PaletteOf(theme)
 	list.FollowEnd = true
-	ui.List(c, list, len(t.Items), func(i int) {
+	return ui.List(c, list, len(t.Items), func(i int) {
 		Centered(c, 0, func() { item(c, t.Items[i]) })
 	}).Grow(1).Gap(16).Padding(24).Children(func() {
 		if len(t.Items) > 0 {
