@@ -636,7 +636,7 @@ func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 // was before it could be chosen, solid covers what is behind it, and in between it goes
 // straight from one detent to the next.
 func TestGlassesRampThroughTheDetents(t *testing.T) {
-	for name, r := range map[string]ramp{"sidebar": glasses.sidebar, "selection": glasses.selection, "bar": glasses.bar} {
+	for name, r := range map[string]ramp{"sidebar": glasses.sidebar, "sidebar light": glasses.sidebarLight, "selection": glasses.selection, "bar": glasses.bar} {
 		if r.clear > r.standard || r.standard > r.solid {
 			t.Errorf("%s: %v, a clearer glass covers more", name, r)
 		}
@@ -644,7 +644,12 @@ func TestGlassesRampThroughTheDetents(t *testing.T) {
 	if glasses.sidebar.at(transparencyStandard) != 0.6 || glasses.bar.at(transparencyStandard) != scrollEdgeCover {
 		t.Error("standard is not the window as it was")
 	}
-	if glasses.sidebar.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 || glasses.selection.at(transparencySolid) != 1 {
+	// The light material is washed pale already, so its veil is thinner
+	// for as much of the desktop to show as in the dark
+	if glasses.sidebarLight.at(transparencyStandard) >= glasses.sidebar.at(transparencyStandard) {
+		t.Error("the light sidebar covers as much as the dark")
+	}
+	if glasses.sidebar.at(transparencySolid) != 1 || glasses.sidebarLight.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 || glasses.selection.at(transparencySolid) != 1 {
 		t.Error("solid lets something through")
 	}
 	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.5) > 1e-6 {
