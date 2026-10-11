@@ -33,7 +33,7 @@ export type { Run } from './run.ts'
 export { createSession, type Session, type SessionOptions } from './session.ts'
 export { usageOf } from './summary.ts'
 export { tool, toolError, toolResult } from './tool.ts'
-export { rewriteHistory, stop } from './turn.ts'
+export { applyTurn, rewriteHistory, stop } from './turn.ts'
 export type {
   AgentAction,
   AgentState,

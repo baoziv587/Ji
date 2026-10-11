@@ -14,8 +14,11 @@ export interface Unfinished {
   sent: string[]
 }
 
+/** What a reply the person stopped ends with: a log has the message, read back as a stop (server/events.ts). */
+export const STOPPED_MESSAGE = 'stopped by user'
+
 /** The run rejects with this when the person stops a reply. */
-const STOPPED = new Error('stopped by user')
+const STOPPED = new Error(STOPPED_MESSAGE)
 
 export class Conversation {
   private current: Agent

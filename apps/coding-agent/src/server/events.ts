@@ -5,12 +5,12 @@ import type { RunEvent, ThinkingLevel, ToolResultMessage } from '@ji.dev/llm'
 import type { Questions } from '@ji.dev/plugin-choices'
 import type { HelpSection } from '../agent/commands.ts'
 import type { UsageReading } from '../agent/meter.ts'
+import type { Mode } from '../features/permissions.ts'
+import { STOPPED_MESSAGE } from '../agent/conversation.ts'
+import { contentOf } from '../agent/messages.ts'
 
 /** A tool's output is cut to this many characters in an event: a client shows it, the model already has it whole. */
 const MAX_OUTPUT = 4_000
-
-/** The error a person's stop ends a reply with (agent/conversation.ts), as it reads in a log. */
-const STOPPED = 'stopped by user'
 
 /** A question as a client shows it; its options are the yes, the shortcuts and the no of an approval. */
 export interface QuestionView {
@@ -52,7 +52,7 @@ export interface ServiceState {
   thinkingLevels: ThinkingLevel[]
   /** OpenAI's priority tier, switched with /fast. */
   fast: boolean
-  mode: string
+  mode: Mode
   allowed: string
   replying: boolean
   queued: number
@@ -88,6 +88,32 @@ export type ServiceEvent = { seq: number } & (
 /** An event before the log numbers it. */
 export type Unnumbered = ServiceEvent extends infer E ? (E extends ServiceEvent ? Omit<E, 'seq'> : never) : never
 
+/** A session's events, numbered and kept as they happen, so a client that connects late reads what it missed. */
+export class EventLog {
+  private readonly events: ServiceEvent[] = []
+  private readonly listeners = new Set<(e: ServiceEvent) => void>()
+  private seq = 0
+
+  push(e: Unnumbered): void {
+    const event = { ...e, seq: ++this.seq } as ServiceEvent
+    this.events.push(event)
+    for (const listener of this.listeners) {
+      listener(event)
+    }
+  }
+
+  /** The events after `seq`: all of them with 0. */
+  after(seq: number): ServiceEvent[] {
+    return this.events.filter(e => e.seq > seq)
+  }
+
+  /** Called with every event from now on; returns what stops it. */
+  subscribe(listener: (e: ServiceEvent) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+}
+
 /** What a client shows of a run event; the rest (steps, model calls, argument deltas) it does without. */
 export function eventOf(e: RunEvent): Unnumbered | undefined {
   switch (e.type) {
@@ -112,7 +138,7 @@ export function eventOf(e: RunEvent): Unnumbered | undefined {
       if (e.turn.kind !== 'input') {
         return undefined
       }
-      return { type: 'user', text: e.turn.messages.map(textOfMessage).join('\n'), steer: !e.turn.idle }
+      return { type: 'user', text: e.turn.messages.map(contentOf).join('\n'), steer: !e.turn.idle }
     default:
       return undefined
   }
@@ -123,11 +149,16 @@ export function outcomeOf(e: Extract<RunEvent, { type: 'run_end' }>): { outcome:
   if (e.outcome === 'done') {
     return { outcome: 'done' }
   }
+
   const { kind, message } = e.error
-  return kind === 'aborted' && message === STOPPED ? { outcome: 'stopped' } : { outcome: 'failed', error: message }
+  if (kind === 'aborted' && message === STOPPED_MESSAGE) {
+    return { outcome: 'stopped' }
+  }
+  return { outcome: 'failed', error: message }
 }
 
-export function usageOf(e: Extract<RunEvent, { type: 'run_end' }>): Usage {
+/** What a run spent, as a client shows it. */
+export function spentOf(e: Extract<RunEvent, { type: 'run_end' }>): Usage {
   const { input, output, cost } = e.summary.usage
   return { input, output, cost }
 }
@@ -145,18 +176,6 @@ export function viewOf(q: Questions['questions'][number]): QuestionView {
 
 function textOfResult(result: ToolResultMessage): string {
   return result.content.map(part => (part.type === 'text' ? part.text : `[${part.type}]`)).join('\n')
-}
-
-/** A message's text, its content a string or a list of parts. */
-function textOfMessage(message: { content: unknown }): string {
-  const { content } = message
-  if (typeof content === 'string') {
-    return content
-  }
-  if (!Array.isArray(content)) {
-    return ''
-  }
-  return content.map(part => (part.type === 'text' ? String(part.text) : '')).join('')
 }
 
 function cut(text: string): string {

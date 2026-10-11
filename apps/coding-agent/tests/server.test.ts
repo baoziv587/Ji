@@ -12,9 +12,9 @@ import { join } from 'node:path'
 import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createAgentHttpServer } from '../src/server/http.ts'
-import { createSessionOpener } from '../src/server/open.ts'
-import { createSessionHub } from '../src/server/sessions.ts'
-import { createSessionStore } from '../src/server/store.ts'
+import { SessionOpener } from '../src/server/open.ts'
+import { SessionHub } from '../src/server/sessions.ts'
+import { SessionStore } from '../src/server/store.ts'
 
 describe('agent HTTP service', () => {
   it('should stream a reply and wait for the client to approve a command', async () => {
@@ -128,14 +128,14 @@ describe('agent HTTP service', () => {
 
   it('should list the sessions without reading their logs, one that cannot be read back included', () => {
     // Arrange
-    const store = createSessionStore(scratch())
+    const store = new SessionStore(scratch())
     const meta = store.create(scratch())
     const records = vi.spyOn(store, 'records').mockImplementation(() => {
       throw new RangeError('Cannot create a string longer than 0x1fffffe8 characters')
     })
     const fake = createFakeModel([])
     onTestFinished(() => fake.dispose())
-    const hub = createSessionHub({ store, open: createSessionOpener({ store, model: fake.model, thinking: 'off' }) })
+    const hub = new SessionHub({ store, opener: new SessionOpener({ store, model: fake.model, thinking: 'off' }) })
 
     // Act
     const listed = hub.list()
@@ -161,7 +161,7 @@ describe('agent HTTP service', () => {
     writeFileSync(join(sessions, 'a.jsonl'), `${lines.join('\n')}\n`)
 
     // Act
-    const records = createSessionStore(sessions).records('a')
+    const records = new SessionStore(sessions).records('a')
 
     // Assert
     expect(records.map(r => r.type)).toEqual(['tool_call_delta', 'text'])
@@ -338,11 +338,8 @@ async function serve(
   const root = scratch()
   const fake = createFakeModel(replies)
   onTestFinished(() => fake.dispose())
-  const store = createSessionStore(sessions)
-  const hub = createSessionHub({
-    store,
-    open: createSessionOpener({ store, model: fake.model, thinking: 'off', auth }),
-  })
+  const store = new SessionStore(sessions)
+  const hub = new SessionHub({ store, opener: new SessionOpener({ store, model: fake.model, thinking: 'off', auth }) })
   const server = createAgentHttpServer({ hub, defaultRoot: root })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   onTestFinished(async () => {

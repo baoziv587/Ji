@@ -22,7 +22,8 @@
     "@ji.dev/plugin-shell": "workspace:*",
     "@ji.dev/plugin-skills": "workspace:*",
     "@ji.dev/plugin-truncate-tool-results": "workspace:*",
-    "@ji.dev/tui": "workspace:*"
+    "@ji.dev/tui": "workspace:*",
+    "@ji.dev/utils": "workspace:*"
   },
   "devDependencies": {
     "@ji.dev/testing": "workspace:*"

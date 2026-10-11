@@ -94,6 +94,29 @@ export function commandOf(
   return { command: commands.find(c => c.name === name), name, arg: rest.join(' ') }
 }
 
+/**
+ * Runs the command the line names: 'send' when the line is no command, or names one only the model knows (a skill's),
+ * so it goes as a message. A name no command has is warned of, and counts as run.
+ */
+export function runCommand(commands: readonly Command[], line: string, warn: (text: string) => void): 'ran' | 'send' {
+  const named = commandOf(commands, line)
+  if (named === undefined) {
+    return 'send'
+  }
+
+  const { command, name, arg } = named
+  if (command === undefined) {
+    warn(`No such command: ${name}. /help lists them.`)
+    return 'ran'
+  }
+  if (command.run === undefined) {
+    return 'send'
+  }
+
+  command.run(arg)
+  return 'ran'
+}
+
 /** The level given; without one, or an unknown one, the level now and the choices. */
 function think(conversation: Conversation, arg: string, say: Say): void {
   const { model, thinking } = conversation.agent

@@ -4,9 +4,8 @@
 import type { AuthEvent, AuthInteraction, AuthPrompt } from '@ji.dev/llm'
 import type { Readable } from 'node:stream'
 import type { Answering } from './answering.ts'
-import { spawn } from 'node:child_process'
-import process from 'node:process'
 import { isCancel, log, password, select, text } from '@clack/prompts'
+import { describeAuthEvent, openBrowser } from '../features/auth.ts'
 
 export function createLoginInteraction(answering: Answering): AuthInteraction {
   return {
@@ -40,38 +39,17 @@ function ask(p: AuthPrompt, input: Readable): Promise<unknown> {
 }
 
 function tell(event: AuthEvent): void {
+  const text = describeAuthEvent(event)
   switch (event.type) {
     case 'auth_url':
-      log.info([`Open ${event.url}`, ...(event.instructions === undefined ? [] : [event.instructions])].join('\n'))
+      log.info(text)
       openBrowser(event.url)
       break
     case 'device_code':
-      log.info(`Go to ${event.verificationUri} and enter ${event.userCode}`)
-      break
     case 'info':
-      log.info([event.message, ...(event.links ?? []).map(l => l.url)].join('\n'))
+      log.info(text)
       break
     default:
-      log.step(event.message)
-  }
-}
-
-/** Best effort: the URL is on screen either way. */
-export function openBrowser(url: string): void {
-  const [command, args] = browserCommand(url)
-
-  const child = spawn(command, args, { stdio: 'ignore', detached: true })
-  child.on('error', () => {})
-  child.unref()
-}
-
-function browserCommand(url: string): [string, string[]] {
-  switch (process.platform) {
-    case 'darwin':
-      return ['open', [url]]
-    case 'win32':
-      return ['cmd', ['/c', 'start', '', url]]
-    default:
-      return ['xdg-open', [url]]
+      log.step(text)
   }
 }

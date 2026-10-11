@@ -2,11 +2,12 @@
 // client shows for it. A reply that did not finish took the conversation back to before it (agent/conversation.ts),
 // so only the steps of runs that ended done count toward the history; a client still sees what the others did.
 
-import type { AgentState, Message, Turn } from '@ji.dev/llm'
+import type { AgentState, Turn } from '@ji.dev/llm'
 import type { JsonlRecord } from '@ji.dev/plugin-jsonl'
 import type { Outcome, Unnumbered } from './events.ts'
+import { applyTurn } from '@ji.dev/llm'
 import { UsageMeter } from '../agent/meter.ts'
-import { eventOf, outcomeOf, usageOf } from './events.ts'
+import { eventOf, outcomeOf, spentOf } from './events.ts'
 
 /** One line of a session's log. */
 export type LogRecord = JsonlRecord
@@ -42,7 +43,7 @@ export function historyOf(records: readonly LogRecord[]): History {
       if (ended.outcome === 'done') {
         done.add(record.run)
       }
-      events.push({ type: 'reply_end', ...ended, usage: usageOf(record) })
+      events.push({ type: 'reply_end', ...ended, usage: spentOf(record) })
       continue
     }
     const event = eventOf(record)
@@ -51,23 +52,11 @@ export function historyOf(records: readonly LogRecord[]): History {
     }
   }
 
-  let messages: Message[] = []
+  let state: AgentState = { messages: [], plugins: {} }
   for (const [run, steps] of turns) {
     if (done.has(run)) {
-      messages = steps.reduce(apply, messages)
+      state = steps.reduce(applyTurn, state)
     }
   }
-  return { state: { messages, plugins: {} }, events, outcome, meter }
-}
-
-/** What a step did to the history, as the session applies it. */
-function apply(messages: Message[], turn: Turn): Message[] {
-  switch (turn.kind) {
-    case 'model':
-      return [...messages, turn.message, ...turn.results]
-    case 'input':
-      return [...messages, ...turn.messages]
-    case 'rewrite':
-      return turn.messages
-  }
+  return { state, events, outcome, meter }
 }
