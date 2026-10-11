@@ -1,12 +1,15 @@
-package agentui
-
-// The conversation as the window shows it, built from the service's events
-// one at a time: no drawing here, so it is tested as plain data.
+// Package transcript is the conversation as the window shows it, built from
+// the service's events one at a time: no drawing here, so it is tested as
+// plain data.
+package transcript
 
 import (
 	"fmt"
 	"strings"
 	"time"
+
+	"desktop/agentui/agent"
+	"desktop/agentui/format"
 )
 
 type ItemKind int
@@ -31,7 +34,7 @@ type Item struct {
 	Failed bool
 	// A command's notice: info, success, warn or error.
 	Level string
-	Help  []HelpSection
+	Help  []agent.HelpSection
 	Tool  *ToolCall
 	// Whether the thinking or the tool's output is shown; the window's own.
 	Open bool
@@ -49,14 +52,14 @@ type Asking struct {
 	ID        string
 	Tool      string
 	Outside   bool
-	Questions []Question
+	Questions []agent.Question
 }
 
 // Transcript is everything the service said since the last reset.
 type Transcript struct {
 	Items  []*Item
 	Asking *Asking
-	State  State
+	State  agent.State
 	// What a reply that did not finish was sent, for the input to take back.
 	Unsent string
 	// What the reply in progress is doing, as the terminal's status line
@@ -69,7 +72,7 @@ type Transcript struct {
 
 // Apply takes in one event; it reports whether a reply ended unfinished, its
 // messages then in Unsent.
-func (t *Transcript) Apply(e Event) (unfinished bool) {
+func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 	switch e.Type {
 	case "user":
 		t.add(&Item{Kind: KindUser, Text: e.Text, Steer: e.Steer})
@@ -105,7 +108,7 @@ func (t *Transcript) Apply(e Event) (unfinished bool) {
 		}
 		t.doing(t.runningLabel())
 	case "compacted":
-		t.add(&Item{Kind: KindNotice, Text: fmt.Sprintf("Compacted the history: %s → %s tokens", count(e.Before), count(e.After))})
+		t.add(&Item{Kind: KindNotice, Text: fmt.Sprintf("Compacted the history: %s → %s tokens", format.Count(e.Before), format.Count(e.After))})
 		t.doing("Waiting")
 	case "notice":
 		t.add(&Item{Kind: KindNotice, Level: e.Level, Failed: e.Level == "error", Text: e.Text})
@@ -174,24 +177,4 @@ func (t *Transcript) tool(id string) *ToolCall {
 		}
 	}
 	return nil
-}
-
-// count is a count in a few characters, as the terminal writes it: 950,
-// 1.2k, 48.2k, 312k, 1.5M.
-func count(n int) string {
-	switch {
-	case n < 1000:
-		return fmt.Sprint(n)
-	case n < 1_000_000:
-		return short(float64(n)/1000) + "k"
-	default:
-		return short(float64(n)/1_000_000) + "M"
-	}
-}
-
-func short(n float64) string {
-	if n < 100 {
-		return strings.TrimSuffix(fmt.Sprintf("%.1f", n), ".0")
-	}
-	return fmt.Sprintf("%.0f", n)
 }

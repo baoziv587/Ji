@@ -1,13 +1,13 @@
-package agentui
-
-// The window's look: shadcn/ui's neutral theme (new-york-v4), its tokens
-// as they are there, and the theme the widgets of MyGo draw with made
-// from them.
+// Package shadcn draws the window as shadcn/ui (new-york-v4) does: its
+// neutral theme, its tokens as they are there and the theme the widgets of
+// MyGo draw with made from them; and its controls, their variants, sizes and
+// states in the palette's colors, built on the widgets' bases.
+package shadcn
 
 import "github.com/egoist/mygo/ui"
 
-// palette holds shadcn/ui's tokens, by their names there.
-type palette struct {
+// Palette holds shadcn/ui's tokens, by their names there.
+type Palette struct {
 	Background, Foreground     ui.Color
 	Card, Popover              ui.Color
 	Primary, PrimaryForeground ui.Color
@@ -22,7 +22,7 @@ type palette struct {
 	Info ui.Color
 }
 
-var lightPalette = palette{
+var lightPalette = Palette{
 	Background:        ui.Oklch(1, 0, 0),
 	Foreground:        ui.Oklch(0.145, 0, 0),
 	Card:              ui.Oklch(1, 0, 0),
@@ -43,7 +43,7 @@ var lightPalette = palette{
 	Info:              ui.Oklch(0.588, 0.158, 241.966),
 }
 
-var darkPalette = palette{
+var darkPalette = Palette{
 	Background:        ui.Oklch(0.145, 0, 0),
 	Foreground:        ui.Oklch(0.985, 0, 0),
 	Card:              ui.Oklch(0.205, 0, 0),
@@ -64,19 +64,19 @@ var darkPalette = palette{
 	Info:              ui.Oklch(0.746, 0.16, 232.661),
 }
 
-// paletteOf is the palette that goes with a theme, light or dark.
-func paletteOf(t *ui.Theme) *palette {
+// PaletteOf is the palette that goes with a theme, light or dark.
+func PaletteOf(t *ui.Theme) *Palette {
 	if t.Dark {
 		return &darkPalette
 	}
 	return &lightPalette
 }
 
-// themeFrom makes the theme of the widgets from the palette that goes with
+// Theme makes the theme of the widgets from the palette that goes with
 // the system's theme, a copy of it that keeps what follows the desktop, as
 // the size of text.
-func themeFrom(system *ui.Theme) *ui.Theme {
-	p := paletteOf(system)
+func Theme(system *ui.Theme) *ui.Theme {
+	p := PaletteOf(system)
 	t := *system
 	t.Background, t.Text, t.TextMuted, t.Border = p.Background, p.Foreground, p.MutedForeground, p.Border
 	t.Surface, t.SurfaceHover, t.SurfacePressed = p.Secondary, p.Accent, p.Accent
@@ -97,5 +97,5 @@ func themeFrom(system *ui.Theme) *ui.Theme {
 
 // Sizes of text as Tailwind's, for a body of text-sm: the system's size,
 // 13 on macOS where the web's is 14.
-func textXS(t *ui.Theme) float32 { return t.FontSize - 2 }
-func textLG(t *ui.Theme) float32 { return t.FontSize + 4 }
+func TextXS(t *ui.Theme) float32 { return t.FontSize - 2 }
+func TextLG(t *ui.Theme) float32 { return t.FontSize + 4 }

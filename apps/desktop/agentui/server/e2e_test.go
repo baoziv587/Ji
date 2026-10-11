@@ -1,4 +1,4 @@
-package agentui
+package server
 
 import (
 	"context"
@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"desktop/agentui/agent"
+	"desktop/agentui/transcript"
 )
 
 // TestEndToEnd starts the real service with a real model, asks a new session
@@ -18,23 +21,23 @@ func TestEndToEnd(t *testing.T) {
 		t.Skip("JI_AGENT_E2E is not set")
 	}
 	root, sessions := t.TempDir(), t.TempDir()
-	options := ServerOptions{Root: root, Sessions: sessions, Model: os.Getenv("JI_AGENT_MODEL"), Thinking: "low"}
+	options := Options{Root: root, Sessions: sessions, Model: os.Getenv("JI_AGENT_MODEL"), Thinking: "low"}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
 	// A session, its command approved
-	server, err := StartServer(options)
+	server, err := Start(options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	client := NewClient(server.URL)
+	client := agent.NewClient(server.URL)
 	session, err := client.CreateSession(ctx, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	events := make(chan Event, 1024)
+	events := make(chan agent.Event, 1024)
 	following, stopFollowing := context.WithCancel(ctx)
-	go client.Follow(following, session.ID, 0, func(e Event) { events <- e })
+	go client.Follow(following, session.ID, 0, func(e agent.Event) { events <- e })
 	if _, err := client.Send(ctx, session.ID, "Use the bash tool to run exactly: echo hi > hello.txt. Then reply with the single word: done"); err != nil {
 		t.Fatal(err)
 	}
@@ -59,15 +62,15 @@ func TestEndToEnd(t *testing.T) {
 	server.Stop()
 
 	// The same session, read back by a new service
-	server, err = StartServer(options)
+	server, err = Start(options)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer server.Stop()
-	client = NewClient(server.URL)
-	listed := make(chan Sessions, 1)
+	client = agent.NewClient(server.URL)
+	listed := make(chan agent.Sessions, 1)
 	listing, stopListing := context.WithCancel(ctx)
-	go client.FollowSessions(listing, func(s Sessions) {
+	go client.FollowSessions(listing, func(s agent.Sessions) {
 		select {
 		case listed <- s:
 		default:
@@ -79,21 +82,21 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("listed %+v", list.Sessions)
 	}
 
-	var tr Transcript
-	replayed := make(chan Event, 1024)
-	go client.Follow(ctx, session.ID, 0, func(e Event) { replayed <- e })
+	var tr transcript.Transcript
+	replayed := make(chan agent.Event, 1024)
+	go client.Follow(ctx, session.ID, 0, func(e agent.Event) { replayed <- e })
 	for e := range replayed {
 		tr.Apply(e)
 		if e.Type == "reply_end" {
 			break
 		}
 	}
-	if len(tr.Items) == 0 || tr.Items[0].Kind != KindUser {
+	if len(tr.Items) == 0 || tr.Items[0].Kind != transcript.KindUser {
 		t.Fatalf("replayed items %+v", tr.Items)
 	}
 	var ran bool
 	for _, it := range tr.Items {
-		ran = ran || (it.Kind == KindTool && it.Tool.Name == "bash" && it.Tool.OK)
+		ran = ran || (it.Kind == transcript.KindTool && it.Tool.Name == "bash" && it.Tool.OK)
 	}
 	if !ran {
 		t.Errorf("the replayed session shows no bash call: %+v", tr.Items)

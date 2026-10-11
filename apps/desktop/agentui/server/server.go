@@ -1,8 +1,7 @@
-package agentui
-
-// Starting the coding agent's HTTP service, when no address of a running one
-// is given: node runs apps/coding-agent/src/server.ts on a free port, and the
-// line it prints once it listens says where.
+// Package server starts the coding agent's HTTP service, when no address
+// of a running one is given: node runs apps/coding-agent/src/server.ts on a
+// free port, and the line it prints once it listens says where.
+package server
 
 import (
 	"bufio"
@@ -19,8 +18,8 @@ import (
 
 const serverScript = "apps/coding-agent/src/server.ts"
 
-// ServerOptions is what the service is started with.
-type ServerOptions struct {
+// Options is what the service is started with.
+type Options struct {
 	// Script is server.ts; found from the working directory or the
 	// executable when empty.
 	Script string
@@ -39,7 +38,7 @@ type Server struct {
 	cmd *exec.Cmd
 }
 
-func StartServer(o ServerOptions) (*Server, error) {
+func Start(o Options) (*Server, error) {
 	script := o.Script
 	if script == "" {
 		found, err := findScript()
