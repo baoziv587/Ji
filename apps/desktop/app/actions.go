@@ -157,8 +157,14 @@ func (a *App) stop(id string) {
 	a.call(func(ctx context.Context) error { return a.agent.Stop(ctx, id) })
 }
 
+// switchMode switches the session between ask and auto, as ⇧⇥ does in the
+// terminal; out of yolo, back to ask.
 func (a *App) switchMode(view *sessionView) {
-	a.callState(view, func(ctx context.Context) (agent.State, error) { return a.agent.SwitchMode(ctx, view.id) })
+	mode := "ask"
+	if view.t.State.Mode == "ask" {
+		mode = "auto"
+	}
+	a.callState(view, func(ctx context.Context) (agent.State, error) { return a.agent.SetMode(ctx, view.id, mode) })
 }
 
 func (a *App) think(view *sessionView, level string) {

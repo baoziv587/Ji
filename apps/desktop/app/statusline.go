@@ -66,7 +66,7 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 				case "auto":
 					mode.Tooltip("Files inside the folder are approved; commands still wait for a yes. ⇧⇥ asks about all.")
 				default:
-					mode.Tooltip("Nothing waits for a yes, outside the folder too. Chosen when the service started.")
+					mode.Tooltip("Nothing waits for a yes, outside the folder too. ⇧⇥ goes back to ask.")
 				}
 				if mode.Clicked() {
 					a.switchMode(view)
@@ -112,7 +112,7 @@ func keysOf(st agent.State, view *sessionView, entries []commands.Entry) [][2]st
 		return [][2]string{{"esc", "stops"}}
 	case st.Replying:
 		return [][2]string{{"↵", "steers"}, {"esc", "stops"}}
-	case st.Mode != "" && st.Mode != "yolo":
+	case st.Mode != "":
 		return [][2]string{{"⇧⇥", "switches"}, {"/", "commands"}}
 	default:
 		return [][2]string{{"/", "commands"}}

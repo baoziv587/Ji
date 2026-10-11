@@ -54,7 +54,7 @@ const executor = createLocalExecutor({ cwd: ROOT })
 const plugins = createPlugins(workspace, executor)
 
 /** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. Nothing does in yolo. */
-const permissions = new Permissions(workspace, plugins.files, plugins.shell, { yolo: ARGS.yolo })
+const permissions = new Permissions(workspace, plugins.files, plugins.shell, { mode: ARGS.yolo ? 'yolo' : 'ask' })
 
 /** The bars around the conversation, built by buildView; stdout is the conversation between them. */
 const screen = new Screen(buildView)

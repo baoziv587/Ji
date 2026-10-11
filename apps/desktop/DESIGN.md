@@ -3,57 +3,57 @@ name: Ji Agent
 description: A graphite working console for watching and steering coding-agent sessions, light and dark.
 colors:
   background: '#F8F5F0'
-  foreground: '#3E2723'
+  foreground: '#39221E'
   card: '#F8F5F0'
   popover: '#F8F5F0'
-  primary: '#447944'
+  primary: '#307D33'
   primary-foreground: '#FFFFFF'
-  secondary: '#E8F5E9'
-  muted: '#F0E9E0'
-  accent: '#CDE4CE'
-  muted-foreground: '#6D4C41'
-  destructive: '#A0564E'
-  border: '#E0D6C9'
-  input: '#E0D6C9'
-  ring: '#557354'
-  sidebar: '#F0E9E0'
-  sidebar-accent: '#CDE4CE'
-  sidebar-border: '#E0D6C9'
-  info: '#2C729E'
-  waiting: '#A2613F'
-  success: '#0E7C66'
-  thinking: '#597059'
-  warning: '#8B651E'
-  code-keyword: '#3D6C3D'
-  code-string: '#7E5D1D'
-  code-number: '#915140'
-  code-type: '#166989'
+  secondary: '#DAECDC'
+  muted: '#F2E8DC'
+  accent: '#CAE5CC'
+  muted-foreground: '#653F32'
+  destructive: '#AF4A41'
+  border: '#E0D2C0'
+  input: '#D3C5B3'
+  ring: '#4D764D'
+  sidebar: '#F2E9DC'
+  sidebar-accent: '#C7E2C8'
+  sidebar-border: '#E0D2C0'
+  info: '#0473A9'
+  waiting: '#B05824'
+  success: '#067C66'
+  thinking: '#557255'
+  warning: '#8F6402'
+  code-keyword: '#2B702E'
+  code-string: '#825C01'
+  code-number: '#9E4730'
+  code-type: '#00698C'
   background-dark: '#1C2A1F'
   foreground-dark: '#EAE5DF'
-  card-dark: '#2B382C'
-  popover-dark: '#354236'
-  primary-dark: '#6FA66F'
+  card-dark: '#273929'
+  popover-dark: '#314433'
+  primary-dark: '#5DAB5F'
   primary-foreground-dark: '#0A1F0C'
-  secondary-dark: '#364235'
-  muted-dark: '#252F26'
-  accent-dark: '#374937'
-  muted-foreground-dark: '#B6AEA4'
-  destructive-dark: '#DB8D83'
-  border-dark: '#424E41'
-  input-dark: '#4C594B'
-  ring-dark: '#81A080'
-  sidebar-dark: '#1C2A1F'
-  sidebar-accent-dark: '#364836'
-  sidebar-border-dark: '#424E41'
-  info-dark: '#83CFFB'
-  waiting-dark: '#EDA77F'
-  success-dark: '#6DC9AC'
-  thinking-dark: '#A0B9A0'
-  warning-dark: '#DDB06F'
-  code-keyword-dark: '#92BF91'
-  code-string-dark: '#CCAC76'
-  code-number-dark: '#DF9F8F'
-  code-type-dark: '#7ABBDA'
+  secondary-dark: '#324331'
+  muted-dark: '#223024'
+  accent-dark: '#344A35'
+  muted-foreground-dark: '#BEB4A8'
+  destructive-dark: '#EB8276'
+  border-dark: '#445543'
+  input-dark: '#4E604C'
+  ring-dark: '#79A378'
+  sidebar-dark: '#172B1C'
+  sidebar-accent-dark: '#334934'
+  sidebar-border-dark: '#445543'
+  info-dark: '#7ED0FE'
+  waiting-dark: '#FD9F67'
+  success-dark: '#40CFA9'
+  thinking-dark: '#9CBB9C'
+  warning-dark: '#E9AC4C'
+  code-keyword-dark: '#85C385'
+  code-string-dark: '#D5A95D'
+  code-number-dark: '#ED9782'
+  code-type-dark: '#5FBEE8'
 typography:
   headline:
     fontFamily: 'SF Pro Text, -apple-system, system-ui, sans-serif'
@@ -232,7 +232,7 @@ Code in a well is colored as it reads, the one place hue names no state: **Code 
 ### Neutral
 
 - **Graphite Ground** (`background`): the conversation canvas; cool off-white `#F7F8FA` in light, near-black graphite in dark.
-- **Sidebar Panel** (`sidebar`): the session list, one step off the ground.
+- **Sidebar Panel** (`sidebar`): the session list, one step off the ground. Over the window's material it is a 60% veil of that color, so the panel keeps the scheme's hue whatever the wallpaper tints the material, and stays translucent.
 - **Raised Panel** (`card`, `popover`): the inspector, the approval panel, the composer, inputs, menus and toasts.
 - **Secondary Fill** (`secondary`): user messages and secondary buttons.
 - **Muted Well** (`muted`): code and diff wells, the empty-state tile; in dark it sits below the ground, a recessed well.
@@ -248,6 +248,8 @@ Code in a well is colored as it reads, the one place hue names no state: **Code 
 **The One Waiting Colour Rule.** Orange (`waiting`) marks only what is blocked on the user. If nothing waits, no orange is on screen.
 
 **The Tinted State Rule.** State tags are the state's own colour as text, on a 10% fill of it, inside a 45% seam of it; never a solid fill.
+
+**The Stepped Light Rule.** Hue stays low, so the light surfaces part by lightness: the well, the bubble, the seam and the field edge sit at least 0.03, 0.04, 0.09 and 0.13 (OKLCH) below the ground, and quiet ink reads at 5.5:1 or more on the well. Code, a message and a table stand off the text around them without a shadow.
 
 **The Legible Diff Rule.** Diff lines sit on a 12% band of their hue, their sign in it and their code in its colors; in light mode the band drops to 60% of that strength. Where a changed line differs from the one it replaced, that part sits on a band 2.5 times as strong.
 
@@ -331,6 +333,7 @@ Quiet, compact, shadcn anatomy.
 
 - **Style:** 36px tall, card fill, 1px input-colour edge, 8px radius; the composer is the same skin grown into a multi-line group.
 - **Focus:** edge turns ring blue with the 3px half-strength ring.
+- **Choice cards:** a choice that needs its consequence read, as the settings' Approvals: one card per option, 1px seam at the 10px radius, padded 12px 16px, a 16px radio before the name at 500 and its line in quiet ink. Chosen, the seam and the radio's dot take the brand, on a 6% fill of it; yolo takes Caution Amber instead and adds a line in it, with a warning icon, saying what it lets through.
 
 ### Navigation
 

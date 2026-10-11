@@ -16,14 +16,20 @@ import (
 	"desktop/ui/icons"
 )
 
+// sidebarVeil is how much of the scheme's sidebar color lies over the
+// material: enough to hold the scheme's hue, little enough that what is
+// behind the window still shows through, blurred.
+const sidebarVeil = 0.6
+
 func (a *App) sidebar(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
-	// Over the window's material where it shows one, as a macOS sidebar
-	vibrant := a.vibrant(c)
+	// Over the window's material where it shows one, as a macOS sidebar,
+	// veiled in the scheme's own: the material blends in the desktop
+	// behind it, and a warm wallpaper would turn the panel warm
 	background := p.Sidebar
-	if vibrant {
-		background = ui.Transparent
+	if a.vibrant(c) {
+		background = p.Sidebar.Alpha(sidebarVeil)
 	}
 	ui.Column(c).Fill().Background(background).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
 		// Clear of the window controls, whose room ends at the zoom button's
@@ -59,7 +65,7 @@ func (a *App) sidebar(c *ui.Context) {
 					}
 				})
 			}
-		}).Background(background).Grow(1).Changed() {
+		}).Background(ui.Transparent).Grow(1).Changed() {
 			a.Select(chosen)
 		}
 

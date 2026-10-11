@@ -9,6 +9,11 @@ package conversation
 // out a fence, a heading, an item, a rule or a table's is held back until
 // it ends, as the terminal holds it.
 //
+// A fence at the margin is cut before and after too, as nothing runs on
+// into it or out of it but an HTML block. While it is open, what is
+// written in it goes to its code as it is, not through goldmark: parsed
+// again for each delta, a long one cost as much as all of it each time.
+//
 // The blocks come out flat, each with the list items and quotes it is in,
 // so that the inspector's list builds only those in view.
 
@@ -35,10 +40,16 @@ type markdown struct {
 	// are.
 	fixed, stable int
 	// How far the text was scanned for cuts, the fence open there, and
-	// whether the line before was blank.
-	scanned int
-	fence   string
-	blank   bool
+	// whether the line before was blank; whether the last cut came after a
+	// blank line, as goldmark cannot tell from what comes after it; whether
+	// an HTML block may be open, which a fence does not end; and whether
+	// the fence open is one at the margin, the last cut before it.
+	scanned    int
+	fence      string
+	blank      bool
+	blankCut   bool
+	html       bool
+	fenceAlone bool
 	// The code blocks among those still being written, which the next
 	// parse takes again in order so that their colors carry on.
 	codes []*fenced
@@ -121,8 +132,10 @@ type fenced struct {
 	block      *syntax.Block
 	// When its Copy was clicked, and its lines in spans as last drawn and
 	// what they were of; the window's own.
-	copied  components.Copied
-	spans   [][]ui.Span
+	copied components.Copied
+	spans  [][]ui.Span
+	// How many spans the last chunk has after each of its lines.
+	ends    []int
 	spansOf struct {
 		lines   []syntax.Line
 		version int
@@ -155,7 +168,22 @@ func (m *markdown) update(text string, done bool) {
 		}
 	}
 	m.blocks = m.blocks[:m.fixed]
+	if m.fenceAlone && !done {
+		m.codes = m.openFence(tail)
+		return
+	}
 	m.codes = m.parse(tail, done)
+}
+
+// openFence puts the fence at the margin that tail opens after the
+// blocks, its code all of tail after its first line, as goldmark would.
+func (m *markdown) openFence(tail string) []*fenced {
+	first := strings.IndexByte(tail, '\n')
+	lang, _, _ := strings.Cut(strings.TrimSpace(tail[len(m.fence):first]), " ")
+	f := flattener{codes: m.codes, out: m.blocks, pending: -1}
+	f.add(mdBlock{kind: mdCode, code: f.fenced(lang, tail[first+1:], false)})
+	m.blocks = f.out
+	return f.took
 }
 
 // last is the text of the last block, without its marks.
@@ -188,20 +216,43 @@ func (m *markdown) scan(text string) {
 		if m.fence != "" {
 			if f := fenceClose.FindStringSubmatch(line); f != nil && f[1][0] == m.fence[0] && len(f[1]) >= len(m.fence) {
 				m.fence = ""
+				if m.fenceAlone {
+					m.fenceAlone = false
+					m.cut(text, m.scanned, false)
+				}
 			}
 			continue
 		}
 
-		if m.blank && strings.TrimSpace(line) != "" && line[0] != ' ' && line[0] != '\t' {
-			m.blocks = m.blocks[:m.fixed]
-			m.codes = m.parse(text[m.stable:start], true)
-			m.fixed, m.stable = len(m.blocks), start
+		blank := strings.TrimSpace(line) == ""
+		margin := !blank && line[0] != ' ' && line[0] != '\t'
+		if m.blank && margin {
+			m.cut(text, start, true)
+			m.html = false
 		}
-		m.blank = strings.TrimSpace(line) == ""
+		m.blank = blank
+		if margin && line[0] == '<' {
+			m.html = true
+		}
 		if f := fenceOpen.FindStringSubmatch(line); f != nil && (f[1][0] == '~' || !strings.Contains(f[2], "`")) {
 			m.fence = f[1]
+			if margin && !m.html {
+				m.cut(text, start, m.blankCut && m.stable == start)
+				m.fenceAlone = true
+			}
 		}
 	}
+}
+
+// cut fixes the blocks of the text before at, for good; blank when a blank
+// line comes before it.
+func (m *markdown) cut(text string, at int, blank bool) {
+	if at > m.stable {
+		m.blocks = m.blocks[:m.fixed]
+		m.codes = m.parse(text[m.stable:at], true)
+		m.fixed, m.stable = len(m.blocks), at
+	}
+	m.blankCut = blank
 }
 
 // parse puts the blocks of src after the blocks, taking the code blocks
@@ -209,7 +260,7 @@ func (m *markdown) scan(text string) {
 // code blocks it did not take, or, for blocks still being written, those
 // it took.
 func (m *markdown) parse(src string, whole bool) []*fenced {
-	f := flattener{src: []byte(src), whole: whole, cut: m.stable > 0, codes: m.codes, out: m.blocks, pending: -1}
+	f := flattener{src: []byte(src), whole: whole, cut: m.stable > 0 && m.blankCut, codes: m.codes, out: m.blocks, pending: -1}
 	f.children(parser.Parse(text.NewReader(f.src)))
 	m.blocks = f.out
 	if whole {
@@ -220,8 +271,8 @@ func (m *markdown) parse(src string, whole bool) []*fenced {
 
 type flattener struct {
 	src []byte
-	// Whether nothing more of src comes, and whether it comes after a cut,
-	// a blank line.
+	// Whether nothing more of src comes, and whether it comes after a cut
+	// at a blank line.
 	whole, cut bool
 	out        []mdBlock
 	in         []mdBox
@@ -364,6 +415,11 @@ func (f *flattener) code(n ast.Node, lang string) *fenced {
 	code := f.lines(n)
 	lines := n.Lines()
 	whole := f.whole || lines.Len() > 0 && lines.At(lines.Len()-1).Stop < len(f.src)
+	return f.fenced(lang, code, whole)
+}
+
+// fenced is the code block of code, the next one kept if in lang.
+func (f *flattener) fenced(lang, code string, whole bool) *fenced {
 	if whole {
 		code = strings.TrimSuffix(code, "\n")
 	}

@@ -60,8 +60,8 @@ const hub = createSessionHub({
     thinking,
     skills: ARGS.skills,
     auth: join(homedir(), '.ji'),
-    yolo: ARGS.yolo,
   }),
+  mode: ARGS.yolo ? 'yolo' : 'ask',
 })
 
 const server = createAgentHttpServer({ hub, defaultRoot: resolve(ARGS.root) })

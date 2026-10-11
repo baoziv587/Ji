@@ -23,7 +23,7 @@ func help(c *ui.Context, sections []agent.HelpSection) {
 			ui.Column(c.Key(i)).Gap(4).Children(func() {
 				ui.Text(c, section.Title).FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground)
 				if section.Text != "" {
-					ui.Text(c, section.Text).LineHeight(1.625).Selectable()
+					ui.Text(c, section.Text).LineHeight(1.625)
 				}
 				for _, row := range section.Rows {
 					ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
@@ -37,7 +37,7 @@ func help(c *ui.Context, sections []agent.HelpSection) {
 								components.Kbd(c, key)
 							}
 						})
-						ui.Text(c, row[1]).TextColor(p.MutedForeground).Selectable().Shrink(1)
+						ui.Text(c, row[1]).TextColor(p.MutedForeground).Shrink(1)
 					})
 				}
 			})

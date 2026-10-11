@@ -139,7 +139,7 @@ func (a *App) choose(view *sessionView, e commands.Entry) {
 }
 
 func canSwitchMode(s agent.Session, st agent.State) bool {
-	return st.Mode != "" && st.Mode != "yolo" && !s.Archived
+	return st.Mode != "" && !s.Archived
 }
 
 // runeCount is where the end of s is, as a text input counts.

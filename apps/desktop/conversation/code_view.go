@@ -58,19 +58,32 @@ func (code *fenced) chunks(p *components.Palette) [][]ui.Span {
 			from++
 		}
 	}
-	code.spans = code.spans[:min(from/chunk, len(code.spans))]
-	for i := len(code.spans) * chunk; i < len(lines); i += chunk {
-		var spans []ui.Span
-		for k, line := range lines[i:min(i+chunk, len(lines))] {
-			if k > 0 {
-				spans = append(spans, ui.Span{Text: "\n"})
-			}
-			spans = appendCode(spans, p, line, [2]int{}, ui.Color{})
-		}
-		code.spans = append(code.spans, spans)
+	// The last chunk keeps the spans of its lines before from, as a block
+	// that streams in changes only its last line or two
+	start := min(from/chunk, len(code.spans)) * chunk
+	if keep := from - start; start/chunk == len(code.spans)-1 && keep > 0 && keep <= len(code.ends) {
+		last := len(code.spans) - 1
+		code.spans[last] = code.spans[last][:code.ends[keep-1]]
+		code.ends = code.ends[:keep]
+		start = from
+	} else {
+		code.spans = code.spans[:start/chunk]
 	}
-	// A copy, as the block may write over the lines it gave
-	code.spansOf.lines = append(code.spansOf.lines[:0], lines...)
+	for i := start; i < len(lines); i++ {
+		if i%chunk == 0 {
+			code.spans = append(code.spans, nil)
+			code.ends = code.ends[:0]
+		}
+		spans := &code.spans[len(code.spans)-1]
+		if i%chunk > 0 {
+			*spans = append(*spans, ui.Span{Text: "\n"})
+		}
+		*spans = appendCode(*spans, p, lines[i], [2]int{}, ui.Color{})
+		code.ends = append(code.ends, len(*spans))
+	}
+	// A copy, as the block may write over the lines it gave; those before
+	// from are the same
+	code.spansOf.lines = append(code.spansOf.lines[:from], lines[from:]...)
 	code.spansOf.version, code.spansOf.palette = version, p
 	return code.spans
 }
@@ -84,13 +97,20 @@ func sameLine(a, b syntax.Line) bool {
 // appendCode puts a line of code's spans in their colors at the end of
 // spans; the part changed, if any, on mark.
 func appendCode(spans []ui.Span, p *components.Palette, line syntax.Line, changed [2]int, mark ui.Color) []ui.Span {
+	if changed == [2]int{} {
+		for _, s := range line {
+			spans = append(spans, ui.Span{Text: s.Text, Color: codeColor(p, s.Kind)})
+		}
+		return spans
+	}
+
 	at := 0
 	for _, s := range line {
 		end := at + len(s.Text)
 		// A span the changed part starts or ends in is cut there
 		cuts := []int{at}
 		for _, x := range changed {
-			if changed != [2]int{} && x > at && x < end {
+			if x > at && x < end {
 				cuts = append(cuts, x)
 			}
 		}

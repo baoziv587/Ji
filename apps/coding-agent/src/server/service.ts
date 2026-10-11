@@ -7,6 +7,7 @@
 //   answer      a question the agent asked: an approval, or the model's ask_user
 //   stop        the reply in progress
 //   switchMode  ask <-> auto, as Shift+Tab in the terminal
+//   setMode     ask, auto or yolo: the one way out of yolo
 //   think       the thinking level of the next model call
 //
 // Every event has a sequence number; the log keeps them all, those read back from the session's history first, so a
@@ -16,7 +17,7 @@ import type { Agent, AuthEvent, AuthInteraction, AuthPrompt, Plugin, Run } from 
 import type { Questions, Reply } from '@ji.dev/plugin-choices'
 import type { Command, Say } from '../agent/commands.ts'
 import type { Feature } from '../features/feature.ts'
-import type { Permissions } from '../features/permissions.ts'
+import type { Mode, Permissions } from '../features/permissions.ts'
 import type { CommandView, Outcome, QuestionView, ServiceEvent, ServiceState, Unnumbered, Usage } from './events.ts'
 import type { History } from './history.ts'
 import { choices, DISMISSED } from '@ji.dev/plugin-choices'
@@ -64,6 +65,8 @@ export interface AgentService {
   answer: (id: string, reply: Reply) => boolean
   stop: () => void
   switchMode: () => void
+  /** A question already asked stays as it is: the calls after it follow the new mode. */
+  setMode: (mode: Mode) => void
   /** Throws on a level the model does not take. */
   think: (level: string) => void
   /** Resolves once the reply in progress, if any, has ended. */
@@ -305,6 +308,10 @@ export function createAgentService(options: AgentServiceOptions): AgentService {
     stop: () => conversation.stop(),
     switchMode: () => {
       permissions.switchMode()
+      emitState()
+    },
+    setMode: mode => {
+      permissions.setMode(mode)
       emitState()
     },
     think: level => {

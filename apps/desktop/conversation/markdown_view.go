@@ -8,16 +8,6 @@ import (
 	"desktop/ui/icons"
 )
 
-// reply draws the reply's text, selected across its blocks as one text.
-func reply(c *ui.Context, it *Item) {
-	blocks := it.md.blocks
-	ui.Column(c).Selectable().Children(func() {
-		for i := range blocks {
-			markdownBlock(c.Key(i), &blocks[i])
-		}
-	})
-}
-
 // markdownBlock draws a block after the markers of the list items and the
 // bars of the quotes it is in, with the room above it inside it, so that
 // a quote's bar runs on from the block before.

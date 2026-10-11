@@ -8,6 +8,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -179,6 +180,9 @@ type Block struct {
 	covered int
 	capped  bool
 	lexing  bool
+	// When the next lexing may start, and whether a wake is set for it.
+	next   time.Time
+	waking bool
 	// The lines as last shown, the length of the text and of what was
 	// colored they were for, and how many times they changed. As the text
 	// grows they are the same colored lines, all but the last, then plain
@@ -236,6 +240,8 @@ func (b *Block) Lines() []Line {
 	case b.Lang == nil || b.capped:
 		// Plain needs no lexer
 		b.plain(end)
+	case time.Now().Before(b.next):
+		b.wake()
 	default:
 		b.lexing = true
 		text := b.text[:end]
@@ -253,14 +259,31 @@ func (b *Block) Lines() []Line {
 		b.shown = b.colored
 		return b.shown
 	}
-	// The lexer's last line is the start of the one it has not reached
+	// The lexer's last line is the start of the one it has not reached.
+	// The head only grows as lines are put after the colored ones, so it
+	// takes only those new to it.
 	n := max(len(b.colored)-1, 0)
-	if len(b.head) != n {
-		b.head = append(b.head[:0], b.colored[:n]...)
+	if len(b.head) > n {
+		b.head = b.head[:0]
 	}
+	b.head = append(b.head, b.colored[len(b.head):n]...)
 	b.shown = append(b.head, Lines(nil, b.text[b.covered:])...)
 	b.head = b.shown[:n]
 	return b.shown
+}
+
+// wake draws again once the next lexing may start.
+func (b *Block) wake() {
+	if b.waking {
+		return
+	}
+	b.waking = true
+	time.AfterFunc(time.Until(b.next), func() {
+		b.mu.Lock()
+		b.waking = false
+		b.mu.Unlock()
+		Ready()
+	})
 }
 
 // Version is how many times the lines shown changed, to tell from it
@@ -272,7 +295,7 @@ func (b *Block) Version() int {
 }
 
 // plain puts the text up to end after the lines colored, plain, leaving
-// those before as they were.
+// those before as they were, the head's among them.
 func (b *Block) plain(end int) {
 	lines := Lines(nil, b.text[b.covered:end])
 	if n := len(b.colored); n > 0 {
@@ -282,15 +305,24 @@ func (b *Block) plain(end int) {
 		lines = append(b.colored[:n-1], lines...)
 	}
 	b.colored, b.covered = lines, end
-	b.head = b.head[:0]
 }
+
+// A block whose lexing takes longer than slowLex rests twice as long
+// before the next: a long one streaming in, lexed again from its start as
+// each line ends, would otherwise keep a core busy all the while.
+const slowLex = 4 * time.Millisecond
 
 func (b *Block) lex(text string) {
 	slots <- struct{}{}
+	start := time.Now()
 	lines := Lines(b.Lang, text)
+	took := time.Since(start)
 	<-slots
 
 	b.mu.Lock()
+	if took > slowLex {
+		b.next = time.Now().Add(2 * took)
+	}
 	b.colored, b.covered, b.lexing = lines, len(text), false
 	b.capped = len(text)+3*strings.Count(text, "\t") > limit
 	b.head = b.head[:0]

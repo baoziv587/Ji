@@ -16,7 +16,7 @@ import (
 // changed and the calls that failed. A step clicked shows whole in the
 // inspector.
 func work(c *ui.Context, t *Transcript, w *Work) {
-	ui.Column(c).Children(func() {
+	ui.Column(c).Unselectable().Children(func() {
 		parts := ui.CollapsibleBase(c, &w.Open)
 		workLine(c, t, w, parts)
 
@@ -25,14 +25,34 @@ func work(c *ui.Context, t *Transcript, w *Work) {
 		progress := parts.Progress()
 		var steps ui.Element
 		clip := ui.Column(c).Shrink(0).ClipY().Children(func() {
-			steps = ui.Column(c).Shrink(0).Children(func() {
+			steps = ui.Column(c).Shrink(0)
+			steps.Children(func() {
 				if !w.Open && progress == 0 {
+					w.window.built = false
 					return
 				}
-				for i, s := range w.Steps {
-					step(c.Key(s.Step), t, s, i, i == len(w.Steps)-1)
+				n := len(w.Steps)
+				from, to := w.window.span(t.sight, n)
+				if from > 0 {
+					ui.Box(c.Key("above")).Height(float32(from) * stepHeight).Shrink(0)
 				}
+				for i := from; i < to; i++ {
+					// Only the steps coming in as it opens, and one that
+					// comes after, come in: not those scrolled to
+					move := components.ColorTransition
+					if progress < 1 || i >= w.window.seen {
+						move = components.Cascade(i - from)
+					}
+					s := w.Steps[i]
+					step(c.Key(s.Step), t, s, move, i == n-1)
+				}
+				if to < n {
+					ui.Box(c.Key("below")).Height(float32(n-to) * stepHeight).Shrink(0)
+				}
+				w.window.seen = n
 			})
+			invalidate := c.Invalidate
+			steps.Draw(func(_ *ui.Painter, r ui.Rect) { w.window.painted(r, t.sight, len(w.Steps), invalidate) })
 		})
 		if progress < 1 {
 			clip.Height(progress * steps.Bounds().H)
@@ -121,10 +141,10 @@ func workLine(c *ui.Context, t *Transcript, w *Work, parts ui.CollapsibleParts) 
 
 // step is a line of the work open: on the thread, its mark, then what it
 // was and how long it took.
-func step(c *ui.Context, t *Transcript, s *Item, i int, last bool) {
+func step(c *ui.Context, t *Transcript, s *Item, move ui.ElementTransition, last bool) {
 	th := c.Theme()
 	p := components.PaletteOf(th)
-	row := stepButton(c, t, s).Height(26).Transition(components.Cascade(i))
+	row := stepButton(c, t, s).Height(stepHeight).Transition(move)
 	row.Children(func() {
 		thread(c, s, last)
 		if s.Kind == KindThinking {
@@ -146,6 +166,58 @@ func step(c *ui.Context, t *Transcript, s *Item, i int, last bool) {
 			figures(c, format.Duration(call.MS))
 		}
 	})
+}
+
+// stepHeight is how high a step's line is: which steps are in sight is
+// counted from it, not measured.
+const stepHeight = 26
+
+// stepsWindow is the steps of an open work that are built: those in sight
+// of the conversation and a screen of them above and below it, room of
+// their height holding the place of the rest, so that a work open on
+// hundreds of steps costs a frame what one on a few does. Which are in
+// sight is read from where the last frame painted the steps; a frame that
+// painted them where those built no longer cover what shows builds again.
+type stepsWindow struct {
+	// Where the steps were painted, and where they were when those built
+	// were chosen.
+	at, from  ui.Rect
+	first, to int
+	built     bool
+	// How many steps there were as they were last built: those after come
+	// in.
+	seen int
+}
+
+// span is the steps to build of n: all of them while where they are is
+// not known yet.
+func (s *stepsWindow) span(sight ui.Rect, n int) (first, to int) {
+	s.built, s.from = true, s.at
+	if s.at == (ui.Rect{}) || sight == (ui.Rect{}) {
+		s.first, s.to = 0, n
+		return 0, n
+	}
+	s.first, s.to = inSight(sight.Y-sight.H, sight.Y+2*sight.H, s.at.Y, n)
+	return s.first, s.to
+}
+
+// painted takes in where the steps are painted, and asks for another
+// frame if those built do not cover what shows of them there.
+func (s *stepsWindow) painted(r, sight ui.Rect, n int, invalidate func()) {
+	s.at = r
+	if !s.built || r == s.from || sight == (ui.Rect{}) {
+		return
+	}
+	if first, to := inSight(sight.Y, sight.Y+sight.H, r.Y, n); first < s.first || to > s.to {
+		invalidate()
+	}
+}
+
+// inSight is the steps of n, the first at top, from top to bottom.
+func inSight(top, bottom, at float32, n int) (first, to int) {
+	first = min(max(int((top-at)/stepHeight), 0), n)
+	to = min(max(int((bottom-at)/stepHeight)+1, first), n)
+	return first, to
 }
 
 // thread draws a step's piece of the line that runs down the steps, and

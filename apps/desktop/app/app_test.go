@@ -30,6 +30,10 @@ type fakeAgent struct {
 	archived []string
 	stopped  []string
 	modes    int
+	// What every session was set to, in turn
+	everyMode []string
+	// Where each session followed takes its events after those played back
+	live map[string]func(agent.Event)
 }
 
 func (f *fakeAgent) FollowSessions(context.Context, func(agent.Sessions), func(error)) {}
@@ -58,9 +62,13 @@ func (f *fakeAgent) Stop(_ context.Context, id string) error {
 	f.stopped = append(f.stopped, id)
 	return nil
 }
-func (f *fakeAgent) SwitchMode(_ context.Context, id string) (agent.State, error) {
+func (f *fakeAgent) SetMode(_ context.Context, id, mode string) (agent.State, error) {
 	f.modes++
-	return agent.State{ID: id, Mode: "auto"}, nil
+	return agent.State{ID: id, Mode: mode}, nil
+}
+func (f *fakeAgent) SetModes(_ context.Context, mode string) error {
+	f.everyMode = append(f.everyMode, mode)
+	return nil
 }
 func (f *fakeAgent) Think(_ context.Context, id, _ string) (agent.State, error) {
 	return agent.State{ID: id}, nil
@@ -70,6 +78,10 @@ func (f *fakeAgent) Follow(_ context.Context, id string, _ int, fn func(agent.Ev
 	for _, e := range f.events[id] {
 		fn(e)
 	}
+	if f.live == nil {
+		f.live = map[string]func(agent.Event){}
+	}
+	f.live[id] = fn
 }
 
 // testCommands are the service's commands, as a session lists them.
@@ -97,6 +109,7 @@ func testApp() (*App, *fakeAgent) {
 	}
 	a := New(f, func(fn func()) { fn() })
 	a.async = func(fn func()) { fn() }
+	a.after = func(_ time.Duration, fn func()) { fn() }
 	a.link.up = true
 	a.setList(agent.Sessions{DefaultRoot: "/code/web", Sessions: []agent.Session{
 		{ID: "a", Root: "/code/web", Title: "Fix the login form", Updated: now},
@@ -121,6 +134,34 @@ func TestSidebarGroupsSessionsByFolder(t *testing.T) {
 	}
 	if a.selected != "a" || !reflect.DeepEqual(f.followed, []string{"a"}) {
 		t.Errorf("selected %q, followed %v: the most recent session opens first", a.selected, f.followed)
+	}
+}
+
+// A session not shown takes in its events now and then, not as each
+// comes, and all of them at once as it is shown.
+func TestABackgroundSessionTakesInItsEventsLater(t *testing.T) {
+	a, f := testApp()
+	a.Select("b")
+	a.Select("a")
+	var later []func()
+	a.after = func(_ time.Duration, fn func()) { later = append(later, fn) }
+
+	f.live["a"](agent.Event{Type: "user", Text: "shown"})
+	for _, word := range []string{"one ", "two ", "three"} {
+		f.live["b"](agent.Event{Type: "text", Delta: word})
+	}
+	if len(a.views["a"].t.Items) != 1 || len(a.views["b"].t.Items) != 0 || len(later) != 1 {
+		t.Fatalf("the one shown has %d items, the other %d; %d updates later", len(a.views["a"].t.Items), len(a.views["b"].t.Items), len(later))
+	}
+	later[0]()
+	if items := a.views["b"].t.Items; len(items) != 1 || items[0].Text != "one two three" {
+		t.Fatalf("taken in later: %+v", items)
+	}
+
+	f.live["b"](agent.Event{Type: "text", Delta: "!"})
+	a.Select("b")
+	if items := a.views["b"].t.Items; items[0].Text != "one two three!" {
+		t.Errorf("shown: %q", items[0].Text)
 	}
 }
 
@@ -440,7 +481,8 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 
 // TestSnapshot draws the window to a PNG, to look at: SNAPSHOT=out.png,
 // DARK=1 for the dark theme, TOAST=1 once the session is archived, MENU=/th
-// with the menu of commands open on what is typed.
+// with the menu of commands open on what is typed, APPROVALS=yolo with
+// that mode chosen in the settings.
 func TestSnapshot(t *testing.T) {
 	out := os.Getenv("SNAPSHOT")
 	if out == "" {
@@ -485,6 +527,7 @@ func TestSnapshot(t *testing.T) {
 		view.draft = menu
 	}
 	a.Settings.Theme = os.Getenv("THEME")
+	a.Settings.Approvals = os.Getenv("APPROVALS")
 	if os.Getenv("SETTINGS") == "1" {
 		a.OpenSettings()
 	}
@@ -582,5 +625,43 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 	tt.Frame()
 	if a.settingsOpen || a.selected != "a" {
 		t.Errorf("open %v, selected %q: choosing the session shown goes back to it", a.settingsOpen, a.selected)
+	}
+}
+
+func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
+	a, f := testApp()
+	tt := ui.NewTester(a.View, 1100, 1000)
+	a.OpenSettings()
+	tt.Frame()
+
+	if !tt.HasText("None chosen: each session starts as the service does, in ask unless it was started with --yolo.") {
+		t.Errorf("no note while none is chosen in %q", tt.Texts())
+	}
+	if err := tt.Click("yolo"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.Settings.Approvals != "yolo" || !reflect.DeepEqual(f.everyMode, []string{"yolo"}) {
+		t.Errorf("approvals %q, set %v: choosing yolo sets every session to it", a.Settings.Approvals, f.everyMode)
+	}
+	if !tt.HasText("Commands run and files change unseen, outside the folder too.") {
+		t.Errorf("yolo chosen says nothing of what it lets through in %q", tt.Texts())
+	}
+
+	// Connected again, the service perhaps started again, so the mode is set again
+	a.link.set(nil)
+	a.applyApprovals()
+	if !reflect.DeepEqual(f.everyMode, []string{"yolo", "yolo"}) {
+		t.Errorf("set %v", f.everyMode)
+	}
+
+	a.Select("a")
+	a.apply(a.views["a"], agent.Event{Type: "state", State: &agent.State{ID: "a", Mode: "yolo"}})
+	tt.Frame()
+	if err := tt.Click("Mode"); err != nil {
+		t.Fatal(err)
+	}
+	if a.views["a"].t.State.Mode != "ask" {
+		t.Errorf("mode %q: the status line takes a session out of yolo, back to ask", a.views["a"].t.State.Mode)
 	}
 }

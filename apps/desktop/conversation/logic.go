@@ -5,8 +5,11 @@ package conversation
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
 	"desktop/format"
@@ -143,6 +146,10 @@ type Transcript struct {
 	running map[string]string
 	// The call whose lines the inspector keeps.
 	linesOf *ToolCall
+	// The row of the list each block starts at, as far as counted, and
+	// where the list showed in the last frame; the window's own.
+	starts []int
+	sight  ui.Rect
 }
 
 // Apply takes in one event; it reports whether a reply ended unfinished, its
@@ -368,4 +375,41 @@ func (t *Transcript) tool(id string) *Item {
 		}
 	}
 	return nil
+}
+
+// rows is how many rows of the list the blocks take: a reply a row for
+// each of its blocks, so that a long one is built only as far as it
+// shows. Only the block at the end grows, so the others are counted once.
+func (t *Transcript) rows() int {
+	n := len(t.Blocks)
+	if n == 0 {
+		return 0
+	}
+	if len(t.starts) == 0 {
+		t.starts = append(t.starts, 0)
+	}
+	for k := len(t.starts); k < n; k++ {
+		t.starts = append(t.starts, t.starts[k-1]+t.Blocks[k-1].rows())
+	}
+	return t.starts[n-1] + t.Blocks[n-1].rows()
+}
+
+// RowOf is the row of the list block starts at.
+func (t *Transcript) RowOf(block int) int {
+	t.rows()
+	return t.starts[block]
+}
+
+// row is the block row i of the list is of, and which of its rows; after
+// rows counted them.
+func (t *Transcript) row(i int) (block, part int) {
+	block = sort.Search(len(t.starts), func(k int) bool { return t.starts[k] > i }) - 1
+	return block, i - t.starts[block]
+}
+
+func (b Block) rows() int {
+	if b.Item != nil && b.Item.Kind == KindText {
+		return len(b.Item.md.blocks)
+	}
+	return 1
 }

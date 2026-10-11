@@ -27,21 +27,30 @@ func Centered(c *ui.Context, gap float32, fn func()) ui.Element {
 }
 
 // View is the conversation, kept at its end as it grows unless scrolled up
-// from it. A list, which builds only the items in view: built whole, a long
-// session took longer than a frame for every delta of a reply.
+// from it. A list, which builds only the rows in view: built whole, a long
+// session took longer than a frame for every delta of a reply. A reply is
+// a row for each of its blocks, and its text is selected with the rest.
 func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
 	theme := c.Theme()
 	p := components.PaletteOf(theme)
 	list.FollowEnd = true
-	return ui.List(c, list, len(t.Blocks), func(i int) {
-		Centered(c, 0, func() {
-			if b := t.Blocks[i]; b.Work != nil {
+	view := ui.List(c, list, t.rows(), func(i int) {
+		k, part := t.row(i)
+		b := t.Blocks[k]
+		row := Centered(c, 0, func() {
+			switch {
+			case b.Work != nil:
 				work(c, t, b.Work)
-			} else {
+			case b.Item.Kind == KindText:
+				markdownBlock(c, &b.Item.md.blocks[part])
+			default:
 				item(c, b.Item)
 			}
 		})
-	}).Grow(1).Gap(16).Padding(24).Children(func() {
+		if i > 0 && part == 0 {
+			row.Padding(16, 0, 0)
+		}
+	}).Grow(1).Padding(24).Selectable().Children(func() {
 		if len(t.Items) > 0 {
 			return
 		}
@@ -50,7 +59,7 @@ func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
 				Marker(c, func() { components.Spinner(c, "Opening", 16, ui.Color{}) }, "Opening the session…")
 				return
 			}
-			ui.Column(c).Center().Gap(12).Padding(80, 0).Children(func() {
+			ui.Column(c).Center().Gap(12).Padding(80, 0).Unselectable().Children(func() {
 				ui.Text(c, "What should we work on?").FontSize(components.TextLG(theme)).FontWeight(500).LetterSpacing(-0.4)
 				ui.Row(c).Gap(16).Children(func() {
 					for _, hint := range [][2]string{{"↵", "to send"}, {"⇧↵", "for a new line"}, {"/", "for commands"}} {
@@ -63,6 +72,8 @@ func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
 			})
 		})
 	})
+	t.sight = view.Bounds()
+	return view
 }
 
 // Marker is shadcn/ui's Marker: a note in the conversation that is no
@@ -73,7 +84,7 @@ func Marker(c *ui.Context, icon func(), text string) ui.Element {
 		icon()
 		// MinWidth(0): a word longer than the row, a link say, breaks
 		// rather than pushing the row past the window
-		ui.Text(c, text).TextColor(p.MutedForeground).LineHeight(1.25).Selectable().Shrink(1).MinWidth(0)
+		ui.Text(c, text).TextColor(p.MutedForeground).LineHeight(1.25).Shrink(1).MinWidth(0)
 	})
 }
 
@@ -85,14 +96,12 @@ func item(c *ui.Context, item *Item) {
 		// A raised panel at the end: the user's own words
 		ui.Row(c).Justify(ui.End).Children(func() {
 			ui.Column(c).MaxWidth(Width*0.8).Padding(8, 12).Radius(t.Radius).Background(p.Secondary).Border(1, p.Border).Gap(4).Children(func() {
-				ui.Text(c, item.Text).Selectable().LineHeight(1.625)
+				ui.Text(c, item.Text).LineHeight(1.625)
 				if item.Steer {
 					ui.Text(c, "steer").FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground)
 				}
 			})
 		})
-	case KindText:
-		reply(c, item)
 	case KindNotice:
 		icon, color, label := (*ui.SVG)(nil), p.MutedForeground, ""
 		switch {

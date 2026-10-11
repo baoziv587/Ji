@@ -27,6 +27,7 @@ import (
 	"desktop/agent"
 	"desktop/app"
 	"desktop/server"
+	"desktop/ui/components"
 )
 
 func main() {
@@ -62,7 +63,13 @@ func main() {
 		a = app.New(agent.NewClient(url), func(fn func()) { win.Update(fn) })
 		a.Layout = loadLayout()
 		a.Settings = loadSettings()
-		a.SaveSettings = saveSettings
+		mygo.Theme.SetSource(themeSource(a.Settings.Appearance))
+		a.SaveSettings = func(s app.Settings) {
+			// The window's material is light or dark as the app is, not as macOS
+			// is; set off the frame being built, which a change of theme redraws
+			go mygo.Theme.SetSource(themeSource(s.Appearance))
+			saveSettings(s)
+		}
 		a.Quit = mygo.App.Quit
 		a.ChooseFolder = func() (string, error) {
 			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
@@ -175,6 +182,16 @@ func loadSettings() app.Settings {
 }
 
 func saveSettings(s app.Settings) { writeConfig("settings.json", s) }
+
+func themeSource(a components.Appearance) mygo.ThemeSource {
+	switch a {
+	case components.Light:
+		return mygo.ThemeLight
+	case components.Dark:
+		return mygo.ThemeDark
+	}
+	return mygo.ThemeSystem
+}
 
 func loadLayout() app.Layout {
 	l := app.DefaultLayout

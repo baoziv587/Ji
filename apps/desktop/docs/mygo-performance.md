@@ -14,13 +14,24 @@
 
 ```go
 list.FollowEnd = true // 停在底部时，跟着新内容滚动
-ui.List(c, list, len(t.Items), func(i int) {
-	Centered(c, 0, func() { item(c, t.Items[i]) })
-})
+ui.List(c, list, t.rows(), func(i int) {
+	k, part := t.row(i) // 第 i 行属于哪个 Block，是它的第几行
+	...
+}).Selectable()
 ```
 
 - `ui.List` 只构建视野里的条目，状态放在 `ui.ListState` 里（见 [app/session.go](../app/session.go)）。
 - **不要拿指针做 Key**。mygo 按值比较 Key，两个内容相同的条目会被判成重复 Key，然后 panic。会话条目只会追加，直接用索引就够了，不必加 Key。
+- **一行不能太大**。List 只能跳过整行。一条回复如果整个算一行，400 段的回复每个增量都要把 400 段全部建出来、排版一遍（每帧 72ms）。现在回复的每个 Markdown 块各占一行（每帧 1.9ms），见 [conversation/logic.go](../conversation/logic.go) 的 `rows`、`row`：
+  - `starts[b]` 是第 b 个 Block 的起始行号。只有最后一个 Block 会变长，所以前面的只数一次；查找用 `sort.Search`，0 行的 Block 自然跳过。
+  - 行之间不用 `Gap`：每个 Block 的第一行加 16 的上边距，块内的行用块自己的间距。
+  - `Selectable()` 放在 List 上，选择才能跨行。行里不要再各自设 `Selectable()`，否则会变成独立的选择；不该选的部分（Work、空状态）用 `Unselectable()`。
+  - 按 Block 定位的地方（如检查器的 `ScrollIntoView`）要先换算成行号：`t.RowOf(block)`。
+- **行内的长列表自己窗口化**。展开的 Work 是一行，里面可能有几百个步骤。步骤行高固定（`stepHeight`），所以只建视野内、上下各多一屏的步骤，其余用等高的空 Box 占位，见 [conversation/work_view.go](../conversation/work_view.go) 的 `stepsWindow`：
+  - 视野用上一帧 List 的 `Bounds()`，步骤的位置用上一帧绘制时 `Draw` 拿到的 rect（都是窗口坐标）。
+  - 上一帧的位置会过时：一次滚动超过一屏时，建出来的范围可能盖不住视野。所以在 `Draw` 里检查，盖不住就 `c.Invalidate()` 再建一帧。只在位置确实变了时才请求，避免死循环。
+  - 位置还不知道时（第一次出现），全部构建。
+  - 滚进窗口的步骤不能播放 Enter 动画（父元素上一帧就在），所以 Cascade 只用在展开过程中和新来的步骤上，其余用 `ColorTransition`。
 
 ## 2. 正在增长的长文本要切段，不能放在一个 `ui.Text` 里
 
@@ -54,8 +65,18 @@ Summary: format.OneLine(format.Head(e.Args, 512))
 - 在"空行之后、顶格开始、不在围栏里"的行前切开。这样的切点前后不会有块跨过去（缩进的行可能是列表项的续行，围栏里的空行属于代码，都不切）。
 - 切点之前的部分只解析一次，结果固定下来；只有最后一个切点之后、还在写的那几块，随文本增长重新解析。每个增量约 30µs，和回复长度无关。
 - 重新解析时，代码块按出现顺序复用上一次的 `*fenced`，它的 `syntax.Block` 跟着保留，已经着好的颜色不会丢。
+- **顶格的代码块前后也切开**，因为除了 HTML 块，没有别的块能跨进或跨出它。代码块还开着的时候，写进来的内容原样交给它的代码，不经过 goldmark（`openFence`）。2000 行的代码块流式写完，累计分配从 1.1GB 降到 2.6MB，耗时从 269ms 降到 9ms（`BenchmarkStreamingALongFence`）。
+  - 那 1.1GB 是整个流式过程的**累计分配**，GC 会回收，不是常驻内存。来源是每个增量都在做 O(代码块长度) 的事：goldmark 重新解析整个代码块、`[]byte(src)` 复制、重新拼出代码字符串、重建最后一个 chunk 的 span。约 4000 个增量 × 平均几十 KB × 几份拷贝，就是几百 MB 到 1GB。
+  - 等价性由 `TestAStreamedReplyShowsAsItsWholeParse` 保证：逐字节流式输入，每一步都和整篇解析的结果比较。
+- **只追加的文本用 `strings.Builder`**：`Item.written` 收集增量，`Item.Text = written.String()` 不拷贝。`text += delta` 每次都会拷贝整段。
 
 **也不要在视图里新建要在后台计算的东西**。检查器以前每帧为运行中的调用重新算一遍行，每次都 `syntax.NewBlock`：新 Block 要在后台 lex，lex 完调用 `Ready` 触发下一帧，下一帧又建新 Block，结果是调用运行多久，就空转多久。现在在调用开始、结束时各算一次（`inspectLines`）。同理，代码块把 token 转成 span 的结果缓存在 `fenced.chunks` 里，行没变就不重算。
+
+**增量也要只算变的那部分**：
+
+- `fenced.chunks` 从第一个变了的行开始重建；最后一个 chunk 记下每行之后的 span 数（`ends`），只截掉变了的行再追加，不整块重建。
+- `syntax.Block.Lines()` 里已着色的行只追加，不重新拷贝。
+- 着色很慢（chroma 约 1MB/s）。一次 lex 超过 `slowLex`（4ms）的块，下次 lex 前先休息两倍时长，期间新行先按纯文本显示，到点再用 `syntax.Ready` 重绘。不然一个大块每个增量都要整块重新 lex，后台 goroutine 一直跑满。
 
 ## 4. 持续动画只重绘，不要每帧重建视图
 
@@ -69,7 +90,13 @@ Summary: format.OneLine(format.Head(e.Args, 512))
 - 按秒变化的文本（比如已用时间），用 `c.After(time.Second - elapsed%time.Second)` 在下一秒整点重建一次。不要靠动画顺带刷新。见 [app/statusline.go](../app/statusline.go)。
 - 折叠的 `CollapsibleBase` 不会构建面板内容，不占成本。展开以后才要算它的成本，见第 2 条。
 
-## 5. 怎么测
+## 5. 不在眼前的东西不要触发重建
+
+- **事件合并**：会话的事件先放进 `inbox`，只有放进去的是当时第一条时才调用 `a.update`，update 里把整批 Apply 掉。打开会话时读历史只要几帧，而不是一个事件一帧。见 [app/app.go](../app/app.go) 的 `open`、`drain`。
+- **后台会话节流**：不在显示的会话，事件每 `backgroundEvery`（250ms）才取一次。否则后台会话每来一个增量，就要把当前窗口整个重建一遍，而这些变化没人看得到。`show` 切换会话时会立刻取走积压的事件。
+- **视图回收**：最多跟踪 `keptViews` 个最近显示过的会话；更早的、闲置且草稿为空的会话会被关掉，连同它的 Transcript 一起释放，再次选中时重新读取。
+
+## 6. 怎么测
 
 - **离线基准测试**：用 `ui.NewTester(view, 1180, 780)` 构造一个大会话，循环执行"追加增量 + `tt.Frame()`"，记录每帧耗时。**要比较不同会话规模下的耗时**（如 2KB / 20KB / 80KB，或 40 / 400 条），看它会不会随会话变长而增长。绝对值意义不大：Tester 每帧都要把整个窗口画成图片，这部分固定开销约 4ms。
 - Tester 有两个局限：`Frame()` 每次都会重建视图，而且最多连续执行 20 轮；它也看不出"只重绘、不重建"的帧。所以第 4 条的效果，要在真实窗口里测量。

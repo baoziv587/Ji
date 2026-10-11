@@ -84,9 +84,13 @@ func (c *Client) Stop(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodPost, sessionPath(id, "stop"), nil, nil)
 }
 
-func (c *Client) SwitchMode(ctx context.Context, id string) (State, error) {
+func (c *Client) SetMode(ctx context.Context, id, mode string) (State, error) {
 	var s State
-	return s, c.do(ctx, http.MethodPost, sessionPath(id, "mode"), nil, &s)
+	return s, c.do(ctx, http.MethodPost, sessionPath(id, "mode"), map[string]string{"mode": mode}, &s)
+}
+
+func (c *Client) SetModes(ctx context.Context, mode string) error {
+	return c.do(ctx, http.MethodPost, "/api/mode", map[string]string{"mode": mode}, nil)
 }
 
 func (c *Client) Think(ctx context.Context, id, level string) (State, error) {

@@ -1,9 +1,13 @@
 package app
 
-// The settings, in place of the session: for now how the window looks,
-// light or dark and in which colors. A choice shows at once and is kept.
+// The settings, in place of the session: how the window looks, light or
+// dark and in which colors, and what waits for a yes in the sessions. A
+// choice shows at once and is kept.
 
 import (
+	"context"
+	"time"
+
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
@@ -15,6 +19,9 @@ import (
 type Settings struct {
 	Appearance components.Appearance `json:"appearance,omitempty"`
 	Theme      string                `json:"theme,omitempty"`
+	// Approvals is every session's mode: ask, auto or yolo. Unset, each
+	// starts in the service's own.
+	Approvals string `json:"approvals,omitempty"`
 }
 
 var appearances = []struct {
@@ -27,6 +34,13 @@ var appearances = []struct {
 	{components.Dark, "Dark", icons.Moon},
 }
 
+// approvals are the modes, in the terminal's words.
+var approvals = []struct{ mode, note string }{
+	{"ask", "Every command, file read and change waits for a yes."},
+	{"auto", "Files inside the folder are approved; commands still wait for a yes."},
+	{"yolo", "Nothing waits for a yes."},
+}
+
 func (a *App) OpenSettings() { a.settingsOpen = true }
 
 // saveSettings hands the settings on to be kept when they have changed.
@@ -35,10 +49,37 @@ func (a *App) saveSettings() {
 		return
 	}
 
+	modeChanged := a.Settings.Approvals != a.saved.Approvals
 	a.saved = a.Settings
+
+	if modeChanged {
+		a.applyApprovals()
+	}
 	if a.SaveSettings != nil {
 		a.SaveSettings(a.Settings)
 	}
+}
+
+// applyApprovals sets every session to the mode the settings choose: when
+// it is chosen, and on each connection, as the service keeps none of the
+// window's.
+func (a *App) applyApprovals() {
+	mode := a.Settings.Approvals
+	if mode == "" {
+		return
+	}
+
+	a.async(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := a.agent.SetModes(ctx, mode)
+		a.update(func() {
+			// Not connected, it is set again once the window is
+			if err != nil && a.link.up {
+				a.toast = &toast{message: "Could not set approvals to " + mode + ": " + err.Error(), action: "Retry", run: a.applyApprovals}
+			}
+		})
+	})
 }
 
 func (a *App) settings(c *ui.Context) {
@@ -49,7 +90,10 @@ func (a *App) settings(c *ui.Context) {
 	ui.Box(c).Grow(1).MinHeight(0).Children(func() {
 		ui.Scroll(c).Fill().Padding(TitleBarHeight+32, 24, 48).ScrollbarInsets(TitleBarHeight, 0, 0).Children(func() {
 			ui.Row(c).Justify(ui.Center).Children(func() {
-				ui.Column(c).Grow(1).MaxWidth(636).Gap(24).Children(func() { a.appearance(c) })
+				ui.Column(c).Grow(1).MaxWidth(636).Gap(56).Children(func() {
+					ui.Column(c).Gap(24).Children(func() { a.appearance(c) })
+					ui.Column(c).Gap(16).Children(func() { a.approvals(c) })
+				})
 			})
 		})
 
@@ -194,6 +238,73 @@ func (a *App) schemeCard(c *ui.Context, s *components.Scheme) {
 			ui.Text(c, s.Name).FontWeight(500).Grow(1).SingleLine()
 			if chosen {
 				ui.Icon(c, icons.Check).FontSize(14).TextColor(p.Primary)
+			}
+		})
+	})
+}
+
+func (a *App) approvals(c *ui.Context) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+
+	ui.Column(c).Gap(4).Children(func() {
+		ui.Text(c, "Approvals").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
+		note := "What waits for a yes, in every session now and every new one. Each can still switch on its own with ⇧⇥."
+		if a.Settings.Approvals == "" {
+			note = "None chosen: each session starts as the service does, in ask unless it was started with --yolo."
+		}
+		ui.Text(c, note).TextColor(p.MutedForeground)
+	})
+
+	ui.RadioGroup(c, func() {
+		for _, m := range approvals {
+			a.approval(c.Key(m.mode), m.mode, m.note)
+		}
+	}).Gap(8).Label("Approvals")
+}
+
+// approval is a mode to choose, as a card: its radio, its name and what
+// it asks about. Yolo, chosen, is in the warning color, as the status
+// line shows it, and says what it lets through.
+func (a *App) approval(c *ui.Context, mode, note string) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	chosen := a.Settings.Approvals == mode
+	mark := p.Primary
+	if mode == "yolo" {
+		mark = p.Warning
+	}
+
+	row := ui.RadioBase(c, &a.Settings.Approvals, mode).Label(mode).Gap(12).Padding(12, 16).AlignItems(ui.Start).
+		Radius(t.Radius+2).Border(1, p.Border).FocusRing(false).Transition(components.ColorTransition)
+	switch {
+	case chosen:
+		row.Border(1, mark).Background(mark.Alpha(0.06))
+	case row.Hovered():
+		row.Border(1, p.MutedForeground.Alpha(0.5))
+	}
+	components.FocusRing(row, p, 0)
+
+	row.Children(func() {
+		edge := p.Input
+		if chosen {
+			edge = mark
+		}
+		ui.Row(c).Size(16, 16).Shrink(0).Margin(2, 0, 0).Radius(8).Border(1, edge).Justify(ui.Center).AlignItems(ui.Center).
+			Transition(components.ColorTransition).Children(func() {
+			if chosen {
+				ui.Box(c).Size(8, 8).Radius(4).Background(mark)
+			}
+		})
+
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, mode).FontWeight(500)
+			ui.Text(c, note).TextColor(p.MutedForeground)
+			if chosen && mode == "yolo" {
+				ui.Row(c).Gap(6).Margin(6, 0, 0).AlignItems(ui.Center).Children(func() {
+					ui.Icon(c, icons.TriangleAlert).FontSize(14).TextColor(p.Warning)
+					ui.Text(c, "Commands run and files change unseen, outside the folder too.").TextColor(p.Warning).Shrink(1)
+				})
 			}
 		})
 	})

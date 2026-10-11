@@ -4,6 +4,7 @@
 
 import type { Api, Model, ThinkingLevel } from '@ji.dev/llm'
 import type { Feature } from '../features/feature.ts'
+import type { Mode } from '../features/permissions.ts'
 import type { AgentService } from './service.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
 import { localWorkspace } from '@ji.dev/plugin-files'
@@ -25,16 +26,15 @@ export interface SessionOpenerOptions {
   skills?: string
   /** Where /login keeps what it is given, as the terminal does: ~/.ji. No /login without it. */
   auth?: string
-  /** Nothing waits for a yes, in any session. */
-  yolo?: boolean
 }
 
-export function createSessionOpener(options: SessionOpenerOptions): (meta: SessionMeta) => AgentService {
-  const { store, model, thinking, skills, auth, yolo = false } = options
-  return ({ id, root }) => {
+/** Opens a session in a mode: what waits for a yes in it from the start. */
+export function createSessionOpener(options: SessionOpenerOptions): (meta: SessionMeta, mode: Mode) => AgentService {
+  const { store, model, thinking, skills, auth } = options
+  return ({ id, root }, mode) => {
     const workspace = localWorkspace(root, { allow: () => true })
     const plugins = createPlugins(workspace, createLocalExecutor({ cwd: root }))
-    const permissions = new Permissions(workspace, plugins.files, plugins.shell, { yolo })
+    const permissions = new Permissions(workspace, plugins.files, plugins.shell, { mode })
 
     return createAgentService({
       id,
