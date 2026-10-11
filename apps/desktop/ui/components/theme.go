@@ -9,8 +9,9 @@ import "github.com/egoist/mygo/ui"
 // Palette holds shadcn/ui's tokens, by their names there, and the colors
 // of what a session is doing. Hue is kept for meaning: the brand is what
 // to do and what runs; orange only what waits for the user; green done;
-// red failed or destructive; violet thinking. A scheme whose brand sits
-// on one of these hues moves that one aside.
+// red failed or destructive. Thinking is the brand's hue, quieter, and
+// nothing is violet. A scheme whose brand sits on one of these hues moves
+// that one aside.
 type Palette struct {
 	Background, Foreground     ui.Color
 	Card, Popover              ui.Color

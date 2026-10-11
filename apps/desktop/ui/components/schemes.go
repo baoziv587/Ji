@@ -30,7 +30,7 @@ var forest = Scheme{
 		Info:              ui.Hex("#2C729E"),
 		Waiting:           ui.Hex("#A2613F"),
 		Success:           ui.Hex("#0E7C66"),
-		Thinking:          ui.Hex("#6C5D9C"),
+		Thinking:          ui.Hex("#597059"),
 		Warning:           ui.Hex("#8B651E"),
 	},
 	Dark: Palette{
@@ -54,7 +54,7 @@ var forest = Scheme{
 		Info:              ui.Hex("#83CFFB"),
 		Waiting:           ui.Hex("#EDA77F"),
 		Success:           ui.Hex("#6DC9AC"),
-		Thinking:          ui.Hex("#BAA3E7"),
+		Thinking:          ui.Hex("#A0B9A0"),
 		Warning:           ui.Hex("#DDB06F"),
 	},
 }
@@ -83,7 +83,7 @@ var graphite = Scheme{
 		Info:              ui.Hex("#2C729E"),
 		Waiting:           ui.Hex("#A2613F"),
 		Success:           ui.Hex("#427B49"),
-		Thinking:          ui.Hex("#6C5D9C"),
+		Thinking:          ui.Hex("#5C6984"),
 		Warning:           ui.Hex("#8B651E"),
 	},
 	Dark: Palette{
@@ -107,7 +107,7 @@ var graphite = Scheme{
 		Info:              ui.Hex("#83CFFB"),
 		Waiting:           ui.Hex("#EDA77F"),
 		Success:           ui.Hex("#A7CA86"),
-		Thinking:          ui.Hex("#BAA3E7"),
+		Thinking:          ui.Hex("#A3B1CE"),
 		Warning:           ui.Hex("#DDB06F"),
 	},
 }
@@ -137,7 +137,7 @@ var lagoon = Scheme{
 		Info:              ui.Hex("#435F98"),
 		Waiting:           ui.Hex("#A2613F"),
 		Success:           ui.Hex("#427B49"),
-		Thinking:          ui.Hex("#6C5D9C"),
+		Thinking:          ui.Hex("#4A726D"),
 		Warning:           ui.Hex("#8B651E"),
 	},
 	Dark: Palette{
@@ -161,7 +161,7 @@ var lagoon = Scheme{
 		Info:              ui.Hex("#97B7F7"),
 		Waiting:           ui.Hex("#EDA77F"),
 		Success:           ui.Hex("#A7CA86"),
-		Thinking:          ui.Hex("#BAA3E7"),
+		Thinking:          ui.Hex("#92BBB3"),
 		Warning:           ui.Hex("#DDB06F"),
 	},
 }
@@ -191,7 +191,7 @@ var slate = Scheme{
 		Info:              ui.Hex("#0F766E"),
 		Waiting:           ui.Hex("#A2613F"),
 		Success:           ui.Hex("#427B49"),
-		Thinking:          ui.Hex("#6C5D9C"),
+		Thinking:          ui.Hex("#536C82"),
 		Warning:           ui.Hex("#8B651E"),
 	},
 	Dark: Palette{
@@ -215,7 +215,7 @@ var slate = Scheme{
 		Info:              ui.Hex("#94C1C0"),
 		Waiting:           ui.Hex("#EAA57D"),
 		Success:           ui.Hex("#A4BF8D"),
-		Thinking:          ui.Hex("#CAA3C3"),
+		Thinking:          ui.Hex("#92B9C4"),
 		Warning:           ui.Hex("#EBCB8B"),
 	},
 }
