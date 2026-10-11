@@ -7,6 +7,7 @@ import (
 
 	"desktop/agent"
 	"desktop/syntax"
+	"desktop/ui/components"
 )
 
 func blocksOf(text string, done bool) []mdBlock {
@@ -165,6 +166,41 @@ func TestALongParagraphIsCutIntoPieces(t *testing.T) {
 	}
 }
 
+// As a block of code streams in, only its chunk being written is made
+// again; all of them are in another palette.
+func TestACodeBlockMakesOnlyItsLastChunkAgain(t *testing.T) {
+	var tr Transcript
+	text := "```\n" + strings.Repeat("x := 1\n", chunk+4)
+	tr.Apply(agent.Event{Type: "text", Delta: text})
+	code := tr.Items[0].md.blocks[0].code
+	p := &components.Palette{}
+	first := code.chunks(p)
+	head := &first[0][0]
+	if len(first) != 2 {
+		t.Fatalf("%d chunks", len(first))
+	}
+
+	tr.Apply(agent.Event{Type: "text", Delta: "y"})
+	more := code.chunks(p)
+	if len(more) != 2 || &more[0][0] != head || more[1][len(more[1])-1].Text != "y" {
+		t.Errorf("chunks %+v", more)
+	}
+	var joined []string
+	for _, spans := range more {
+		var s strings.Builder
+		for _, span := range spans {
+			s.WriteString(span.Text)
+		}
+		joined = append(joined, s.String())
+	}
+	if strings.Join(joined, "\n") != strings.TrimSuffix(code.text, "\n") {
+		t.Errorf("the chunks make %q, not %q", strings.Join(joined, "\n"), code.text)
+	}
+	if again := code.chunks(&components.Palette{}); &again[0][0] == head {
+		t.Errorf("kept in another palette")
+	}
+}
+
 // A table's head and rows, each cell in its runs.
 func TestTablesKeepTheirCells(t *testing.T) {
 	blocks := blocksOf("| a | **b** |\n|---|--:|\n| 1 | 2 |\n", true)
@@ -191,5 +227,38 @@ func TestACallsLinesAreWorkedOutOnceWhileItRuns(t *testing.T) {
 	tr.Apply(agent.Event{Type: "tool_end", ID: "1", Name: "bash", OK: true, Output: "a"})
 	if done := inspectLines(&tr, call); &done[0] == &first[0] || done[len(done)-1].kind != inspectCode {
 		t.Errorf("not worked out again as it ended: %+v", done)
+	}
+}
+
+// Only the call inspected last keeps its lines; one inspected again has
+// them worked out again.
+func TestOnlyTheCallInspectedKeepsItsLines(t *testing.T) {
+	var tr Transcript
+	for _, id := range []string{"1", "2"} {
+		tr.Apply(agent.Event{Type: "tool_start", ID: id, Name: "bash", Args: `{"command":"ls"}`})
+		tr.Apply(agent.Event{Type: "tool_end", ID: id, Name: "bash", OK: true, Output: "out " + id})
+	}
+	one, two := tr.Steps[0].Tool, tr.Steps[1].Tool
+	want := inspectLines(&tr, one)
+	inspectLines(&tr, two)
+	if one.lines != nil || two.lines == nil {
+		t.Fatalf("lines kept: %v and %v", one.lines != nil, two.lines != nil)
+	}
+	again := inspectLines(&tr, one)
+	if two.lines != nil || len(again) != len(want) || again[len(again)-1].line.Code.Lines()[0][0].Text != "out 1" {
+		t.Errorf("inspected again %+v", again)
+	}
+}
+
+// A delta to a long paragraph, its lines not cut by a blank one: each line
+// added to the run before it copied the whole run again.
+func BenchmarkADeltaToALongParagraph(b *testing.B) {
+	text := strings.Repeat("some words in a long line of prose here\n", 2000)
+	var m markdown
+	m.update(text, false)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		m.update(text+"more", false)
 	}
 }

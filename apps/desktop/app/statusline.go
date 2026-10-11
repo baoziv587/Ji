@@ -24,8 +24,8 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 	ui.Row(c).Height(20).Gap(6).Padding(0, 4).AlignItems(ui.Center).Children(func() {
 		var parts []func()
 		switch {
-		case a.connection != "":
-			parts = append(parts, func() { small(a.connection, p.Destructive).Shrink(1) })
+		case a.link.problem != "":
+			parts = append(parts, func() { small(a.link.problem, p.Destructive).Shrink(1) })
 		case a.failure != "":
 			parts = append(parts, func() { small(a.failure, p.Destructive).Selectable().Shrink(1) })
 		}
@@ -69,7 +69,7 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 					mode.Tooltip("Nothing waits for a yes, outside the folder too. Chosen when the service started.")
 				}
 				if mode.Clicked() {
-					a.switchMode(s.ID, view)
+					a.switchMode(view)
 				}
 			})
 		}

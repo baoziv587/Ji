@@ -5,6 +5,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/plugins/glass"
@@ -63,7 +64,7 @@ func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, 
 			edge := ui.Box(c).Absolute().Left(-3).Top(0).Width(6).FillHeight().Cursor(ui.CursorResizeEW)
 			a.resizing = edge.Pressed()
 			if dx, _, ok := edge.Dragged(); ok && dx != 0 {
-				a.InspectorSize = max(width-dx, inspectorMin)
+				a.Layout.Inspector = max(width-dx, inspectorMin)
 			}
 		}
 	})
@@ -115,21 +116,8 @@ func (a *App) inspectorBar(c *ui.Context, view *sessionView, s *conversation.Ite
 			a.inspectStep(view, s, 1)
 		}
 
-		// The copy button answers with a check for a moment
-		copied := time.Since(view.copied) < 1500*time.Millisecond
-		ghost.Icon, ghost.Disabled = icons.Copy, false
-		if copied {
-			ghost.Icon = icons.Check
-			c.After(1500*time.Millisecond - time.Since(view.copied))
-		}
-		copyButton := components.Button(c, "", ghost).Label("Copy").Tooltip(copyTip(s))
-		if copied {
-			copyButton.TextColor(p.Success)
-		}
-		if copyButton.Clicked() {
-			c.WriteClipboard(copyText(s))
-			view.copied = time.Now()
-		}
+		ghost.Disabled = false
+		view.copied.Button(c, ghost, func() string { return copyText(s) }).Tooltip(copyTip(s))
 		ghost.Icon = icons.X
 		if !covering && components.Button(c, "", ghost).Label("Close").Tooltip("Close (Esc)").Clicked() {
 			a.closeInspector(view)
@@ -191,11 +179,12 @@ func copyText(s *conversation.Item) string {
 	case call == nil:
 		return s.Text
 	case call.Edit:
-		out := ""
+		var out strings.Builder
 		for _, line := range call.Diff {
-			out += line.Text + "\n"
+			out.WriteString(line.Text)
+			out.WriteByte('\n')
 		}
-		return out
+		return out.String()
 	}
 	return call.Output
 }

@@ -67,7 +67,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					}
 					if components.Button(c, "", components.ButtonStyle{Size: components.SizeIconExtraSmall, Icon: icons.ArrowUp, Disabled: strings.TrimSpace(view.draft) == ""}).
 						Radius(999).Label(label).Tooltip(label + " (↵)").Clicked() {
-						a.send(s.ID, view)
+						a.send(view)
 					}
 				})
 				usageLine(c, st.Usage)
@@ -82,7 +82,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 			}
 			// Over the conversation, as wide as the input
 			if len(entries) > 0 {
-				commands.List(c, entries, &view.menu, view.t.State, func(e commands.Entry) { a.choose(s.ID, view, e) }).Attach(ui.AnchorTopLeft, ui.AnchorBottomLeft).Top(-4)
+				commands.List(c, entries, &view.menu, view.t.State, func(e commands.Entry) { a.choose(view, e) }).Attach(ui.AnchorTopLeft, ui.AnchorBottomLeft).Top(-4)
 			}
 		})
 	})
@@ -111,18 +111,18 @@ func (a *App) composerKey(s agent.Session, view *sessionView, ev ui.InputEvent) 
 			view.menu.Close(view.draft)
 			return true
 		case ev.Key == ui.KeyEnter && ev.Mods == 0:
-			a.choose(s.ID, view, chosen)
+			a.choose(view, chosen)
 			return true
 		}
 	}
 
 	switch {
 	case ev.Key == ui.KeyEnter && ev.Mods == 0:
-		a.send(s.ID, view)
+		a.send(view)
 		return true
 	case ev.Key == ui.KeyTab && ev.Mods == ui.Shift:
 		if canSwitchMode(s, view.t.State) {
-			a.switchMode(s.ID, view)
+			a.switchMode(view)
 		}
 		return true
 	}
@@ -130,9 +130,9 @@ func (a *App) composerKey(s agent.Session, view *sessionView, ev ui.InputEvent) 
 }
 
 // choose runs the entry, or completes it when it takes something next.
-func (a *App) choose(id string, view *sessionView, e commands.Entry) {
+func (a *App) choose(view *sessionView, e commands.Entry) {
 	if e.Runs() {
-		a.command(id, view, e.Completion())
+		a.command(view, e.Completion())
 		return
 	}
 	view.menu.Complete(&view.draft, e)

@@ -97,7 +97,7 @@ func testApp() (*App, *fakeAgent) {
 	}
 	a := New(f, func(fn func()) { fn() })
 	a.async = func(fn func()) { fn() }
-	a.connected = true
+	a.link.up = true
 	a.setList(agent.Sessions{DefaultRoot: "/code/web", Sessions: []agent.Session{
 		{ID: "a", Root: "/code/web", Title: "Fix the login form", Updated: now},
 		{ID: "b", Root: "/code/api", Title: "Add rate limits", Updated: now - 3_600_000, Status: "asking"},
@@ -121,6 +121,34 @@ func TestSidebarGroupsSessionsByFolder(t *testing.T) {
 	}
 	if a.selected != "a" || !reflect.DeepEqual(f.followed, []string{"a"}) {
 		t.Errorf("selected %q, followed %v: the most recent session opens first", a.selected, f.followed)
+	}
+}
+
+// Past keptViews, the window lets go of the idle sessions shown longest
+// ago, but keeps one waiting on an answer or with something typed.
+func TestIdleSessionsAreLetGo(t *testing.T) {
+	a, _ := testApp()
+	var sessions []agent.Session
+	for i := range keptViews + 3 {
+		sessions = append(sessions, agent.Session{ID: fmt.Sprint(i), Root: "/code/web"})
+	}
+	sessions[1].Status = "asking"
+	a.setList(agent.Sessions{Sessions: sessions})
+
+	for _, s := range sessions {
+		a.Select(s.ID)
+		if s.ID == "0" {
+			a.views["0"].draft = "half typed"
+		}
+	}
+
+	if a.views["a"] != nil {
+		t.Error("the idle session shown first is still followed")
+	}
+	for _, s := range sessions {
+		if a.views[s.ID] == nil {
+			t.Errorf("session %s was let go of", s.ID)
+		}
 	}
 }
 
@@ -362,6 +390,7 @@ func TestFirstRunOffersToStart(t *testing.T) {
 	}
 	// Back to none, as before the first
 	a.list.Sessions, a.selected = nil, ""
+	a.regroup()
 	tt.Frame()
 	if err := tt.Click("Choose Folder…"); err != nil {
 		t.Fatal(err)

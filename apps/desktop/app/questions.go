@@ -13,7 +13,7 @@ import (
 // questions shows what the session waits on, a panel above the input: an
 // approval answers with a click, the model's own questions with picks and a
 // Send.
-func (a *App) questions(c *ui.Context, id string, view *sessionView) {
+func (a *App) questions(c *ui.Context, view *sessionView) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	asking := view.t.Asking
@@ -43,7 +43,7 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 						switch {
 						case approval && o.Value == "yes":
 							style.Variant = components.Default
-						case !approval && view.picked(i, o.Value):
+						case !approval && view.answer.picked(i, o.Value):
 							// A toggle that is on
 							style.Variant, style.Icon = components.Secondary, icons.Check
 						}
@@ -57,9 +57,9 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 						}
 						if b.Clicked() {
 							if approval {
-								a.answer(id, view, [][]string{{o.Value}})
+								a.answer(view, [][]string{{o.Value}})
 							} else {
-								view.toggle(i, o.Value, q.Multiple)
+								view.answer.toggle(i, o.Value, q.Multiple)
 							}
 						}
 					}
@@ -72,7 +72,7 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 					case len(q.Options) == 0:
 						placeholder = "Type your answer"
 					}
-					input := components.TextInput(c.Key(fmt.Sprint("other", i)), &view.others[i]).Placeholder(placeholder).Label("Your answer")
+					input := components.TextInput(c.Key(fmt.Sprint("other", i)), &view.answer.others[i]).Placeholder(placeholder).Label("Your answer")
 					if q.Secret {
 						input.Password()
 					}
@@ -83,10 +83,10 @@ func (a *App) questions(c *ui.Context, id string, view *sessionView) {
 				ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
 					if components.Button(c, "Dismiss", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeSmall}).
 						Tooltip("Answer none of them: the agent asks what you want instead").Clicked() {
-						a.answer(id, view, nil)
+						a.answer(view, nil)
 					}
 					if components.Button(c, "Send answer", components.ButtonStyle{Size: components.SizeSmall}).Clicked() {
-						a.answer(id, view, view.answers())
+						a.answer(view, view.answer.answers(asking.Questions))
 					}
 				})
 			}

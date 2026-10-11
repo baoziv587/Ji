@@ -92,7 +92,7 @@ func TestMessagesAndSkillsGoTheirWays(t *testing.T) {
 
 	for _, line := range []string{"hello", "/impeccable polish", "/exit"} {
 		view.draft = line
-		a.send("a", view)
+		a.send(view)
 	}
 
 	if !reflect.DeepEqual(f.sent["a"], []string{"hello"}) {

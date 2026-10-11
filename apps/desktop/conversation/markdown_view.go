@@ -58,7 +58,7 @@ func markdownContent(c *ui.Context, b *mdBlock, ink ui.Color) {
 	p := components.PaletteOf(th)
 	switch b.kind {
 	case mdParagraph:
-		inline(c, b.runs, ink, th.FontSize).LineHeight(1.625)
+		inline(c, b.runs, b.texts(p, th.FontSize)[0], ink).LineHeight(1.625)
 	case mdHeading:
 		size := th.FontSize
 		switch b.level {
@@ -67,13 +67,13 @@ func markdownContent(c *ui.Context, b *mdBlock, ink ui.Color) {
 		case 2:
 			size = th.FontSize + 2
 		}
-		inline(c, b.runs, p.Foreground, size).FontSize(size).FontWeight(600).LineHeight(1.4)
+		inline(c, b.runs, b.texts(p, size)[0], p.Foreground).FontSize(size).FontWeight(600).LineHeight(1.4)
 	case mdCode:
 		fencedWell(c, b.code)
 	case mdRule:
 		ui.Box(c).Height(1).Background(p.Border).Margin(8, 0)
 	case mdTable:
-		table(c, b.table, ink)
+		table(c, b.table, b.texts(p, th.FontSize), ink)
 	}
 }
 
@@ -95,22 +95,43 @@ func listMarker(c *ui.Context, box mdBox) {
 	})
 }
 
-// inline draws runs as a paragraph; a link in it opens in the browser.
-func inline(c *ui.Context, runs []mdRun, ink ui.Color, size float32) ui.Element {
+// texts are the block's runs in spans, or those of each cell of its table
+// in order: made again only in another palette or size, not each frame.
+func (b *mdBlock) texts(p *components.Palette, size float32) [][]ui.Span {
+	if b.spans != nil && b.spansOf.palette == p && b.spansOf.size == size {
+		return b.spans
+	}
+	b.spans = b.spans[:0]
+	if b.table == nil {
+		b.spans = append(b.spans, spans(p, b.runs, size))
+	} else {
+		for _, row := range b.table.rows {
+			for _, cell := range row {
+				b.spans = append(b.spans, spans(p, cell, size))
+			}
+		}
+	}
+	b.spansOf.palette, b.spansOf.size = p, size
+	return b.spans
+}
+
+// inline draws runs, in their spans, as a paragraph; a link in it opens in
+// the browser.
+func inline(c *ui.Context, runs []mdRun, spans []ui.Span, ink ui.Color) ui.Element {
 	p := components.PaletteOf(c.Theme())
 	links := false
 	for _, r := range runs {
 		links = links || r.style&styleLink != 0
 	}
 	if !links {
-		return ui.RichText(c, spans(p, runs, size)...).TextColor(ink)
+		return ui.RichText(c, spans...).TextColor(ink)
 	}
 
 	return ui.RichText(c).TextColor(ink).Children(func() {
 		for i := 0; i < len(runs); {
 			if r := runs[i : i+1]; r[0].style&styleLink != 0 {
 				ui.Link(c, "", r[0].url).TextColor(p.Primary).Tooltip(r[0].url).Children(func() {
-					ui.RichText(c, spans(p, r, size)...)
+					ui.RichText(c, spans[i:i+1]...)
 				})
 				i++
 				continue
@@ -119,7 +140,7 @@ func inline(c *ui.Context, runs []mdRun, ink ui.Color, size float32) ui.Element 
 			for end < len(runs) && runs[end].style&styleLink == 0 {
 				end++
 			}
-			ui.RichText(c, spans(p, runs[i:end], size)...)
+			ui.RichText(c, spans[i:end]...)
 			i = end
 		}
 	})
@@ -148,7 +169,7 @@ func spans(p *components.Palette, runs []mdRun, size float32) []ui.Span {
 
 // table draws a table in a seam, its head on the muted fill and its
 // columns as wide as they need within the room there is.
-func table(c *ui.Context, t *mdRows, ink ui.Color) {
+func table(c *ui.Context, t *mdRows, cells [][]ui.Span, ink ui.Color) {
 	th := c.Theme()
 	p := components.PaletteOf(th)
 	columns := 0
@@ -162,7 +183,10 @@ func table(c *ui.Context, t *mdRows, ink ui.Color) {
 
 	ui.Box(c).AlignSelf(ui.Start).MinWidth(0).Border(1, p.Border).Radius(th.Radius).Clip().Children(func() {
 		ui.Grid(c).ColumnTracks(tracks...).Children(func() {
+			k := 0
 			for r, row := range t.rows {
+				texts := cells[k : k+len(row)]
+				k += len(row)
 				for i := range columns {
 					cell := ui.Column(c).MinWidth(0).Padding(6, 12)
 					if r < len(t.rows)-1 {
@@ -173,10 +197,11 @@ func table(c *ui.Context, t *mdRows, ink ui.Color) {
 					}
 					cell.Children(func() {
 						var runs []mdRun
+						var spans []ui.Span
 						if i < len(row) {
-							runs = row[i]
+							runs, spans = row[i], texts[i]
 						}
-						text := inline(c, runs, ink, th.FontSize).LineHeight(1.5)
+						text := inline(c, runs, spans, ink).LineHeight(1.5)
 						if r == 0 {
 							text.FontWeight(600)
 						}

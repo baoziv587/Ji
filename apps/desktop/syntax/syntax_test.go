@@ -62,6 +62,61 @@ func TestLinesPastTheLimitArePlain(t *testing.T) {
 	}
 }
 
+// A block streaming in past the limit is not lexed again: its lines past
+// it are put after those colored, plain, the lines before as they were.
+func TestBlockPastTheLimitIsLexedOnce(t *testing.T) {
+	lexed := 0
+	Background = func(fn func()) { lexed++; fn() }
+	defer func() { Background = func(fn func()) { go fn() } }()
+
+	text := strings.Repeat("x := 1\n", limit/7+10)
+	b := &Block{Lang: Language("go")}
+	b.Grow(text, false)
+	first := b.Lines()
+	head := &first[0][0]
+	for _, line := range []string{"y := 2\n", "\tz\n"} {
+		text += line
+		b.Grow(text, false)
+		b.Lines()
+	}
+	b.Grow(text+"return", true)
+	lines := b.Lines()
+	if lexed != 1 || &lines[0][0] != head || len(lines) != strings.Count(text, "\n")+1 {
+		t.Fatalf("lexed %d times, %d lines", lexed, len(lines))
+	}
+	want := []Line{{{"y := 2", Plain}}, {{"    z", Plain}}, {{"return", Plain}}}
+	if got := lines[len(lines)-3:]; !reflect.DeepEqual(got, want) {
+		t.Errorf("the last lines %+v", got)
+	}
+}
+
+// What is shown changes its version, and the colored lines before the one
+// being written stay the same as the text grows.
+func TestBlockShowsTheSameLinesAsItGrows(t *testing.T) {
+	var later []func()
+	Background = func(fn func()) { later = append(later, fn) }
+	defer func() { Background = func(fn func()) { go fn() } }()
+
+	b := &Block{Lang: Language("go")}
+	b.Grow("x := 1\ny := 2\n", false)
+	b.Lines()
+	later[0]()
+	lines, v := b.Lines(), b.Version()
+	first := &lines[0][0]
+	if b.Lines(); b.Version() != v {
+		t.Errorf("version %d for the same lines, was %d", b.Version(), v)
+	}
+	b.Grow("x := 1\ny := 2\nz", false)
+	lines = b.Lines()
+	if b.Version() == v || &lines[0][0] != first || len(lines) != 3 || lines[2][0] != (Span{"z", Plain}) {
+		t.Errorf("version %d, lines %+v", b.Version(), lines)
+	}
+	b.Grow("x := 1\ny := 2\nzz", false)
+	if lines = b.Lines(); &lines[0][0] != first || lines[2][0] != (Span{"zz", Plain}) {
+		t.Errorf("lines %+v", lines)
+	}
+}
+
 // As a block streams in a line at a time, the line not ended yet is
 // plain; a comment closed on a later line colors again the lines it opened
 // on.
@@ -125,5 +180,22 @@ func TestBlockLexesInTheBackground(t *testing.T) {
 	}
 	if lines := b.Lines(); len(lines) != 3 || lines[1][0] != (Span{"y ", Plain}) || lines[1][3] != (Span{"2", Number}) {
 		t.Errorf("lines %+v", lines)
+	}
+}
+
+// A line ended in a block streaming in past the limit costs no lexing.
+func BenchmarkALineEndedPastTheLimit(b *testing.B) {
+	Background = func(fn func()) { fn() }
+	defer func() { Background = func(fn func()) { go fn() } }()
+	head := strings.Repeat("x := map[string]int{\"a\": 1} // c\n", limit/30)
+	text := head + strings.Repeat("y := 2\n", b.N)
+	block := &Block{Lang: Language("go")}
+	block.Grow(head, false)
+	block.Lines()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := range b.N {
+		block.Grow(text[:len(head)+7*(i+1)], false)
+		block.Lines()
 	}
 }

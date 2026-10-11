@@ -145,24 +145,28 @@ func (c *Client) stream(ctx context.Context, path string, after *int, fn func(js
 }
 
 // readEvents parses a Server-Sent Events stream: each event's data is one
-// JSON value; comments and other fields are skipped.
+// JSON value; comments and other fields are skipped. The data handed to fn
+// is read into one buffer, used again for the next event, so fn must not
+// keep it: a write's arguments, a whole file, would otherwise be copied
+// three times over.
 func readEvents(r io.Reader, fn func(json.RawMessage)) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
-	var data strings.Builder
+	var data []byte
 	for scanner.Scan() {
-		line := scanner.Text()
+		line := scanner.Bytes()
 		switch {
-		case line == "":
-			if data.Len() > 0 {
-				fn(json.RawMessage(data.String()))
-				data.Reset()
+		case len(line) == 0:
+			if len(data) > 0 {
+				fn(data)
+				data = data[:0]
 			}
-		case strings.HasPrefix(line, "data:"):
-			if data.Len() > 0 {
-				data.WriteByte('\n')
+		case bytes.HasPrefix(line, dataField):
+			if len(data) > 0 {
+				data = append(data, '\n')
 			}
-			data.WriteString(strings.TrimPrefix(strings.TrimPrefix(line, "data:"), " "))
+			value := bytes.TrimPrefix(bytes.TrimPrefix(line, dataField), []byte(" "))
+			data = append(data, value...)
 		}
 	}
 	if err := scanner.Err(); err != nil {
@@ -170,6 +174,8 @@ func readEvents(r io.Reader, fn func(json.RawMessage)) error {
 	}
 	return io.ErrUnexpectedEOF
 }
+
+var dataField = []byte("data:")
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader

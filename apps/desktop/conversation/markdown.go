@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/yuin/goldmark"
@@ -65,6 +64,13 @@ type mdBlock struct {
 	in []mdBox
 	// The room above it.
 	gap float32
+	// Its runs in spans as last drawn, or each of its table's cells', and
+	// the palette and the size they were for; the window's own.
+	spans   [][]ui.Span
+	spansOf struct {
+		palette *components.Palette
+		size    float32
+	}
 }
 
 // mdBox is a list item or a quote a block is in. On the first block in
@@ -115,11 +121,11 @@ type fenced struct {
 	block      *syntax.Block
 	// When its Copy was clicked, and its lines in spans as last drawn and
 	// what they were of; the window's own.
-	copied  time.Time
+	copied  components.Copied
 	spans   [][]ui.Span
 	spansOf struct {
-		lines   *syntax.Line
-		n       int
+		lines   []syntax.Line
+		version int
 		palette *components.Palette
 	}
 }
@@ -377,6 +383,12 @@ func (f *flattener) code(n ast.Node, lang string) *fenced {
 func (f *flattener) lines(n ast.Node) string {
 	var b strings.Builder
 	lines := n.Lines()
+	size := 0
+	for i := range lines.Len() {
+		seg := lines.At(i)
+		size += seg.Len()
+	}
+	b.Grow(size)
 	for i := range lines.Len() {
 		seg := lines.At(i)
 		b.Write(seg.Value(f.src))
@@ -399,15 +411,26 @@ func (f *flattener) table(n *extast.Table) *mdRows {
 // inline is the runs of n's text, each in one style.
 func (f *flattener) inline(n ast.Node) []mdRun {
 	var runs []mdRun
+	// The run being written, in a builder: a paragraph is a text a line,
+	// and adding each to a string would copy all before it again.
+	var run strings.Builder
+	var in mdRun
+	flush := func() {
+		if run.Len() > 0 {
+			in.text = run.String()
+			runs = append(runs, in)
+			run.Reset()
+		}
+	}
 	add := func(text string, style mdStyle, url string) {
 		if text == "" {
 			return
 		}
-		if last := len(runs) - 1; last >= 0 && runs[last].style == style && runs[last].url == url {
-			runs[last].text += text
-			return
+		if in.style != style || in.url != url {
+			flush()
+			in = mdRun{style: style, url: url}
 		}
-		runs = append(runs, mdRun{text, style, url})
+		run.WriteString(text)
 	}
 
 	var walk func(n ast.Node, style mdStyle, url string)
@@ -459,6 +482,7 @@ func (f *flattener) inline(n ast.Node) []mdRun {
 		}
 	}
 	walk(n, 0, "")
+	flush()
 	return runs
 }
 
