@@ -165,7 +165,7 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 	case "thinking":
 		t.extend(KindThinking, e.Delta)
 		if w := t.work(); w != nil {
-			w.Glimpse = glimpse(t.Items[len(t.Items)-1].md.last())
+			w.Glimpse = glimpse(t.Items[len(t.Items)-1].md.tail(glimpsed))
 		}
 		t.doing("Thinking")
 	case "tool_start":

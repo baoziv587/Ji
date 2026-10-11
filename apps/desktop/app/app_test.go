@@ -137,23 +137,35 @@ func TestSidebarGroupsSessionsByFolder(t *testing.T) {
 	}
 }
 
-// A session not shown takes in its events now and then, not as each
-// comes, and all of them at once as it is shown.
+// The session shown takes in its events on the next tick, one not shown
+// now and then; either all of those come meanwhile at once, and one not
+// shown all of them as it is shown.
 func TestABackgroundSessionTakesInItsEventsLater(t *testing.T) {
 	a, f := testApp()
 	a.Select("b")
 	a.Select("a")
 	var later []func()
-	a.after = func(_ time.Duration, fn func()) { later = append(later, fn) }
+	var waits []time.Duration
+	a.after = func(d time.Duration, fn func()) {
+		later = append(later, fn)
+		waits = append(waits, d)
+	}
 
-	f.live["a"](agent.Event{Type: "user", Text: "shown"})
+	for _, word := range []string{"shown ", "too"} {
+		f.live["a"](agent.Event{Type: "text", Delta: word})
+	}
 	for _, word := range []string{"one ", "two ", "three"} {
 		f.live["b"](agent.Event{Type: "text", Delta: word})
 	}
-	if len(a.views["a"].t.Items) != 1 || len(a.views["b"].t.Items) != 0 || len(later) != 1 {
-		t.Fatalf("the one shown has %d items, the other %d; %d updates later", len(a.views["a"].t.Items), len(a.views["b"].t.Items), len(later))
+	if len(a.views["a"].t.Items) != 0 || len(a.views["b"].t.Items) != 0 || len(later) != 2 ||
+		waits[0] > components.Tick || waits[1] != backgroundEvery {
+		t.Fatalf("the one shown has %d items, the other %d; updates after %v", len(a.views["a"].t.Items), len(a.views["b"].t.Items), waits)
 	}
 	later[0]()
+	if items := a.views["a"].t.Items; len(items) != 1 || items[0].Text != "shown too" || len(a.views["b"].t.Items) != 0 {
+		t.Fatalf("shown, on the tick: %+v", items)
+	}
+	later[1]()
 	if items := a.views["b"].t.Items; len(items) != 1 || items[0].Text != "one two three" {
 		t.Fatalf("taken in later: %+v", items)
 	}

@@ -186,17 +186,31 @@ func (m *markdown) openFence(tail string) []*fenced {
 	return f.took
 }
 
-// last is the text of the last block, without its marks.
-func (m *markdown) last() string {
+// tail is the end of the last block's text, without its marks: its last n
+// bytes, or all of it when shorter. Read for each delta, so a long
+// paragraph is not copied whole each time.
+func (m *markdown) tail(n int) string {
 	if len(m.blocks) == 0 {
 		return ""
 	}
 	b := m.blocks[len(m.blocks)-1]
 	if b.code != nil {
-		return b.code.text
+		return b.code.text[max(0, len(b.code.text)-n):]
 	}
+	if len(b.runs) == 0 {
+		return ""
+	}
+
+	from, size := len(b.runs), 0
+	for from > 0 && size < n {
+		from--
+		size += len(b.runs[from].text)
+	}
+
 	var s strings.Builder
-	for _, r := range b.runs {
+	s.Grow(min(size, n))
+	s.WriteString(b.runs[from].text[max(0, size-n):])
+	for _, r := range b.runs[from+1:] {
 		s.WriteString(r.text)
 	}
 	return s.String()

@@ -229,7 +229,9 @@ func (a *App) open(id string) {
 			switch {
 			case !view.inbox.put(e):
 			case view.shown.Load():
-				drain()
+				// Taken in on the spinners' tick: the deltas of a reply come
+				// faster than it, and those come meanwhile show in its frame
+				a.after(components.UntilTick(time.Now()), drain)
 			default:
 				a.after(backgroundEvery, drain)
 			}

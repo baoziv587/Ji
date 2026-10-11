@@ -283,10 +283,13 @@ func relative(path, root string) string {
 	return path[len(root)+1:]
 }
 
+// glimpsed is how many bytes at the end of the thinking a glimpse reads.
+const glimpsed = 600
+
 // glimpse is the last words of thinking being written: its last line,
 // the end of it when long.
 func glimpse(text string) string {
-	tail := strings.TrimRightFunc(text[max(0, len(text)-600):], unicode.IsSpace)
+	tail := strings.TrimRightFunc(text[max(0, len(text)-glimpsed):], unicode.IsSpace)
 	if i := strings.LastIndexByte(tail, '\n'); i >= 0 {
 		tail = tail[i+1:]
 	}
