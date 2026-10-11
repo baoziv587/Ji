@@ -1,6 +1,6 @@
 # shadcn/ui 数值速查（new-york-v4，neutral 主题）
 
-来源是 `npx shadcn@latest view @shadcn/theme-neutral` 和各组件的源码。实际代码见 `apps/desktop/agentui/theme.go` 和 `components.go`。
+来源是 `npx shadcn@latest view @shadcn/theme-neutral` 和各组件的源码。实际代码见 `apps/desktop/ui/components/`（`theme.go` 和各控件文件）。
 
 ## 颜色令牌（OKLCH）
 
