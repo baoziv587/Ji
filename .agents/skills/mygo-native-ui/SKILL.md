@@ -5,7 +5,7 @@ description: 用 mygo（github.com/egoist/mygo）的 ui 包写原生桌面界面
 
 # 用 mygo 写原生界面
 
-本仓库的例子是 `apps/desktop`。`main.go` 只负责组装，状态和视图放在 `agentui/` 里。
+本仓库的例子是 `apps/desktop`。`main.go` 只负责组装，窗口状态和布局在 `app/`，会话在 `conversation/`（`logic.go` 是数据，`view.go` 是绘制），命令菜单在 `commands/`，shadcn 风格控件和主题在 `ui/components/`，图标在 `ui/icons/`。
 
 ## 先查哪里
 
@@ -43,7 +43,7 @@ go run .             # 不要写 go run main.go：单独编译一个文件，会
 
 - `c.Theme()` 是系统主题：light 或 dark，并且跟随系统强调色。macOS 上 `FontSize` 是 13，其它平台是 14。
 - `c.SetTheme(t)` 会整个替换主题，替换后**不再跟随系统强调色**。
-  - 做法：从 `c.Theme()` 复制一份，覆盖颜色后缓存起来；只有 `Dark` 或 `FontSize` 变化时才重建，然后每帧调用 `SetTheme`。参见 `agentui/theme.go`。
+  - 做法：从 `c.Theme()` 复制一份，覆盖颜色后缓存起来；只有 `Dark` 或 `FontSize` 变化时才重建，然后每帧调用 `SetTheme`。参见 `ui/components/theme.go`。
 - `Color.Alpha(a)` 是**在原有 alpha 上相乘**，不是直接设定 alpha。
 - `ui.Oklch(l, c, h)` 可以直接写设计令牌。
 - `Theme.Inverse` 和 `InverseText` 默认是零值。内置的 tooltip 和 toast 会回退到 Text/Background，但用 `ToastBase` 自己绘制时如果直接读 `t.Inverse`，就会画成透明。所以要么把这两个字段设上，要么用自己的颜色。
@@ -59,7 +59,7 @@ go run .             # 不要写 go run main.go：单独编译一个文件，会
   - `TextInputBase`
   - `TextAreaBase`
   - `ToastViewportBase(c, func(viewport, toasts))` 加 `ToastBase`：通过 `.Root`、`.ActionButton()` 构建
-  - 参考实现在 `agentui/components.go`。
+  - 参考实现在 `ui/components/`。
 
 状态的写法：
 
@@ -93,7 +93,7 @@ go run .             # 不要写 go run main.go：单独编译一个文件，会
 - 本仓库的截图命令：
 
   ```sh
-  SNAPSHOT=/tmp/out.png go test ./agentui -run TestSnapshot
+  SNAPSHOT=/tmp/out.png go test ./app -run TestSnapshot
   ```
 
   加上 `DARK=1` 截深色，加上 `TOAST=1` 截出现 toast 的状态。

@@ -1,7 +1,7 @@
 // Ji Agent: a native window for the coding agent's sessions. The agent runs
 // as an HTTP service (apps/coding-agent/src/server.ts) that keeps each session
 // in a JSONL log; this app starts it, or connects to one already running, and
-// draws the sessions with MyGo's native UI (package agentui).
+// draws the sessions with MyGo's native UI (package app).
 //
 //	pnpm desktop                             # from the repository: works on the directory it is run from
 //	go tool mygo dev                         # with live reload, working on this directory
@@ -24,9 +24,9 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"desktop/agentui"
-	"desktop/agentui/agent"
-	"desktop/agentui/server"
+	"desktop/agent"
+	"desktop/app"
+	"desktop/server"
 )
 
 func main() {
@@ -56,10 +56,10 @@ func main() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	var a *agentui.App
+	var a *app.App
 	mygo.App.WhenReady(func() {
 		var win *mygo.Window
-		a = agentui.NewApp(agent.NewClient(url), func(fn func()) { win.Update(fn) })
+		a = app.New(agent.NewClient(url), func(fn func()) { win.Update(fn) })
 		a.SidebarSize = loadLayout().Sidebar
 		a.Quit = mygo.App.Quit
 		a.ChooseFolder = func() (string, error) {
