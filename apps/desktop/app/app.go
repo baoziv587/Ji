@@ -60,6 +60,9 @@ type App struct {
 	SaveSettings func(Settings)
 	saved        Settings
 	settingsOpen bool
+	// The transparency slider is held: what it sets is kept once let go,
+	// not on every frame of the drag.
+	sliding bool
 	// The theme made from the settings and the system's, until either
 	// changes; the system's is dark or not.
 	theme      *ui.Theme
@@ -119,14 +122,15 @@ func New(service agent.Agent, update func(func())) *App {
 	// Code colored in the background shows as it is
 	syntax.Ready = func() { update(func() {}) }
 	return &App{
-		agent:  service,
-		update: update,
-		async:  func(fn func()) { go fn() },
-		after:  func(d time.Duration, fn func()) { time.AfterFunc(d, fn) },
-		ctx:    context.Background(),
-		views:  map[string]*sessionView{},
-		opened: map[string]*bool{},
-		Layout: DefaultLayout,
+		agent:    service,
+		update:   update,
+		async:    func(fn func()) { go fn() },
+		after:    func(d time.Duration, fn func()) { time.AfterFunc(d, fn) },
+		ctx:      context.Background(),
+		views:    map[string]*sessionView{},
+		opened:   map[string]*bool{},
+		Layout:   DefaultLayout,
+		Settings: DefaultSettings,
 	}
 }
 

@@ -64,10 +64,15 @@ func main() {
 		a.Layout = loadLayout()
 		a.Settings = loadSettings()
 		mygo.Theme.SetSource(themeSource(a.Settings.Appearance))
+		appearance := a.Settings.Appearance
 		a.SaveSettings = func(s app.Settings) {
 			// The window's material is light or dark as the app is, not as macOS
-			// is; set off the frame being built, which a change of theme redraws
-			go mygo.Theme.SetSource(themeSource(s.Appearance))
+			// is; set off the frame being built, which a change of theme redraws,
+			// and only when the appearance changes, not with every setting
+			if s.Appearance != appearance {
+				appearance = s.Appearance
+				go mygo.Theme.SetSource(themeSource(s.Appearance))
+			}
 			saveSettings(s)
 		}
 		a.Quit = mygo.App.Quit
@@ -174,7 +179,7 @@ func writeConfig(name string, v any) {
 // loadSettings reads the settings kept, the defaults where a file is
 // missing or unreadable.
 func loadSettings() app.Settings {
-	var s app.Settings
+	s := app.DefaultSettings
 	if b, err := os.ReadFile(configPath("settings.json")); err == nil {
 		_ = json.Unmarshal(b, &s)
 	}
