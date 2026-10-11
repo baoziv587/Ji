@@ -23,10 +23,23 @@ const TitleBarHeight = 52
 
 // View builds the window from the app's state.
 func (a *App) View(c *ui.Context) {
-	if system := c.Theme(); a.theme == nil || a.theme.Dark != system.Dark || a.theme.FontSize != system.FontSize {
-		a.theme = components.Theme(system)
+	system := c.Theme()
+	a.systemDark = system.Dark
+
+	if a.Settings.Appearance == "" {
+		a.Settings.Appearance = components.System
 	}
+	scheme := components.SchemeNamed(a.Settings.Theme)
+	a.Settings.Theme = scheme.Name
+	defer a.saveSettings()
+
+	dark := a.Settings.Appearance.IsDark(system.Dark)
+	if a.theme == nil || a.theme.Dark != dark || a.theme.FontSize != system.FontSize || a.scheme != scheme {
+		a.theme, a.scheme = components.Theme(system, scheme, dark), scheme
+	}
+	components.Use(scheme)
 	c.SetTheme(a.theme)
+
 	p := components.PaletteOf(a.theme)
 	if a.toast != nil {
 		shown := a.toast
@@ -34,12 +47,16 @@ func (a *App) View(c *ui.Context) {
 		c.ToastAction(shown.message, shown.action, shown.run)
 	}
 
-	if c.Vibrancy() {
+	if a.vibrant(c) {
 		c.Root().Background(ui.Transparent)
 	}
 	toasts(c, a.SidebarSize)
 	ui.Split(c, &a.SidebarSize, func() { a.sidebar(c) }, func() {
 		ui.Column(c).Fill().Background(p.Background).Children(func() {
+			if a.settingsOpen {
+				a.settings(c)
+				return
+			}
 			s, view, ok := a.current()
 			if !ok {
 				ui.Box(c).Height(TitleBarHeight).Shrink(0).DragWindow()
@@ -49,6 +66,12 @@ func (a *App) View(c *ui.Context) {
 			a.detail(c, s, view)
 		})
 	}).Fill()
+}
+
+// vibrant is whether the window shows the system's material, which is
+// light or dark as the system is: not while it is set the other way.
+func (a *App) vibrant(c *ui.Context) bool {
+	return c.Vibrancy() && a.theme.Dark == a.systemDark
 }
 
 // noSession fills the right side while no session is chosen: connecting,

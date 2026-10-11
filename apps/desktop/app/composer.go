@@ -69,7 +69,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 				usageLine(c, st.Usage)
 			})
 			if pane.FocusWithin() {
-				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.5))
+				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))
 			}
 
 			// Esc closes the menu first

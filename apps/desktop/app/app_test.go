@@ -13,6 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
+	"desktop/ui/components"
 )
 
 // fakeAgent records what the window asked of the service, and plays back
@@ -385,6 +386,10 @@ func TestSnapshot(t *testing.T) {
 	if menu := os.Getenv("MENU"); menu != "" {
 		view.draft = menu
 	}
+	a.Settings.Theme = os.Getenv("THEME")
+	if os.Getenv("SETTINGS") == "1" {
+		a.OpenSettings()
+	}
 	tt := ui.NewTester(a.View, 1180, 780)
 	tt.SetDark(os.Getenv("DARK") == "1")
 	tt.Frame()
@@ -409,5 +414,59 @@ func TestSnapshot(t *testing.T) {
 	defer f.Close()
 	if err := png.Encode(f, tt.Image()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The settings show in place of the session; a choice shows at once and is
+// kept, and choosing a session goes back to it.
+func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
+	a, _ := testApp()
+	var saved []Settings
+	a.SaveSettings = func(s Settings) { saved = append(saved, s) }
+	tt := ui.NewTester(a.View, 1100, 700)
+	tt.SetDark(false)
+	tt.Frame()
+
+	if err := tt.Click("Settings"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("Appearance") || !tt.HasText("Follows macOS, which is light now.") {
+		t.Fatalf("no settings in %q", tt.Texts())
+	}
+
+	if err := tt.Click("Dark"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.Settings.Appearance != components.Dark || !a.theme.Dark || !tt.HasText("Always dark") {
+		t.Errorf("appearance %q, dark %v: Dark makes the window dark while the system is light", a.Settings.Appearance, a.theme.Dark)
+	}
+
+	if err := tt.Click("Lagoon theme"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.Settings.Theme != "Lagoon" || components.PaletteOf(a.theme).Primary != components.SchemeNamed("Lagoon").Dark.Primary {
+		t.Errorf("theme %q: Lagoon draws the window", a.Settings.Theme)
+	}
+	if want := (Settings{Appearance: components.Dark, Theme: "Lagoon"}); len(saved) == 0 || saved[len(saved)-1] != want {
+		t.Errorf("saved %v, want last %v", saved, want)
+	}
+
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.settingsOpen {
+		t.Error("Escape leaves the settings open")
+	}
+
+	a.OpenSettings()
+	tt.Frame()
+	if err := tt.Click("Fix the login form"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.settingsOpen || a.selected != "a" {
+		t.Errorf("open %v, selected %q: choosing the session shown goes back to it", a.settingsOpen, a.selected)
 	}
 }

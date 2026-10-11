@@ -65,7 +65,7 @@ func (a *App) archive(id string, archived bool) {
 			}
 			if a.selected == id {
 				a.selected = ""
-				a.Select(next)
+				a.show(next)
 			}
 			a.toast = &toast{message: "Archived “" + titleOf(s) + "”", action: "Undo", run: func() { a.unarchive(id) }}
 		})
