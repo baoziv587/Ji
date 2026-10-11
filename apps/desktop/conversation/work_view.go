@@ -102,10 +102,13 @@ func workLine(c *ui.Context, t *Transcript, w *Work, parts ui.CollapsibleParts) 
 			})
 		})
 
-		figure := ""
+		figure, done := "", 0
+		if outcome == "running" {
+			done = w.Done()
+		}
 		switch {
-		case outcome == "running" && w.Done() > 0:
-			figure = fmt.Sprintf("%d done", w.Done())
+		case done > 0:
+			figure = fmt.Sprintf("%d done", done)
 		case outcome != "running" && w.MS > 0:
 			figure = format.Duration(w.MS)
 		}

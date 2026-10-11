@@ -41,7 +41,7 @@ type Lang struct{ lexer chroma.Lexer }
 
 // limit is how much of a block is colored: past it, the lines are plain,
 // so a block that streams in, lexed again as each line ends, costs no
-// more than this each time.
+// more than this each time, and is not lexed again once past it.
 const limit = 64 << 10
 
 var languages sync.Map
@@ -172,14 +172,22 @@ type Block struct {
 	text string
 	// Whether text is all of it, its last line ended.
 	whole bool
-	// The lines of text colored, and how much of it they cover.
+	// The lines of text colored, and how much of it they cover; whether
+	// that reached the limit, past which the lines are plain, so that the
+	// head is not lexed again for each line after it.
 	colored []Line
 	covered int
+	capped  bool
 	lexing  bool
-	// The lines as last shown, and the length of the text and of what was
-	// colored they were for.
+	// The lines as last shown, the length of the text and of what was
+	// colored they were for, and how many times they changed. As the text
+	// grows they are the same colored lines, all but the last, then plain
+	// ones: head is those colored lines at the start of shown, kept to
+	// write the plain ones after again rather than copy them all.
 	shown    []Line
 	shownFor [2]int
+	version  int
+	head     []Line
 }
 
 // NewBlock is the block of code text, whole.
@@ -209,11 +217,13 @@ func (b *Block) Grow(text string, whole bool) {
 func (b *Block) fit() {
 	if b.covered > len(b.text) {
 		b.colored, b.covered = b.colored[:min(len(b.colored), strings.Count(b.text, "\n")+1)], len(b.text)
+		b.head = b.head[:0]
 	}
 }
 
 // Lines are the block's lines: colored as far as the lexer has got, plain
 // after it. Each line of the text, so a line ending it is an empty one.
+// They hold until the next call, which may write over them.
 func (b *Block) Lines() []Line {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -223,9 +233,9 @@ func (b *Block) Lines() []Line {
 	}
 	switch {
 	case b.covered >= end || b.lexing:
-	case b.Lang == nil:
+	case b.Lang == nil || b.capped:
 		// Plain needs no lexer
-		b.colored, b.covered = Lines(nil, b.text[:end]), end
+		b.plain(end)
 	default:
 		b.lexing = true
 		text := b.text[:end]
@@ -237,13 +247,42 @@ func (b *Block) Lines() []Line {
 	if b.shown != nil && b.shownFor == [2]int{len(b.text), b.covered} {
 		return b.shown
 	}
-	b.shown, b.shownFor = b.colored, [2]int{len(b.text), b.covered}
-	if b.covered < len(b.text) || b.colored == nil {
-		// The lexer's last line is the start of the one it has not reached
-		n := max(len(b.colored)-1, 0)
-		b.shown = append(b.colored[:n:n], Lines(nil, b.text[b.covered:])...)
+	b.shownFor = [2]int{len(b.text), b.covered}
+	b.version++
+	if b.covered >= len(b.text) && b.colored != nil {
+		b.shown = b.colored
+		return b.shown
 	}
+	// The lexer's last line is the start of the one it has not reached
+	n := max(len(b.colored)-1, 0)
+	if len(b.head) != n {
+		b.head = append(b.head[:0], b.colored[:n]...)
+	}
+	b.shown = append(b.head, Lines(nil, b.text[b.covered:])...)
+	b.head = b.shown[:n]
 	return b.shown
+}
+
+// Version is how many times the lines shown changed, to tell from it
+// whether they did since they were last drawn.
+func (b *Block) Version() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.version
+}
+
+// plain puts the text up to end after the lines colored, plain, leaving
+// those before as they were.
+func (b *Block) plain(end int) {
+	lines := Lines(nil, b.text[b.covered:end])
+	if n := len(b.colored); n > 0 {
+		// The last line colored is the start of the first one here
+		last := b.colored[n-1]
+		lines[0] = append(last[:len(last):len(last)], lines[0]...)
+		lines = append(b.colored[:n-1], lines...)
+	}
+	b.colored, b.covered = lines, end
+	b.head = b.head[:0]
 }
 
 func (b *Block) lex(text string) {
@@ -253,6 +292,8 @@ func (b *Block) lex(text string) {
 
 	b.mu.Lock()
 	b.colored, b.covered, b.lexing = lines, len(text), false
+	b.capped = len(text)+3*strings.Count(text, "\t") > limit
+	b.head = b.head[:0]
 	b.fit()
 	b.mu.Unlock()
 	Ready()

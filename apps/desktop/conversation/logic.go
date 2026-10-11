@@ -43,6 +43,9 @@ type Item struct {
 	// The reply's text or the thinking in Markdown's blocks, parsed as it
 	// comes (markdown.go).
 	md markdown
+	// The text written so far, which Text reads without a copy: adding each
+	// delta to a string would copy the whole of it again.
+	written *strings.Builder
 }
 
 // ToolCall is a call the agent made, and how it ended once it has.
@@ -138,6 +141,8 @@ type Transcript struct {
 	Since    time.Time
 	// The calls running, by id, for the activity.
 	running map[string]string
+	// The call whose lines the inspector keeps.
+	linesOf *ToolCall
 }
 
 // Apply takes in one event; it reports whether a reply ended unfinished, its
@@ -324,7 +329,11 @@ func (t *Transcript) extend(kind ItemKind, delta string) {
 	} else {
 		t.add(item)
 	}
-	item.Text += delta
+	if item.written == nil {
+		item.written = &strings.Builder{}
+	}
+	item.written.WriteString(delta)
+	item.Text = item.written.String()
 	item.md.update(item.Text, false)
 }
 

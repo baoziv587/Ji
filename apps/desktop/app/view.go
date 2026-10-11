@@ -35,10 +35,10 @@ func (a *App) View(c *ui.Context) {
 	if a.vibrant(c) {
 		c.Root().Background(ui.Transparent)
 	}
-	toasts(c, a.SidebarSize)
+	toasts(c, a.Layout.Sidebar)
 
 	p := components.PaletteOf(a.theme)
-	ui.Split(c, &a.SidebarSize, func() { a.sidebar(c) }, func() {
+	ui.Split(c, &a.Layout.Sidebar, func() { a.sidebar(c) }, func() {
 		ui.Column(c).Fill().Background(p.Background).Children(func() {
 			if a.settingsOpen {
 				a.settings(c)
@@ -90,8 +90,8 @@ func (a *App) noSession(c *ui.Context) {
 	ui.Column(c).Fill().Center().Gap(24).Padding(48).Children(func() {
 		if !a.listed {
 			ui.Column(c).MaxWidth(384).Gap(8).AlignItems(ui.Center).Children(func() {
-				if a.connection != "" {
-					ui.Text(c, a.connection).TextColor(p.Destructive).TextAlign(ui.Center)
+				if a.link.problem != "" {
+					ui.Text(c, a.link.problem).TextColor(p.Destructive).TextAlign(ui.Center)
 					ui.Text(c, "Trying again…").TextColor(p.MutedForeground)
 					return
 				}
@@ -122,7 +122,7 @@ func (a *App) noSession(c *ui.Context) {
 }
 
 func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
-	view.startAnswering()
+	view.answer.reset(view.t.Asking)
 	room := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 	space := room.Bounds().W
 	room.Children(func() {
@@ -142,7 +142,7 @@ func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 		// With too little room for both, the inspector covers the
 		// conversation rather than squeeze it
 		covering := space < inspectorMin+conversationMin
-		width := min(a.InspectorSize, max(space-conversationMin, inspectorMin))
+		width := min(a.Layout.Inspector, max(space-conversationMin, inspectorMin))
 		a.inspector(c, view, step, covering, width)
 	})
 }
@@ -157,7 +157,7 @@ func (a *App) conversation(c *ui.Context, s agent.Session, view *sessionView) ui
 		a.header(c, s, view)
 		bottom := ui.Column(c).Absolute().Bottom(0).Left(0).Right(0).PassThrough().Children(func() {
 			if view.t.Asking != nil && !s.Archived {
-				a.questions(c.Key("questions:"+s.ID), s.ID, view)
+				a.questions(c.Key("questions:"+s.ID), view)
 			}
 			a.composer(c.Key("composer:"+s.ID), s, view)
 		})

@@ -31,11 +31,10 @@ func (a *App) sidebar(c *ui.Context) {
 		bar := c.TitleBar()
 		ui.Row(c).Height(TitleBarHeight).Shrink(0).Padding(0, 10, 0, max(bar.Left+16, 18)).Gap(8).AlignItems(ui.Center).DragWindow().Children(func() {
 			dot := p.Destructive
-			if a.connected {
+			if a.link.up {
 				dot = p.Success
 			}
-			ui.Box(c).Size(6, 6).Radius(3).Background(dot).Label("Connection").
-				Tooltip(map[bool]string{true: "Connected to the agent", false: "Not connected to the agent"}[a.connected])
+			ui.Box(c).Size(6, 6).Radius(3).Background(dot).Label("Connection").Tooltip(a.link.tooltip())
 			ui.Text(c, "Sessions").FontWeight(600).Grow(1)
 			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Plus}).
 				Label("New Session").Tooltip("New Session (⌘N)").Clicked() {
@@ -43,20 +42,20 @@ func (a *App) sidebar(c *ui.Context) {
 			}
 		})
 
-		groups, archived := a.groups()
+		groups := a.groups()
 		// None is chosen while the settings show, so that choosing any shows it
 		chosen := a.selected
 		if a.settingsOpen {
 			chosen = ""
 		}
 		if ui.Sidebar(c, &chosen, func() {
-			for _, g := range groups {
+			for _, g := range groups.folders {
 				a.section(c, g)
 			}
-			if len(archived) > 0 {
-				ui.SidebarSection(c, fmt.Sprintf("Archived (%d)", len(archived)), &a.archivedOpen, func() {
-					for _, s := range archived {
-						a.row(c, s)
+			if len(groups.archived) > 0 {
+				ui.SidebarSection(c, fmt.Sprintf("Archived (%d)", len(groups.archived)), &a.archivedOpen, func() {
+					for _, i := range groups.archived {
+						a.row(c, a.list.Sessions[i])
 					}
 				})
 			}
@@ -85,42 +84,59 @@ func (a *App) sidebar(c *ui.Context) {
 	})
 }
 
+// grouping is the sessions as the sidebar shows them, by their index in
+// the list: those not archived under their folders, the folder used last
+// first, and the archived ones apart.
+type grouping struct {
+	folders  []group
+	archived []int
+}
+
 // group is a folder's sessions, most recent first.
 type group struct {
 	root, title string
-	sessions    []agent.Session
+	sessions    []int
 }
 
-// groups puts the sessions not archived under their folders, the folder
-// used last first, and the archived ones apart.
-func (a *App) groups() ([]group, []agent.Session) {
-	var groups []group
+// groups is the grouping of the list, made again only once it changes.
+func (a *App) groups() *grouping {
+	if a.grouped == nil {
+		a.grouped = groupSessions(a.list.Sessions)
+	}
+	return a.grouped
+}
+
+// regroup is to be called whenever the list changes.
+func (a *App) regroup() { a.grouped = nil }
+
+func groupSessions(sessions []agent.Session) *grouping {
+	g := &grouping{}
 	at := map[string]int{}
-	var archived []agent.Session
-	for _, s := range a.list.Sessions {
+	for i, s := range sessions {
 		if s.Archived {
-			archived = append(archived, s)
+			g.archived = append(g.archived, i)
 			continue
 		}
-		i, ok := at[s.Root]
+		f, ok := at[s.Root]
 		if !ok {
-			i = len(groups)
-			at[s.Root] = i
-			groups = append(groups, group{root: s.Root, title: filepath.Base(s.Root)})
+			f = len(g.folders)
+			at[s.Root] = f
+			g.folders = append(g.folders, group{root: s.Root, title: filepath.Base(s.Root)})
 		}
-		groups[i].sessions = append(groups[i].sessions, s)
+		g.folders[f].sessions = append(g.folders[f].sessions, i)
 	}
+
 	// Two folders of one name tell themselves apart by their parents
 	names := map[string]int{}
-	for _, g := range groups {
-		names[g.title]++
+	for _, f := range g.folders {
+		names[f.title]++
 	}
-	for i, g := range groups {
-		if names[g.title] > 1 {
-			groups[i].title = g.title + " · " + filepath.Base(filepath.Dir(g.root))
+	for i, f := range g.folders {
+		if names[f.title] > 1 {
+			g.folders[i].title = f.title + " · " + filepath.Base(filepath.Dir(f.root))
 		}
 	}
-	return groups, archived
+	return g
 }
 
 func (a *App) section(c *ui.Context, g group) {
@@ -131,8 +147,8 @@ func (a *App) section(c *ui.Context, g group) {
 		a.opened[g.root] = open
 	}
 	ui.SidebarSection(c.Key("section:"+g.root), g.title, open, func() {
-		for _, s := range g.sessions {
-			a.row(c, s)
+		for _, i := range g.sessions {
+			a.row(c, a.list.Sessions[i])
 		}
 	}).Tooltip(g.root)
 }

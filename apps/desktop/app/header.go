@@ -32,7 +32,7 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 			level := st.Thinking
 			// Pulled in by its padding, so its text keeps the dots' spacing
 			if components.InlineSelect(c, &level, st.ThinkingLevels, s.Archived).Margin(0, -2, 0, -6).Label("Thinking").Tooltip("Thinking level").Changed() {
-				a.think(s.ID, view, level)
+				a.think(view, level)
 			}
 		}
 		if st.Fast {

@@ -68,6 +68,15 @@ func Inspect(c *ui.Context, list *ui.ListState, t *Transcript, s *Item) ui.Eleme
 // as it ends, not each frame, as its blocks of code are colored in the
 // background once each.
 func inspectLines(t *Transcript, call *ToolCall) []inspectLine {
+	if t.linesOf != call {
+		// Only the call inspected last keeps its lines, which hold its
+		// output in blocks of code: those of each call ever inspected would
+		// stay as long as the conversation
+		if t.linesOf != nil {
+			t.linesOf.lines = nil
+		}
+		t.linesOf = call
+	}
 	if call.lines != nil && call.linesDone == call.Done {
 		return call.lines
 	}

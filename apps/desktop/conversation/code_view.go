@@ -3,13 +3,11 @@ package conversation
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
 	"desktop/syntax"
 	"desktop/ui/components"
-	"desktop/ui/icons"
 )
 
 // chunk is how many lines of a block of code one text takes: a text is
@@ -25,20 +23,10 @@ func fencedWell(c *ui.Context, code *fenced) {
 	ui.Column(c).Background(p.Muted).Radius(th.Radius).Padding(0, 0, 10).Children(func() {
 		ui.Row(c).Height(32).Padding(0, 4, 0, 12).AlignItems(ui.Center).Unselectable().Children(func() {
 			ui.Text(c, code.lang).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.MutedForeground).Grow(1)
-			copied := time.Since(code.copied) < 1500*time.Millisecond
-			style := components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Copy}
-			if copied {
-				style.Icon = icons.Check
-				c.After(1500*time.Millisecond - time.Since(code.copied))
-			}
-			b := components.Button(c, "", style).Label("Copy").Tooltip("Copy the code")
-			b.TextColor(p.MutedForeground)
-			if copied {
-				b.TextColor(p.Success)
-			}
-			if b.Clicked() {
-				c.WriteClipboard(strings.TrimSuffix(code.text, "\n"))
-				code.copied = time.Now()
+			style := components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall}
+			b := code.copied.Button(c, style, func() string { return strings.TrimSuffix(code.text, "\n") }).Tooltip("Copy the code")
+			if !code.copied.Recent() {
+				b.TextColor(p.MutedForeground)
 			}
 		})
 
@@ -50,22 +38,28 @@ func fencedWell(c *ui.Context, code *fenced) {
 
 // chunks are the block's lines in spans, chunk lines to a text: made again
 // only as its lines change, a line ended or colored, not each frame, as a
-// reply may hold many blocks.
+// reply may hold many blocks; and then only from the chunk of the first
+// line that changed, as one that streams in grows at its end.
 func (code *fenced) chunks(p *components.Palette) [][]ui.Span {
 	lines := code.block.Lines()
+	version := code.block.Version()
+	if code.spansOf.version == version && code.spansOf.palette == p {
+		return code.spans
+	}
 	if n := len(lines); n > 0 && lines[n-1] == nil {
 		// The line break that ends the last line starts none
 		lines = lines[:n-1]
 	}
-	if len(lines) == 0 {
-		return nil
-	}
-	if code.spansOf.lines == &lines[0] && code.spansOf.n == len(lines) && code.spansOf.palette == p {
-		return code.spans
-	}
 
-	code.spans = code.spans[:0]
-	for i := 0; i < len(lines); i += chunk {
+	from := 0
+	if code.spansOf.palette == p {
+		was := code.spansOf.lines
+		for from < min(len(lines), len(was)) && sameLine(lines[from], was[from]) {
+			from++
+		}
+	}
+	code.spans = code.spans[:min(from/chunk, len(code.spans))]
+	for i := len(code.spans) * chunk; i < len(lines); i += chunk {
 		var spans []ui.Span
 		for k, line := range lines[i:min(i+chunk, len(lines))] {
 			if k > 0 {
@@ -75,8 +69,16 @@ func (code *fenced) chunks(p *components.Palette) [][]ui.Span {
 		}
 		code.spans = append(code.spans, spans)
 	}
-	code.spansOf.lines, code.spansOf.n, code.spansOf.palette = &lines[0], len(lines), p
+	// A copy, as the block may write over the lines it gave
+	code.spansOf.lines = append(code.spansOf.lines[:0], lines...)
+	code.spansOf.version, code.spansOf.palette = version, p
 	return code.spans
+}
+
+// sameLine is whether a and b are the same line as the block gave it: a
+// line once made is not changed, only put in another's place.
+func sameLine(a, b syntax.Line) bool {
+	return len(a) == len(b) && (len(a) == 0 || &a[0] == &b[0])
 }
 
 // appendCode puts a line of code's spans in their colors at the end of

@@ -9,6 +9,7 @@ package app
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -32,19 +33,19 @@ type App struct {
 	// the service, which says there is nothing to quit.
 	Quit func()
 
-	ctx         context.Context
-	list        agent.Sessions
-	listed      bool
-	connected   bool
-	connection  string
-	failure     string
-	selected    string
-	views       map[string]*sessionView
-	SidebarSize float32
-	// How wide the inspector is, beside the conversation, and whether its
-	// edge is being dragged.
-	InspectorSize float32
-	resizing      bool
+	ctx      context.Context
+	list     agent.Sessions
+	listed   bool
+	link     link
+	failure  string
+	selected string
+	views    map[string]*sessionView
+	grouped  *grouping
+	// The sessions followed, the one shown last first.
+	recent []string
+	Layout Layout
+	// Whether the inspector's edge is being dragged.
+	resizing bool
 	// Whether each folder's section of the sidebar is open, by folder; the
 	// archived section is closed until opened.
 	opened       map[string]*bool
@@ -64,6 +65,49 @@ type App struct {
 	systemDark bool
 }
 
+// link is whether the service answers, and what is wrong while it does not.
+type link struct {
+	up      bool
+	problem string
+}
+
+func (l *link) set(err error) {
+	l.up, l.problem = err == nil, ""
+	if err != nil {
+		l.problem = "Cannot reach the agent: " + err.Error()
+	}
+}
+
+func (l link) tooltip() string {
+	if l.up {
+		return "Connected to the agent"
+	}
+	return "Not connected to the agent"
+}
+
+// Layout is what of the window's arrangement lasts from one run to the
+// next: how wide the sidebar is, and the inspector beside the
+// conversation. The window's own frame MyGo keeps (StateKey).
+type Layout struct {
+	Sidebar   float32 `json:"sidebar"`
+	Inspector float32 `json:"inspector"`
+}
+
+var DefaultLayout = Layout{Sidebar: 260, Inspector: 400}
+
+const sidebarMin = 180
+
+// Fit is l with a size too small to use put back to its default.
+func (l Layout) Fit() Layout {
+	if l.Sidebar < sidebarMin {
+		l.Sidebar = DefaultLayout.Sidebar
+	}
+	if l.Inspector < inspectorMin {
+		l.Inspector = DefaultLayout.Inspector
+	}
+	return l
+}
+
 type toast struct {
 	message, action string
 	run             func()
@@ -73,14 +117,13 @@ func New(service agent.Agent, update func(func())) *App {
 	// Code colored in the background shows as it is
 	syntax.Ready = func() { update(func() {}) }
 	return &App{
-		agent:         service,
-		update:        update,
-		async:         func(fn func()) { go fn() },
-		ctx:           context.Background(),
-		views:         map[string]*sessionView{},
-		opened:        map[string]*bool{},
-		SidebarSize:   260,
-		InspectorSize: 400,
+		agent:  service,
+		update: update,
+		async:  func(fn func()) { go fn() },
+		ctx:    context.Background(),
+		views:  map[string]*sessionView{},
+		opened: map[string]*bool{},
+		Layout: DefaultLayout,
 	}
 }
 
@@ -91,18 +134,13 @@ func (a *App) Follow(ctx context.Context) {
 	a.agent.FollowSessions(ctx, func(s agent.Sessions) {
 		a.update(func() { a.setList(s) })
 	}, func(err error) {
-		a.update(func() {
-			a.connected = err == nil
-			a.connection = ""
-			if err != nil {
-				a.connection = "Cannot reach the agent: " + err.Error()
-			}
-		})
+		a.update(func() { a.link.set(err) })
 	})
 }
 
 func (a *App) setList(s agent.Sessions) {
 	a.list, a.listed = s, true
+	a.regroup()
 	if a.selected == "" {
 		for _, session := range s.Sessions {
 			if !session.Archived {
@@ -123,22 +161,98 @@ func (a *App) Select(id string) {
 func (a *App) show(id string) {
 	a.selected = id
 	a.open(id)
+	a.keep(id)
 }
 
-// open follows a session's events for as long as the window runs: one left
-// in the background keeps up, and shows at once when chosen again.
+// keptViews is how many sessions the window follows besides the one
+// shown. One left in the background keeps up and shows at once when
+// chosen again; past these, the idle ones are let go of, their
+// conversations with them, and read again when chosen.
+const keptViews = 8
+
+// keep puts id first among the sessions shown last, and lets go of those
+// past keptViews that are idle with nothing typed.
+func (a *App) keep(id string) {
+	if id == "" {
+		return
+	}
+
+	recent := []string{id}
+	for _, other := range a.recent {
+		view := a.views[other]
+		switch {
+		case other == id || view == nil:
+		case len(recent) <= keptViews || view.draft != "" || a.busy(other):
+			recent = append(recent, other)
+		default:
+			a.close(other)
+		}
+	}
+	a.recent = recent
+}
+
+func (a *App) busy(id string) bool {
+	s, _ := a.session(id)
+	status := a.status(s)
+	return status == "running" || status == "asking"
+}
+
+// open follows a session's events until it is closed.
 func (a *App) open(id string) {
 	if id == "" || a.views[id] != nil {
 		return
 	}
-	view := &sessionView{}
+
+	ctx, stop := context.WithCancel(a.ctx)
+	view := &sessionView{id: id, stop: stop}
 	a.views[id] = view
-	ctx := a.ctx
+
+	var events inbox
 	a.async(func() {
 		a.agent.Follow(ctx, id, 0, func(e agent.Event) {
-			a.update(func() { a.apply(view, e) })
+			if events.put(e) {
+				a.update(func() {
+					for _, e := range events.take() {
+						a.apply(view, e)
+					}
+				})
+			}
 		})
 	})
+}
+
+// close stops following a session and lets go of what the window keeps of it.
+func (a *App) close(id string) {
+	if view := a.views[id]; view != nil {
+		view.stop()
+		delete(a.views, id)
+	}
+}
+
+// inbox is the events of a session come in and not yet applied. Those
+// that come while the main thread is busy are applied in one update, so
+// the history read when a session opens takes a frame or a few, not one
+// for each event.
+type inbox struct {
+	mu     sync.Mutex
+	events []agent.Event
+}
+
+// put adds e, and is whether it is the first since the last take: the one
+// to ask for an update.
+func (b *inbox) put(e agent.Event) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.events = append(b.events, e)
+	return len(b.events) == 1
+}
+
+func (b *inbox) take() []agent.Event {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	events := b.events
+	b.events = nil
+	return events
 }
 
 func (a *App) apply(view *sessionView, e agent.Event) {

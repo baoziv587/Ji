@@ -60,8 +60,7 @@ func main() {
 	mygo.App.WhenReady(func() {
 		var win *mygo.Window
 		a = app.New(agent.NewClient(url), func(fn func()) { win.Update(fn) })
-		l := loadLayout()
-		a.SidebarSize, a.InspectorSize = l.Sidebar, l.Inspector
+		a.Layout = loadLayout()
 		a.Settings = loadSettings()
 		a.SaveSettings = saveSettings
 		a.Quit = mygo.App.Quit
@@ -127,7 +126,7 @@ func main() {
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		cancel()
 		if a != nil {
-			saveLayout(layout{Sidebar: a.SidebarSize, Inspector: a.InspectorSize})
+			writeConfig("layout.json", a.Layout)
 		}
 		started.Stop()
 	})
@@ -177,28 +176,13 @@ func loadSettings() app.Settings {
 
 func saveSettings(s app.Settings) { writeConfig("settings.json", s) }
 
-// layout is what of the window's arrangement lasts from one run to the next;
-// the window's own frame MyGo keeps (StateKey).
-type layout struct {
-	Sidebar   float32 `json:"sidebar"`
-	Inspector float32 `json:"inspector"`
-}
-
-func loadLayout() layout {
-	l := layout{Sidebar: 260, Inspector: 400}
+func loadLayout() app.Layout {
+	l := app.DefaultLayout
 	if b, err := os.ReadFile(configPath("layout.json")); err == nil {
 		_ = json.Unmarshal(b, &l)
 	}
-	if l.Sidebar < 180 {
-		l.Sidebar = 260
-	}
-	if l.Inspector < 320 {
-		l.Inspector = 400
-	}
-	return l
+	return l.Fit()
 }
-
-func saveLayout(l layout) { writeConfig("layout.json", l) }
 
 func envOr(name, fallback string) string {
 	if v := os.Getenv(name); v != "" {
