@@ -1,6 +1,9 @@
 package conversation
 
 import (
+	"strings"
+	"unicode"
+
 	"github.com/egoist/mygo/ui"
 	extast "github.com/yuin/goldmark/extension/ast"
 
@@ -12,23 +15,30 @@ import (
 // bars of the quotes it is in, with the room above it inside it, so that
 // a quote's bar runs on from the block before.
 func markdownBlock(c *ui.Context, b *mdBlock) {
-	p := components.PaletteOf(c.Theme())
+	th := c.Theme()
+	p := components.PaletteOf(th)
 	ink := p.Foreground
+	// Prose runs about 85 characters to a line at most, 43 of CJK; code
+	// and tables take the whole column
+	measure := float32(Width)
+	if b.kind != mdCode && b.kind != mdTable {
+		measure = 43 * th.FontSize
+	}
 	if len(b.in) == 0 {
-		ui.Column(c).Padding(b.gap, 0, 0).Children(func() {
+		ui.Column(c).MaxWidth(measure).Padding(b.gap, 0, 0).Children(func() {
 			markdownContent(c, b, ink)
 		})
 		return
 	}
-	ui.Row(c).AlignItems(ui.Stretch).Children(func() {
+	ui.Row(c).MaxWidth(measure).AlignItems(ui.Stretch).Children(func() {
 		for _, box := range b.in {
 			if box.quote {
-				ink = p.MutedForeground
+				ink = p.Quoted()
 				top := float32(0)
 				if box.first {
 					top = b.gap
 				}
-				ui.Box(c).Width(2).Shrink(0).Radius(1).Background(p.Border).Margin(top, 12, 0, 0)
+				ui.Box(c).Width(2).Shrink(0).Radius(1).Background(p.MutedForeground.Alpha(0.5)).Margin(top, 12, 0, 0)
 				continue
 			}
 			ui.Row(c).Width(box.width).Shrink(0).Padding(b.gap, 8, 0, 0).Justify(ui.End).Unselectable().Children(func() {
@@ -53,8 +63,10 @@ func markdownContent(c *ui.Context, b *mdBlock, ink ui.Color) {
 		size := th.FontSize
 		switch b.level {
 		case 1:
-			size = components.TextLG(th)
+			size = th.FontSize + 7
 		case 2:
+			size = components.TextLG(th)
+		case 3:
 			size = th.FontSize + 2
 		}
 		inline(c, b.runs, b.texts(p, size)[0], p.Stressed()).FontSize(size).FontWeight(600).LineHeight(1.4)
@@ -120,7 +132,7 @@ func inline(c *ui.Context, runs []mdRun, spans []ui.Span, ink ui.Color) ui.Eleme
 	return ui.RichText(c).TextColor(ink).Children(func() {
 		for i := 0; i < len(runs); {
 			if r := runs[i : i+1]; r[0].style&styleLink != 0 {
-				ui.Link(c, "", r[0].url).TextColor(p.Primary).Tooltip(r[0].url).Children(func() {
+				ui.Link(c, "", r[0].url).TextColor(p.Link()).Tooltip(r[0].url).Children(func() {
 					ui.RichText(c, spans[i:i+1]...)
 				})
 				i++
@@ -155,12 +167,61 @@ func spans(p *components.Palette, runs []mdRun, size float32) []ui.Span {
 		if r.style&styleCode != 0 {
 			s.Font, s.Size, s.Background = "monospace", size-1, p.CodeSpan()
 			if r.style&styleLink == 0 {
-				s.Color = p.Stressed()
+				s.Color, s.Background = p.InlineCode(codeKind(r.text))
 			}
 		}
 		out[i] = s
 	}
 	return out
+}
+
+// codeKind is what code in a sentence names, by its shape: a call where it
+// has parentheses, words apart a command or a phrase, a path where it has a
+// slash, a glob or a file's extension, a member where dots join names.
+func codeKind(s string) components.CodeKind {
+	switch {
+	case strings.Contains(s, "("):
+		return components.CodeCall
+	case strings.ContainsAny(s, " \t"):
+		return components.CodeWord
+	case strings.ContainsAny(s, "/*") || strings.HasPrefix(s, "~") || isFile(s):
+		return components.CodePath
+	case isMember(s):
+		return components.CodeCall
+	}
+	return components.CodeWord
+}
+
+// fileExtensions are the extensions that make a name with a dot a file's,
+// not a member's, as cdp.js against Browser.close.
+var fileExtensions = map[string]bool{
+	"c": true, "cc": true, "cfg": true, "cjs": true, "conf": true, "cpp": true, "css": true, "csv": true,
+	"env": true, "go": true, "h": true, "hpp": true, "html": true, "ini": true, "java": true, "jpeg": true,
+	"jpg": true, "js": true, "json": true, "jsx": true, "kt": true, "lock": true, "log": true, "md": true,
+	"mdx": true, "mjs": true, "mod": true, "pdf": true, "php": true, "png": true, "py": true, "rb": true,
+	"rs": true, "scss": true, "sh": true, "sql": true, "sum": true, "svg": true, "swift": true, "toml": true,
+	"ts": true, "tsx": true, "txt": true, "vue": true, "xml": true, "yaml": true, "yml": true, "zsh": true,
+}
+
+func isFile(s string) bool {
+	i := strings.LastIndexByte(s, '.')
+	return i >= 0 && i < len(s)-1 && fileExtensions[strings.ToLower(s[i+1:])]
+}
+
+// isMember is whether s is names joined by dots, :: or ->.
+func isMember(s string) bool {
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '.' || r == ':' || r == '-' || r == '>' })
+	if len(parts) < 2 || !strings.ContainsAny(s, ".:>") {
+		return false
+	}
+	for _, part := range parts {
+		for i, r := range part {
+			if !(r == '_' || r == '$' || unicode.IsLetter(r) || i > 0 && unicode.IsDigit(r)) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // table draws a table in a seam, its head on the muted fill and its

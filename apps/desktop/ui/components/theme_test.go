@@ -148,15 +148,15 @@ func oklch(c ui.Color) (lightness, chroma, hue float64) {
 	return lightness, math.Hypot(a, bb), hue
 }
 
-// Code reads on every surface it is drawn on: its colors at 4.5:1 at least
-// against the wells, the cards and the ground.
+// Code reads on every surface it is drawn on, at a size under the body's:
+// its colors at 7:1 at least against the wells, the cards and the ground.
 func TestCodeColorsRead(t *testing.T) {
 	for _, s := range Schemes {
 		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
 			for name, c := range map[string]ui.Color{"CodeKeyword": p.CodeKeyword, "CodeString": p.CodeString, "CodeNumber": p.CodeNumber, "CodeType": p.CodeType} {
 				for ground, g := range map[string]ui.Color{"Muted": p.Muted, "Card": p.Card, "Background": p.Background} {
-					if r := contrast(c, g); r < 4.5 {
-						t.Errorf("%s %s %s on %s: %.2f:1, at least 4.5:1", s.Name, mode, name, ground, r)
+					if r := contrast(c, g); r < 7 {
+						t.Errorf("%s %s %s on %s: %.2f:1, at least 7:1", s.Name, mode, name, ground, r)
 					}
 				}
 			}
@@ -165,19 +165,41 @@ func TestCodeColorsRead(t *testing.T) {
 }
 
 // Code in a sentence reads on its tint over every surface a reply is on,
-// at 4.5:1 at least, in the brand's hue.
-func TestEmphasisReads(t *testing.T) {
+// at 4.5:1 at least, a word in the brand's hue.
+func TestInlineCodeReads(t *testing.T) {
 	for _, s := range Schemes {
 		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
-			for ground, g := range map[string]ui.Color{"Secondary": p.Secondary, "Muted": p.Muted, "Card": p.Card, "Background": p.Background} {
-				if r := contrast(p.Emphasis, p.CodeSpan().Over(g)); r < 4.5 {
-					t.Errorf("%s %s Emphasis on CodeSpan on %s: %.2f:1, at least 4.5:1", s.Name, mode, ground, r)
+			for kind, name := range map[CodeKind]string{CodeWord: "word", CodePath: "path", CodeCall: "call"} {
+				ink, tint := p.InlineCode(kind)
+				for ground, g := range map[string]ui.Color{"Secondary": p.Secondary, "Muted": p.Muted, "Card": p.Card, "Background": p.Background} {
+					if r := contrast(ink, tint.Over(g)); r < 4.5 {
+						t.Errorf("%s %s %s on its tint on %s: %.2f:1, at least 4.5:1", s.Name, mode, name, ground, r)
+					}
 				}
 			}
 			_, c, hue := oklch(p.Emphasis)
 			_, _, brand := oklch(p.Primary)
 			if c < 0.04 || math.Abs(hue-brand) > 10 {
 				t.Errorf("%s %s Emphasis: chroma %.3f at %.0f°, at least 0.04 at the brand's %.0f°", s.Name, mode, c, hue, brand)
+			}
+		}
+	}
+}
+
+// A reply reads long without strain: its text at 11:1 to 14:1 on the
+// ground, as near black on white glares; its links and quotes well above
+// the floor, as they are read as much as the text around them.
+func TestReplyTextReads(t *testing.T) {
+	for _, s := range Schemes {
+		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
+			if r := contrast(p.Foreground, p.Background); r < 11 || r > 14 {
+				t.Errorf("%s %s Foreground: %.2f:1, between 11:1 and 14:1", s.Name, mode, r)
+			}
+			if r := contrast(p.Link(), p.Background); r < 6 {
+				t.Errorf("%s %s Link: %.2f:1, at least 6:1", s.Name, mode, r)
+			}
+			if r := contrast(p.Quoted(), p.Background); r < 9 {
+				t.Errorf("%s %s Quoted: %.2f:1, at least 9:1", s.Name, mode, r)
 			}
 		}
 	}

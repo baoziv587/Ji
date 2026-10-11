@@ -354,3 +354,28 @@ func BenchmarkStreamingALongFence(b *testing.B) {
 		}
 	}
 }
+
+func TestCodeKind(t *testing.T) {
+	for s, want := range map[string]components.CodeKind{
+		"Emulation.setFocusEmulationEnabled":    components.CodeCall,
+		"document.hasFocus()=false, el.focus()": components.CodeCall,
+		"child.kill('SIGKILL')":                 components.CodeCall,
+		"Browser.close":                         components.CodeCall,
+		"$TMPDIR/org.chromium.Chromium.*":       components.CodePath,
+		"/tmp/k8s-*.png":                        components.CodePath,
+		"Default/":                              components.CodePath,
+		"Singleton*":                            components.CodePath,
+		"cdp.js":                                components.CodePath,
+		"PRODUCT.md":                            components.CodePath,
+		"~/.zshrc":                              components.CodePath,
+		"SIGKILL":                               components.CodeWord,
+		"TMPDIR":                                components.CodeWord,
+		"rm -rf":                                components.CodeWord,
+		"0.5":                                   components.CodeWord,
+		"v1.2.3":                                components.CodeWord,
+	} {
+		if got := codeKind(s); got != want {
+			t.Errorf("codeKind(%q) = %d, want %d", s, got, want)
+		}
+	}
+}

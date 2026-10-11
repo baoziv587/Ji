@@ -37,9 +37,41 @@ type Palette struct {
 // that it takes on whatever it is on, a message or a card.
 func (p *Palette) CodeSpan() ui.Color { return p.Primary.Alpha(0.14) }
 
+// CodeKind is what code in a sentence names.
+type CodeKind int
+
+const (
+	CodeWord CodeKind = iota
+	CodePath
+	CodeCall
+)
+
+// InlineCode is the ink of code in a sentence and what it is on, by what
+// it names: a path in the strings' hue, a call or a member in the types',
+// any other word in the brand's, each on its own hue let through, so that
+// a reply full of code is not all one hue.
+func (p *Palette) InlineCode(kind CodeKind) (ink, ground ui.Color) {
+	switch kind {
+	case CodePath:
+		return p.CodeString, p.CodeString.Alpha(0.14)
+	case CodeCall:
+		return p.CodeType, p.CodeType.Alpha(0.14)
+	}
+	return p.Emphasis, p.CodeSpan()
+}
+
 // Stressed is the text of a heading or of bold text: the text's color
 // with a trace of the brand's, which stand out by their weight.
 func (p *Palette) Stressed() ui.Color { return p.Foreground.Mix(p.Primary, 0.05) }
+
+// Link is the text of a link in a sentence: the brand drawn toward the
+// text, as a link is underlined only under the pointer and reads by its
+// hue alone, at body size.
+func (p *Palette) Link() ui.Color { return p.Primary.Mix(p.Foreground, 0.3) }
+
+// Quoted is the text of a quote: a step below the text, not as far down
+// as quiet ink, as a quote is read through.
+func (p *Palette) Quoted() ui.Color { return p.Foreground.Mix(p.MutedForeground, 0.4) }
 
 type Scheme struct {
 	Name        string
@@ -127,3 +159,7 @@ func Theme(system *ui.Theme, s *Scheme, dark bool) *ui.Theme {
 // 13 on macOS where the web's is 14.
 func TextXS(t *ui.Theme) float32 { return t.FontSize - 2 }
 func TextLG(t *ui.Theme) float32 { return t.FontSize + 4 }
+
+// TextCode is the size of code in a reply, a step under the body: at
+// TextXS its colors blur.
+func TextCode(t *ui.Theme) float32 { return t.FontSize - 1 }
