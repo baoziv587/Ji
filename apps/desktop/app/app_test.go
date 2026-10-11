@@ -495,7 +495,8 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 // TestSnapshot draws the window to a PNG, to look at: SNAPSHOT=out.png,
 // DARK=1 for the dark theme, TOAST=1 once the session is archived, MENU=/th
 // with the menu of commands open on what is typed, APPROVALS=yolo with
-// that mode chosen in the settings.
+// that mode chosen in the settings, USAGE=1 with the history 3/4 full and
+// what was spent open.
 func TestSnapshot(t *testing.T) {
 	out := os.Getenv("SNAPSHOT")
 	if out == "" {
@@ -536,6 +537,11 @@ func TestSnapshot(t *testing.T) {
 	a.list.Sessions[2].Status = "running"
 	view.t.State.Usage = agent.UsageReading{Cost: 0.0042, Input: 12400, Output: 830, Cache: 82, Speed: 61, Calls: 3}
 	view.t.State.Usage.Context = &agent.ContextSize{Tokens: 13230, Limit: 200000}
+	if os.Getenv("USAGE") == "1" {
+		view.t.State.Usage = agent.UsageReading{Cost: 0.6621, Input: 16_000_000, Output: 425_000, Cache: 99, Speed: 48, Calls: 120}
+		view.t.State.Usage.Context = &agent.ContextSize{Tokens: 149_000, Limit: 200_000}
+		view.usageOpen = true
+	}
 	if menu := os.Getenv("MENU"); menu != "" {
 		view.draft = menu
 	}

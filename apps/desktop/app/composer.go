@@ -14,10 +14,10 @@ import (
 	"desktop/ui/icons"
 )
 
-// composer is where the next message is typed, between the terminal's two
-// bars: above it the status line, what the reply does, the mode and the
-// keys that work now; below it the usage. The three share one pane of
-// glass, the text area with the buttons that send and stop under it. The
+// composer is where the next message is typed, under the terminal's status
+// line: what the reply does, the mode and the keys that work now. The two
+// share one pane of glass, the text area with the gauge of the usage and
+// the buttons that send and stop under it. The
 // menu of commands opens over the conversation as a `/` is typed.
 func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 	t := c.Theme()
@@ -55,7 +55,9 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					view.menu.ToEnd = false
 					area.SetTextSelection(runeCount(view.draft), runeCount(view.draft))
 				}
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Justify(ui.End).Children(func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					usageGauge(c, st.Usage, &view.usageOpen)
+					ui.Box(c).Grow(1)
 					if st.Replying {
 						if components.Button(c, "Stop", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall, Icon: icons.Square}).Tooltip("Esc").Clicked() {
 							a.stop(s.ID)
@@ -70,7 +72,6 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 						a.send(view)
 					}
 				})
-				usageLine(c, st.Usage)
 			})
 			if pane.FocusWithin() {
 				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))

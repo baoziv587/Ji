@@ -83,6 +83,37 @@ func Spinner(c *ui.Context, label string, size float32, color ui.Color) ui.Eleme
 	})
 }
 
+// Gauge is how full something is, value between 0 and 1: a ring filled
+// clockwise from the top in color, on a track of quiet ink, size wide,
+// named by label.
+func Gauge(c *ui.Context, label string, value float64, size float32, color ui.Color) ui.Element {
+	value = min(max(value, 0), 1)
+	track := PaletteOf(c.Theme()).MutedForeground.Alpha(0.25)
+	return ui.Box(c).Size(size, size).Shrink(0).Role(ui.RoleProgress).Range(0, 1, value).Label(label).Draw(func(p *ui.Painter, r ui.Rect) {
+		width := r.W / 7
+		cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, (r.W-width)/2
+		var ring ui.Path
+		ring.Circle(cx, cy, radius)
+		p.StrokePath(&ring, width, track)
+		if value == 0 {
+			return
+		}
+
+		var arc ui.Path
+		steps := int(math.Ceil(value * 48))
+		for i := 0; i <= steps; i++ {
+			a := (float64(i)/float64(steps)*value - 0.25) * 2 * math.Pi
+			x, y := cx+radius*float32(math.Cos(a)), cy+radius*float32(math.Sin(a))
+			if i == 0 {
+				arc.MoveTo(x, y)
+			} else {
+				arc.LineTo(x, y)
+			}
+		}
+		p.StrokePath(&arc, width, color)
+	})
+}
+
 // EmptyHeader is the head of shadcn/ui's Empty: an icon on a tile, a
 // title, and what to do about it.
 func EmptyHeader(c *ui.Context, icon *ui.SVG, title, description string) {

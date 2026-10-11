@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -119,42 +118,120 @@ func keysOf(st agent.State, view *sessionView, entries []commands.Entry) [][2]st
 	}
 }
 
-// usageLine is the terminal's usage line: the history's size against
-// where it is compacted, then what the session has spent. Blank until the
-// first call has ended.
-func usageLine(c *ui.Context, u agent.UsageReading) {
+// usageGauge is the terminal's usage line, folded into how full the
+// history is against where it is compacted, in the terminal's words under
+// the pointer, what the session has spent and how much of the input the
+// cache gave; pressed, it opens the rest. Blank until the first call has
+// ended.
+func usageGauge(c *ui.Context, u agent.UsageReading, open *bool) {
+	if u.Calls == 0 {
+		return
+	}
 	t := c.Theme()
 	p := components.PaletteOf(t)
-	ui.Row(c).Height(16).Gap(12).Padding(0, 4).AlignItems(ui.Center).Children(func() {
-		if u.Calls == 0 {
-			return
-		}
+	ctx := u.Context
+	full, color := contextFill(p, ctx)
 
-		if ctx := u.Context; ctx != nil {
-			estimate, color := "", p.MutedForeground
+	trigger := ui.ButtonBase(c).Height(24).Padding(0, 6, 0, 4).Gap(6).Radius(6).AlignItems(ui.Center).Shrink(0).
+		FocusRing(false).Transition(components.ColorTransition)
+	if trigger.Hovered() || *open {
+		trigger.Background(p.Accent)
+	}
+	components.FocusRing(trigger, p, 0)
+	spent := fmt.Sprintf("%s, cache %d%%", cost(u.Cost), u.Cache)
+	trigger.Children(func() {
+		if ctx != nil {
+			components.Gauge(c, "Context", full, 14, color)
+			figures(c, fmt.Sprintf("%s%d%%", estimated(ctx), int(full*100)), color)
+			barText(c, "·", p.MutedForeground)
+		}
+		figures(c, cost(u.Cost), p.MutedForeground)
+		barText(c, "·", p.MutedForeground)
+		figures(c, fmt.Sprintf("cache %d%%", u.Cache), p.MutedForeground)
+	})
+	if ctx == nil {
+		trigger.Label("Usage: " + spent)
+	} else {
+		trigger.Label(fmt.Sprintf("Usage: context %d%% used, %s", int(full*100), spent))
+		if !*open {
+			trigger.Tooltip(fmt.Sprintf("ctx %s%s/%s", estimated(ctx), format.Count(ctx.Tokens), format.Count(ctx.Limit)))
+		}
+	}
+	if trigger.Clicked() {
+		*open = !*open
+	}
+
+	ui.PopoverBase(c, trigger, open, func(panel ui.Element) {
+		panel.Margin(4, 0, 0, 0).Padding(12).Gap(4).Width(240).Radius(t.Radius).Background(p.Popover).Border(1, p.Border).
+			Shadow(0, 4, 6, -1, ui.RGBA(0, 0, 0, 0.1))
+		if ctx != nil {
+			ui.Row(c).Height(20).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "Context").TextColor(p.Foreground).FontWeight(500).Grow(1)
+				ui.Text(c, fmt.Sprintf("%s%s / %s", estimated(ctx), format.Count(ctx.Tokens), format.Count(ctx.Limit))).
+					Font("monospace").FontSize(components.TextCode(t)).TextColor(p.Foreground).FontFeatures("tnum")
+			})
+			ui.Box(c).Height(4).Margin(4, 0).Draw(func(pt *ui.Painter, r ui.Rect) {
+				pt.Fill(r, p.MutedForeground.Alpha(0.25), 2)
+				if full > 0 {
+					pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: max(r.W*float32(full), r.H), H: r.H}, color, 2)
+				}
+			})
+			hint := "Compacts at " + format.Count(ctx.Limit)
 			if ctx.Estimated {
-				estimate = "~"
+				hint = "Estimated since the last compaction"
 			}
-			switch {
-			case float64(ctx.Tokens) >= float64(ctx.Limit)*0.9:
-				color = p.Destructive
-			case float64(ctx.Tokens) >= float64(ctx.Limit)*0.7:
-				color = p.Warning
-			}
-			figures(c, fmt.Sprintf("ctx %s%s/%s", estimate, format.Count(ctx.Tokens), format.Count(ctx.Limit)), color).
-				Tooltip("The history, against where it is compacted")
+			barText(c, hint, p.MutedForeground)
+			ui.Box(c).Height(1).Background(p.Border).Margin(8, 0)
 		}
 
-		parts := []string{
-			fmt.Sprintf("$%.4f", u.Cost),
-			fmt.Sprintf("in %s · out %s", format.Count(u.Input), format.Count(u.Output)),
-			fmt.Sprintf("cache %d%%", u.Cache),
+		rows := [][2]string{
+			{"Cost", cost(u.Cost)},
+			{"Input", format.Count(u.Input)},
+			{"Output", format.Count(u.Output)},
+			{"Cache hit", fmt.Sprintf("%d%%", u.Cache)},
 		}
 		if u.Speed > 0 {
-			parts = append(parts, fmt.Sprintf("%.0f tok/s", u.Speed))
+			rows = append(rows, [2]string{"Speed", fmt.Sprintf("%.0f tok/s", u.Speed)})
 		}
-		figures(c, strings.Join(parts, " · "), p.MutedForeground).Shrink(1)
+		for _, row := range rows {
+			ui.Row(c).Height(20).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, row[0]).TextColor(p.MutedForeground).Grow(1)
+				ui.Text(c, row[1]).Font("monospace").FontSize(components.TextCode(t)).TextColor(p.Foreground).FontFeatures("tnum")
+			})
+		}
 	})
+}
+
+// contextFill is how full the history is, and its color: quiet, then the
+// warning's past 70%, the destructive's past 90%.
+func contextFill(p *components.Palette, ctx *agent.ContextSize) (float64, ui.Color) {
+	if ctx == nil || ctx.Limit <= 0 {
+		return 0, p.MutedForeground
+	}
+	full := min(float64(ctx.Tokens)/float64(ctx.Limit), 1)
+	switch {
+	case full >= 0.9:
+		return full, p.Destructive
+	case full >= 0.7:
+		return full, p.Warning
+	}
+	return full, p.MutedForeground
+}
+
+// estimated is the terminal's mark of a size estimated since a compaction.
+func estimated(ctx *agent.ContextSize) string {
+	if ctx.Estimated {
+		return "~"
+	}
+	return ""
+}
+
+// cost is dollars to the cent, a cost under one cent not shown as nothing.
+func cost(dollars float64) string {
+	if dollars > 0 && dollars < 0.01 {
+		return "<$0.01"
+	}
+	return fmt.Sprintf("$%.2f", dollars)
 }
 
 // barText is the small text of the status and usage lines, its digits
