@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"desktop/agent"
@@ -56,6 +57,25 @@ func TestWorkFoldsTheStepsBetweenTheText(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, diff) {
 		t.Errorf("diff %+v", tr.Steps[5].Tool.Diff)
+	}
+}
+
+// The glimpse reads only the end of a long paragraph of thinking, and says
+// what reading all of it says, a delta at a time.
+func TestTheGlimpseReadsOnlyTheEnd(t *testing.T) {
+	var tr Transcript
+	text := strings.Repeat("A **long** thought, with `code` and *more* in it. ", 40) + "é, at last"
+	for i := 0; i < len(text); i += 7 {
+		tr.Apply(agent.Event{Type: "thinking", Delta: text[i:min(i+7, len(text))]})
+
+		md := &tr.Items[len(tr.Items)-1].md
+		var whole strings.Builder
+		for _, r := range md.blocks[len(md.blocks)-1].runs {
+			whole.WriteString(r.text)
+		}
+		if got, want := tr.work().Glimpse, glimpse(whole.String()); got != want {
+			t.Fatalf("after %d bytes, glimpse %q, want %q", i, got, want)
+		}
 	}
 }
 

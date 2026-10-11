@@ -16,6 +16,18 @@ func EaseOutExpo(t float32) float32 {
 	return 1 - float32(math.Pow(2, -10*float64(t)))
 }
 
+// Tick is how often what moves by itself is drawn again: a spinner's turn,
+// and the deltas of the reply shown. At the display's own rate, 120 a
+// second on a ProMotion screen, every frame paints the whole window again,
+// for a mark 16 wide.
+const Tick = time.Second / 30
+
+// UntilTick is how long from now to the next Tick. Every caller counts from
+// the same clock, so what they ask for comes in one frame.
+func UntilTick(now time.Time) time.Duration {
+	return Tick - time.Duration(now.UnixNano())%Tick
+}
+
 // Rise brings an element in from a little below as it appears, and sends
 // it up and away as it goes: a line of text taking another's place.
 var Rise = ui.ElementTransition{

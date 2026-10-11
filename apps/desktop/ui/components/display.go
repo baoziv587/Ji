@@ -56,15 +56,15 @@ func Kbd(c *ui.Context, key string) ui.Element {
 
 // Spinner is shadcn/ui's Spinner, Lucide's Loader2 turning once a second,
 // size wide, in color or else muted, named by label. It turns from its
-// Draw, not with Loop: Loop builds the whole view anew every frame, as many
-// times a second as the display shows, and a long conversation then takes
-// longer than a frame to build.
+// Draw, a step each Tick: Loop builds the whole view anew every frame, and
+// AnimationFrame paints the whole window again, both as many times a second
+// as the display shows.
 func Spinner(c *ui.Context, label string, size float32, color ui.Color) ui.Element {
 	if color.A == 0 {
 		color = PaletteOf(c.Theme()).MutedForeground
 	}
 	return ui.Box(c).Size(size, size).Shrink(0).Role(ui.RoleProgress).Label(label).Draw(func(p *ui.Painter, r ui.Rect) {
-		p.AnimationFrame()
+		p.After(UntilTick(p.Now()))
 		turn := float64(p.Now().UnixMilli()%1000) / 1000 * 2 * math.Pi
 		// Loader2's arc: radius 9 of 24, from 3 o'clock round to 72° short of it
 		cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, r.W*9/24
