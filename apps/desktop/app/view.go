@@ -24,6 +24,7 @@ const TitleBarHeight = 52
 // View builds the window from the app's state.
 func (a *App) View(c *ui.Context) {
 	a.applyTheme(c)
+	a.sliding = false
 	defer a.saveSettings()
 
 	if a.toast != nil {

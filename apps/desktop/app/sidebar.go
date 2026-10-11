@@ -16,11 +16,6 @@ import (
 	"desktop/ui/icons"
 )
 
-// sidebarVeil is how much of the scheme's sidebar color lies over the
-// material: enough to hold the scheme's hue, little enough that what is
-// behind the window still shows through, blurred.
-const sidebarVeil = 0.6
-
 func (a *App) sidebar(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -28,8 +23,8 @@ func (a *App) sidebar(c *ui.Context) {
 	// veiled in the scheme's own: the material blends in the desktop
 	// behind it, and a warm wallpaper would turn the panel warm
 	background := p.Sidebar
-	if a.vibrant(c) {
-		background = p.Sidebar.Alpha(sidebarVeil)
+	if a.seeThrough(c) {
+		background = p.Sidebar.Alpha(glasses.sidebar.at(a.Settings.Transparency))
 	}
 	ui.Column(c).Fill().Background(background).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
 		// Clear of the window controls, whose room ends at the zoom button's
@@ -168,8 +163,8 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 		// The active item, focused or not, on the selection's tint; over the
 		// material, a tint of the brand that lets it show through
 		tint := p.SidebarAccent
-		if a.vibrant(c) {
-			tint = p.Primary.Alpha(0.16)
+		if a.seeThrough(c) {
+			tint = p.Primary.Alpha(glasses.selection.at(a.Settings.Transparency))
 		}
 		item.Background(tint).TextColor(p.Foreground).FontWeight(500)
 	}

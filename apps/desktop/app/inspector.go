@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"desktop/conversation"
@@ -84,7 +83,7 @@ func (a *App) inspectorBar(c *ui.Context, view *sessionView, s *conversation.Ite
 	p := components.PaletteOf(t)
 	steps := view.t.Steps
 	ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(8).Padding(0, 10, 0, 16).AlignItems(ui.Center).
-		Material(glass.ScrollEdge{Hard: true}).DragWindow().Children(func() {
+		Material(a.bar()).DragWindow().Children(func() {
 		if covering {
 			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.ChevronLeft}).
 				Label("Back to the Conversation").Tooltip("Back (Esc)").Margin(0, 0, 0, -6).Clicked() {

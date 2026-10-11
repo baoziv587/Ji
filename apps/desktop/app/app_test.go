@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/png"
+	"math"
 	"os"
 	"reflect"
 	"strconv"
@@ -540,6 +541,9 @@ func TestSnapshot(t *testing.T) {
 	}
 	a.Settings.Theme = os.Getenv("THEME")
 	a.Settings.Approvals = os.Getenv("APPROVALS")
+	if v, err := strconv.ParseFloat(os.Getenv("TRANSPARENCY"), 64); err == nil {
+		a.Settings.Transparency = v
+	}
 	if os.Getenv("SETTINGS") == "1" {
 		a.OpenSettings()
 	}
@@ -586,6 +590,77 @@ func TestSnapshot(t *testing.T) {
 	}
 }
 
+// The transparency slider snaps to its detents while dragged, and stops
+// anywhere between; what it sets is kept once it is let go. It reaches
+// the sidebar over the window's material, and, solid, the sidebar is as
+// it is with none.
+func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
+	a, _ := testApp()
+	var saved []Settings
+	a.SaveSettings = func(s Settings) { saved = append(saved, s) }
+	tt := ui.NewTester(a.View, 1100, 700)
+	tt.SetVibrancy(true)
+	a.OpenSettings()
+	tt.Frame()
+
+	solid, _ := tt.Find("Solid")
+	clear, _ := tt.Find("Clear")
+	left, right := solid.X+8, clear.X+clear.W-8
+	y := solid.Y - 2 - 16
+	along := func(v float32) float32 { return left + (right-left)*v/100 }
+	kept := len(saved)
+
+	tt.Press(along(50), y)
+	tt.Move(along(52), y)
+	tt.Frame()
+	if a.Settings.Transparency != transparencyStandard {
+		t.Errorf("transparency %v: 52 snaps to standard", a.Settings.Transparency)
+	}
+	tt.Move(along(75), y)
+	tt.Frame()
+	if v := a.Settings.Transparency; v < 72 || v > 78 {
+		t.Errorf("transparency %v: it stops between detents", v)
+	}
+	if len(saved) != kept {
+		t.Errorf("saved %v while dragging", saved[kept:])
+	}
+	tt.Move(along(98), y)
+	tt.Release(along(98), y)
+	tt.Frame()
+	if a.Settings.Transparency != transparencyClear || len(saved) == kept || saved[len(saved)-1].Transparency != transparencyClear {
+		t.Errorf("transparency %v, saved %v: let go at 98, clear is kept", a.Settings.Transparency, saved[kept:])
+	}
+
+	tt.Key(0, ui.KeyLeft)
+	tt.Frame()
+	if a.Settings.Transparency != 99 {
+		t.Errorf("transparency %v: the arrows move it freely", a.Settings.Transparency)
+	}
+}
+
+// Each glass at the standard transparency is as the window was before it
+// could be chosen, solid covers what is behind it, and in between it goes
+// straight from one detent to the next.
+func TestGlassesRampThroughTheDetents(t *testing.T) {
+	for name, r := range map[string]ramp{"sidebar": glasses.sidebar, "selection": glasses.selection, "bar": glasses.bar} {
+		if r.clear > r.standard || r.standard > r.solid {
+			t.Errorf("%s: %v, a clearer glass covers more", name, r)
+		}
+	}
+	if glasses.sidebar.at(transparencyStandard) != 0.6 || glasses.bar.at(transparencyStandard) != scrollEdgeCover || glasses.selection.at(transparencyStandard) != 0.16 {
+		t.Error("standard is not the window as it was")
+	}
+	if glasses.sidebar.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 {
+		t.Error("solid lets something through")
+	}
+	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.45) > 1e-6 {
+		t.Errorf("sidebar at 75: %v, want 0.45", got)
+	}
+	if got := glasses.bar.at(-10); got != 1 {
+		t.Errorf("bar below solid: %v, want 1", got)
+	}
+}
+
 // The settings show in place of the session; a choice shows at once and is
 // kept, and choosing a session goes back to it.
 func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
@@ -619,7 +694,7 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 	if a.Settings.Theme != "Lagoon" || components.PaletteOf(a.theme).Primary != components.SchemeNamed("Lagoon").Dark.Primary {
 		t.Errorf("theme %q: Lagoon draws the window", a.Settings.Theme)
 	}
-	if want := (Settings{Appearance: components.Dark, Theme: "Lagoon"}); len(saved) == 0 || saved[len(saved)-1] != want {
+	if want := (Settings{Appearance: components.Dark, Theme: "Lagoon", Transparency: transparencyStandard}); len(saved) == 0 || saved[len(saved)-1] != want {
 		t.Errorf("saved %v, want last %v", saved, want)
 	}
 

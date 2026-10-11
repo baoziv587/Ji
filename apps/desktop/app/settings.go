@@ -8,7 +8,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
 	"desktop/ui/components"
@@ -19,10 +18,16 @@ import (
 type Settings struct {
 	Appearance components.Appearance `json:"appearance,omitempty"`
 	Theme      string                `json:"theme,omitempty"`
+	// Transparency is how much the window's glass lets through, from 0,
+	// solid, to 100: kept even at 0, which would otherwise read as unset.
+	Transparency float64 `json:"transparency"`
 	// Approvals is every session's mode: ask, auto or yolo. Unset, each
 	// starts in the service's own.
 	Approvals string `json:"approvals,omitempty"`
 }
+
+// DefaultSettings are the settings of a first run, under those kept.
+var DefaultSettings = Settings{Transparency: transparencyStandard}
 
 var appearances = []struct {
 	value components.Appearance
@@ -45,7 +50,7 @@ func (a *App) OpenSettings() { a.settingsOpen = true }
 
 // saveSettings hands the settings on to be kept when they have changed.
 func (a *App) saveSettings() {
-	if a.Settings == a.saved {
+	if a.Settings == a.saved || a.sliding {
 		return
 	}
 
@@ -98,7 +103,7 @@ func (a *App) settings(c *ui.Context) {
 		})
 
 		ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).
-			Material(glass.ScrollEdge{Hard: true}).DragWindow().Children(func() {
+			Material(a.bar()).DragWindow().Children(func() {
 			ui.Text(c, "Settings").FontWeight(600).Grow(1)
 			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.X}).
 				Label("Close Settings").Tooltip("Close (Esc)").Clicked() {
@@ -119,6 +124,18 @@ func (a *App) appearance(c *ui.Context) {
 			ui.Text(c, modeNote(a.Settings.Appearance, a.systemDark)).TextColor(p.MutedForeground)
 		})
 		a.modes(c)
+	})
+
+	ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, "Transparency").FontWeight(500)
+			note := "What shows through the sidebar and the title bars: the desktop, and what scrolls under them."
+			if !c.Vibrancy() {
+				note = "What scrolls under the title bars shows through them; the sidebar has no desktop to show here."
+			}
+			ui.Text(c, note).TextColor(p.MutedForeground)
+		})
+		a.transparency(c)
 	})
 
 	ui.Box(c).Height(1).Background(p.Border)
@@ -181,6 +198,21 @@ func (a *App) modes(c *ui.Context) {
 			})
 		}
 	}).Row().Shrink(0).Height(36).Padding(3).Gap(2).Radius(t.Radius).Background(p.Muted).Label("Mode")
+}
+
+// transparency is the slider of the window's glass, its ends named under it.
+func (a *App) transparency(c *ui.Context) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	ui.Column(c).Width(236).Shrink(0).Gap(2).Children(func() {
+		a.sliding = components.Slider(c, &a.Settings.Transparency, transparencySolid, transparencyClear, transparencyDetents[:]...).
+			Label("Transparency").Pressed()
+		ui.Row(c).Justify(ui.SpaceBetween).Children(func() {
+			for _, end := range []string{"Solid", "Clear"} {
+				ui.Text(c, end).FontSize(components.TextXS(t)).TextColor(p.MutedForeground)
+			}
+		})
+	})
 }
 
 // schemeCard is a scheme to choose, shown as a small window in its
