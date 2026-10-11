@@ -160,11 +160,11 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 	status := a.status(s)
 	item := ui.SidebarItem(c.Key(s.ID), s.ID, nil, titleOf(s)).Height(32).Padding(0, 8).Transition(components.ColorTransition)
 	if s.ID == a.selected && !a.settingsOpen {
-		// The active item, focused or not, on the selection's tint; over the
-		// material, a tint of the brand that lets it show through
+		// The active item, focused or not, on the selection's color, which
+		// over the material lets a little of it through, as much in hue
 		tint := p.SidebarAccent
 		if a.seeThrough(c) {
-			tint = p.Primary.Alpha(glasses.selection.at(a.Settings.Transparency))
+			tint = tint.Alpha(glasses.selection.at(a.Settings.Transparency))
 		}
 		item.Background(tint).TextColor(p.Foreground).FontWeight(500)
 	}

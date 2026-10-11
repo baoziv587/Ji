@@ -57,7 +57,7 @@ func markdownContent(c *ui.Context, b *mdBlock, ink ui.Color) {
 		case 2:
 			size = th.FontSize + 2
 		}
-		inline(c, b.runs, b.texts(p, size)[0], p.Foreground).FontSize(size).FontWeight(600).LineHeight(1.4)
+		inline(c, b.runs, b.texts(p, size)[0], p.Stressed()).FontSize(size).FontWeight(600).LineHeight(1.4)
 	case mdCode:
 		fencedWell(c, b.code)
 	case mdRule:
@@ -142,6 +142,9 @@ func spans(p *components.Palette, runs []mdRun, size float32) []ui.Span {
 		s := ui.Span{Text: r.text}
 		if r.style&styleStrong != 0 {
 			s.Weight = 600
+			if r.style&styleLink == 0 {
+				s.Color = p.Stressed()
+			}
 		}
 		if r.style&styleEmphasis != 0 {
 			s.Italic = true
@@ -150,7 +153,10 @@ func spans(p *components.Palette, runs []mdRun, size float32) []ui.Span {
 			s.Strikethrough, s.Color = true, p.MutedForeground
 		}
 		if r.style&styleCode != 0 {
-			s.Font, s.Size, s.Background = "monospace", size-1, p.Muted
+			s.Font, s.Size, s.Background = "monospace", size-1, p.CodeSpan()
+			if r.style&styleLink == 0 {
+				s.Color = p.Stressed()
+			}
 		}
 		out[i] = s
 	}

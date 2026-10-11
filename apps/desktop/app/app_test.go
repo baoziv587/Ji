@@ -632,8 +632,8 @@ func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 	}
 }
 
-// Each glass at the standard transparency is as the window was before it
-// could be chosen, solid covers what is behind it, and in between it goes
+// The sidebar and the bars at the standard transparency are as the window
+// was before it could be chosen, solid covers what is behind it, and in between it goes
 // straight from one detent to the next.
 func TestGlassesRampThroughTheDetents(t *testing.T) {
 	for name, r := range map[string]ramp{"sidebar": glasses.sidebar, "selection": glasses.selection, "bar": glasses.bar} {
@@ -641,14 +641,14 @@ func TestGlassesRampThroughTheDetents(t *testing.T) {
 			t.Errorf("%s: %v, a clearer glass covers more", name, r)
 		}
 	}
-	if glasses.sidebar.at(transparencyStandard) != 0.6 || glasses.bar.at(transparencyStandard) != scrollEdgeCover || glasses.selection.at(transparencyStandard) != 0.16 {
+	if glasses.sidebar.at(transparencyStandard) != 0.6 || glasses.bar.at(transparencyStandard) != scrollEdgeCover {
 		t.Error("standard is not the window as it was")
 	}
-	if glasses.sidebar.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 {
+	if glasses.sidebar.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 || glasses.selection.at(transparencySolid) != 1 {
 		t.Error("solid lets something through")
 	}
-	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.45) > 1e-6 {
-		t.Errorf("sidebar at 75: %v, want 0.45", got)
+	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.5) > 1e-6 {
+		t.Errorf("sidebar at 75: %v, want 0.5", got)
 	}
 	if got := glasses.bar.at(-10); got != 1 {
 		t.Errorf("bar below solid: %v, want 1", got)

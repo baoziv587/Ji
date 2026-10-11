@@ -26,10 +26,20 @@ type Palette struct {
 	SidebarBorder              ui.Color
 	Info, Warning              ui.Color
 	Waiting, Success, Thinking ui.Color
+	// Code in a sentence: a deep shade of the brand, on CodeSpan.
+	Emphasis ui.Color
 	// Code's keywords, strings, numbers and types.
 	CodeKeyword, CodeString ui.Color
 	CodeNumber, CodeType    ui.Color
 }
+
+// CodeSpan is what code in a sentence is on: the brand, let through, so
+// that it takes on whatever it is on, a message or a card.
+func (p *Palette) CodeSpan() ui.Color { return p.Primary.Alpha(0.14) }
+
+// Stressed is the text of a heading or of bold text: the text's color
+// with a trace of the brand's, which stand out by their weight.
+func (p *Palette) Stressed() ui.Color { return p.Foreground.Mix(p.Primary, 0.05) }
 
 type Scheme struct {
 	Name        string
