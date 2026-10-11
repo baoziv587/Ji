@@ -1,45 +1,13 @@
 package agentui
 
 import (
-	"encoding/json"
 	"reflect"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-)
 
-func TestCommandMenuRanksAsTheTerminalDoes(t *testing.T) {
-	names := func(draft string) []string {
-		var out []string
-		for _, e := range commandMenu(testCommands, draft) {
-			out = append(out, e.completion())
-		}
-		return out
-	}
-	for _, c := range []struct {
-		draft string
-		want  []string
-	}{
-		// Every command for a `/`, in the service's order
-		{"/", []string{"/think ", "/fast ", "/compact", "/help", "/exit", "/login ", "/impeccable "}},
-		// Names that start with it, then names that have it, then hints that do
-		{"/co", []string{"/compact", "/help"}},
-		{"/in", []string{"/think ", "/login ", "/impeccable "}},
-		// Past the name, what it takes
-		{"/think ", []string{"/think off", "/think high"}},
-		{"/login open", []string{"/login openai", "/login openai-codex"}},
-		{"/login ai", []string{"/login openai", "/login openai-codex"}},
-		// Nothing for a command that takes no choices, a message, or none that matches
-		{"/impeccable ", nil},
-		{"hello /th", nil},
-		{"/zz", nil},
-		{"/think high now", nil},
-	} {
-		if got := names(c.draft); !reflect.DeepEqual(got, c.want) {
-			t.Errorf("%q: %q, want %q", c.draft, got, c.want)
-		}
-	}
-}
+	"desktop/agentui/agent"
+)
 
 func TestEnterCompletesACommandThenRunsItsChoice(t *testing.T) {
 	a, f := testApp()
@@ -142,9 +110,9 @@ func TestMessagesAndSkillsGoTheirWays(t *testing.T) {
 func TestNoticesAndHelpShowInTheConversation(t *testing.T) {
 	a, f := testApp()
 	f.events["a"] = append(f.events["a"],
-		Event{Type: "notice", Level: "success", Text: "Thinking: off"},
-		Event{Type: "notice", Level: "warn", Text: "No such command: /nope. /help lists them."},
-		Event{Type: "help", Sections: []HelpSection{{Title: "Commands", Rows: [][2]string{{"/think", "<off|high>  sets thinking"}}}, {Title: "Mode", Text: "ask: before every command"}}},
+		agent.Event{Type: "notice", Level: "success", Text: "Thinking: off"},
+		agent.Event{Type: "notice", Level: "warn", Text: "No such command: /nope. /help lists them."},
+		agent.Event{Type: "help", Sections: []agent.HelpSection{{Title: "Commands", Rows: [][2]string{{"/think", "<off|high>  sets thinking"}}}, {Title: "Mode", Text: "ask: before every command"}}},
 	)
 	a.views = map[string]*sessionView{}
 	a.Select("a")
@@ -159,7 +127,7 @@ func TestNoticesAndHelpShowInTheConversation(t *testing.T) {
 
 func TestLoginAsksForAKeyAndCanBeDismissed(t *testing.T) {
 	a, f := testApp()
-	f.events["a"] = append(f.events["a"], Event{Type: "ask", ID: "2", Questions: []Question{{
+	f.events["a"] = append(f.events["a"], agent.Event{Type: "ask", ID: "2", Questions: []agent.Question{{
 		Title: "Enter your DeepSeek API key", Other: true, Secret: true, Placeholder: "sk-…",
 	}}})
 	a.views = map[string]*sessionView{}
@@ -188,10 +156,10 @@ func TestLoginAsksForAKeyAndCanBeDismissed(t *testing.T) {
 func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 	a, f := testApp()
 	f.events["a"] = append(f.events["a"],
-		Event{Type: "state", State: &State{ID: "a", Mode: "auto", Allowed: "allows commands", Replying: true, Queued: 2, Commands: testCommands,
-			Usage: UsageReading{Context: &ContextSize{Tokens: 150_000, Limit: 200_000}, Cost: 0.0123, Input: 48213, Output: 3104, Cache: 86, Speed: 41, Calls: 4}}},
-		Event{Type: "user", Text: "run the tests"},
-		Event{Type: "tool_start", ID: "1", Name: "bash", Args: "{}"},
+		agent.Event{Type: "state", State: &agent.State{ID: "a", Mode: "auto", Allowed: "allows commands", Replying: true, Queued: 2, Commands: testCommands,
+			Usage: agent.UsageReading{Context: &agent.ContextSize{Tokens: 150_000, Limit: 200_000}, Cost: 0.0123, Input: 48213, Output: 3104, Cache: 86, Speed: 41, Calls: 4}}},
+		agent.Event{Type: "user", Text: "run the tests"},
+		agent.Event{Type: "tool_start", ID: "1", Name: "bash", Args: "{}"},
 	)
 	a.views = map[string]*sessionView{}
 	a.Select("a")
@@ -201,18 +169,5 @@ func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
 		}
-	}
-}
-
-func TestHelpReadsRowsAndLines(t *testing.T) {
-	var e Event
-	raw := `{"seq":4,"type":"help","sections":[{"title":"Commands","rows":[["/think","<off|high>  sets thinking"]]},{"title":"Mode","rows":"ask: before every command"}]}`
-	if err := json.Unmarshal([]byte(raw), &e); err != nil {
-		t.Fatal(err)
-	}
-
-	want := []HelpSection{{Title: "Commands", Rows: [][2]string{{"/think", "<off|high>  sets thinking"}}}, {Title: "Mode", Text: "ask: before every command"}}
-	if !reflect.DeepEqual(e.Sections, want) {
-		t.Errorf("sections %+v", e.Sections)
 	}
 }

@@ -25,6 +25,8 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agentui"
+	"desktop/agentui/agent"
+	"desktop/agentui/server"
 )
 
 func main() {
@@ -33,7 +35,7 @@ func main() {
 	if home, err := os.UserHomeDir(); err == nil && wd == "/" {
 		wd = home
 	}
-	server := flag.String("server", os.Getenv("JI_AGENT_SERVER"), "address of a running agent service; started here when empty")
+	address := flag.String("server", os.Getenv("JI_AGENT_SERVER"), "address of a running agent service; started here when empty")
 	// pnpm runs a script in the package's directory, and says in INIT_CWD where it was run from
 	root := flag.String("root", envOr("JI_AGENT_ROOT", envOr("INIT_CWD", wd)), "where a new session works when no folder is chosen")
 	sessions := flag.String("sessions", os.Getenv("JI_AGENT_SESSIONS"), "where the service keeps the sessions (default: ~/.ji/sessions)")
@@ -43,10 +45,10 @@ func main() {
 	yolo := flag.Bool("yolo", os.Getenv("JI_AGENT_YOLO") == "1", "nothing waits for a yes")
 	flag.Parse()
 
-	url := *server
-	var started *agentui.Server
+	url := *address
+	var started *server.Server
 	if url == "" {
-		s, err := agentui.StartServer(agentui.ServerOptions{Script: *script, Root: *root, Sessions: *sessions, Model: *model, Thinking: *thinking, Yolo: *yolo})
+		s, err := server.Start(server.Options{Script: *script, Root: *root, Sessions: *sessions, Model: *model, Thinking: *thinking, Yolo: *yolo})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -57,7 +59,7 @@ func main() {
 	var a *agentui.App
 	mygo.App.WhenReady(func() {
 		var win *mygo.Window
-		a = agentui.NewApp(agentui.NewClient(url), func(fn func()) { win.Update(fn) })
+		a = agentui.NewApp(agent.NewClient(url), func(fn func()) { win.Update(fn) })
 		a.SidebarSize = loadLayout().Sidebar
 		a.Quit = mygo.App.Quit
 		a.ChooseFolder = func() (string, error) {
