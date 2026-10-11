@@ -26,9 +26,10 @@ func (a *App) sidebar(c *ui.Context) {
 		background = ui.Transparent
 	}
 	ui.Column(c).Fill().Background(background).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
-		// Under the window controls, then lined up with the items' text
+		// Clear of the window controls, whose room ends at the zoom button's
+		// edge; in full screen, lined up with the items' text
 		bar := c.TitleBar()
-		ui.Row(c).Height(TitleBarHeight).Shrink(0).Padding(0, 10, 0, max(bar.Left, 18)).Gap(8).AlignItems(ui.Center).DragWindow().Children(func() {
+		ui.Row(c).Height(TitleBarHeight).Shrink(0).Padding(0, 10, 0, max(bar.Left+16, 18)).Gap(8).AlignItems(ui.Center).DragWindow().Children(func() {
 			dot := p.Destructive
 			if a.connected {
 				dot = p.Success
