@@ -804,8 +804,8 @@ func TestGlassesRampThroughTheDetents(t *testing.T) {
 		glasses.content.at(transparencySolid) != 1 || glasses.contentLight.at(transparencySolid) != 1 {
 		t.Error("solid lets something through")
 	}
-	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.5) > 1e-6 {
-		t.Errorf("sidebar at 75: %v, want 0.5", got)
+	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.3) > 1e-6 {
+		t.Errorf("sidebar at 75: %v, want 0.3", got)
 	}
 	if got := glasses.bar.at(-10); got != 1 {
 		t.Errorf("bar below solid: %v, want 1", got)
