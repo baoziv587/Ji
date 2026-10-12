@@ -1,0 +1,65 @@
+/* Graphite: a cool graphite console and a clear blue. */
+
+:root {
+  --background: #f7f8fa;
+  --foreground: #272a32;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --primary: #4164b5;
+  --primary-foreground: #ffffff;
+  --secondary: #e6e9f0;
+  --muted: #eaedf1;
+  --accent: #e2e6ee99;
+  --muted-foreground: #4f596d;
+  --destructive: #b24e58;
+  --border: #d2d7e1;
+  --input: #c3cad8;
+  --ring: #546795;
+  --sidebar: #ebf1fe;
+  --sidebar-accent: #d5e2ff99;
+  --sidebar-border: #d2d7e1;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #0473a9;
+  --waiting: #b05824;
+  --success: #2a7f3a;
+  --thinking: #59698b;
+  --warning: #8f6402;
+  --emphasis: #2c457d;
+  --code-keyword: #2d4c91;
+  --code-string: #205a11;
+  --code-number: #863606;
+  --code-type: #005858;
+}
+
+.dark {
+  --background: #16181d;
+  --foreground: #d9dde5;
+  --card: #21252f;
+  --popover: #2b2f39;
+  --primary: #79a2f8;
+  --primary-foreground: #0f1420;
+  --secondary: #292f3c;
+  --muted: #12151c;
+  --accent: #2e3442;
+  --muted-foreground: #acb6cb;
+  --destructive: #eb8192;
+  --border: #3a3f4d;
+  --input: #424a5d;
+  --ring: #8da4d5;
+  --sidebar: #171e2c;
+  --sidebar-accent: #25314b;
+  --sidebar-border: #3a3f4d;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #7ed0fe;
+  --waiting: #fd9f67;
+  --success: #9fce6f;
+  --thinking: #a0b1d5;
+  --warning: #e9ac4c;
+  --emphasis: #cedefe;
+  --code-keyword: #8eb0f7;
+  --code-string: #8bc281;
+  --code-number: #ed9c79;
+  --code-type: #4bc6c7;
+}

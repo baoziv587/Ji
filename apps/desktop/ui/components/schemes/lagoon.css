@@ -1,0 +1,65 @@
+/* Lagoon: cool mineral greys and a deep teal. Info, a cyan in the others, is a blue here. */
+
+:root {
+  --background: #f5f8f8;
+  --foreground: #192d32;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --primary: #06766e;
+  --primary-foreground: #ffffff;
+  --secondary: #ddeceb;
+  --muted: #e5eeee;
+  --accent: #d6eae799;
+  --muted-foreground: #3f5a60;
+  --destructive: #b24e58;
+  --border: #cbdad9;
+  --input: #b8cfce;
+  --ring: #24756e;
+  --sidebar: #e1f6f6;
+  --sidebar-accent: #bae7e199;
+  --sidebar-border: #cbdad9;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #385cab;
+  --waiting: #b05824;
+  --success: #2a7f3a;
+  --thinking: #40746e;
+  --warning: #8f6402;
+  --emphasis: #00544e;
+  --code-keyword: #025852;
+  --code-string: #684900;
+  --code-number: #88331f;
+  --code-type: #02508d;
+}
+
+.dark {
+  --background: #0f1a1c;
+  --foreground: #d1e0e0;
+  --card: #13292d;
+  --popover: #1c3337;
+  --primary: #2bd5be;
+  --primary-foreground: #042f2e;
+  --secondary: #183338;
+  --muted: #081618;
+  --accent: #1a393e;
+  --muted-foreground: #9ebcc0;
+  --destructive: #eb8192;
+  --border: #274549;
+  --input: #2e5056;
+  --ring: #7fcabc;
+  --sidebar: #012328;
+  --sidebar-accent: #16413d;
+  --sidebar-border: #274549;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #93b7ff;
+  --waiting: #fd9f67;
+  --success: #9fce6f;
+  --thinking: #89bdb4;
+  --warning: #e9ac4c;
+  --emphasis: #a6efe1;
+  --code-keyword: #53c7b5;
+  --code-string: #d6aa5e;
+  --code-number: #f19a85;
+  --code-type: #7ab6f4;
+}

@@ -1,0 +1,65 @@
+/* Slate: a soft blue-grey ground, a deep slate in the dark, and an ice blue. Info is a teal, apart from the brand. */
+
+:root {
+  --background: #eceff4;
+  --foreground: #292f3b;
+  --card: #f5f7fa;
+  --popover: #f5f7fa;
+  --primary: #296b9c;
+  --primary-foreground: #ffffff;
+  --secondary: #dae1ec;
+  --muted: #dee4ed;
+  --accent: #d5dded99;
+  --muted-foreground: #3f4b62;
+  --destructive: #a9464d;
+  --border: #c6cfdd;
+  --input: #b7c2d3;
+  --ring: #3e6a8f;
+  --sidebar: #dfe9f9;
+  --sidebar-accent: #bed5f399;
+  --sidebar-border: #c6cfdd;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #06766e;
+  --waiting: #b05824;
+  --success: #2a7f3a;
+  --thinking: #4d6d88;
+  --warning: #8f6402;
+  --emphasis: #034c78;
+  --code-keyword: #024c7b;
+  --code-string: #285300;
+  --code-number: #812f0d;
+  --code-type: #624400;
+}
+
+.dark {
+  --background: #232934;
+  --foreground: #e2e6ed;
+  --card: #2d3749;
+  --popover: #374157;
+  --primary: #74c3d9;
+  --primary-foreground: #1f2530;
+  --secondary: #374157;
+  --muted: #1d2433;
+  --accent: #3b465f;
+  --muted-foreground: #acb6ca;
+  --destructive: #eb8089;
+  --border: #495269;
+  --input: #505d78;
+  --ring: #7ac3d6;
+  --sidebar: #192338;
+  --sidebar-accent: #30435b;
+  --sidebar-border: #495269;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #85c4c3;
+  --waiting: #fa9d65;
+  --success: #9ec27e;
+  --thinking: #89bbc9;
+  --warning: #f4c96e;
+  --emphasis: #a6ebfe;
+  --code-keyword: #66d5f2;
+  --code-string: #a7d68f;
+  --code-number: #ffb59c;
+  --code-type: #ecc073;
+}

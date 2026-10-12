@@ -1,0 +1,65 @@
+/* Forest: warm paper and a forest green. Done is a sea green, apart from the brand. */
+
+:root {
+  --background: #f8f5f0;
+  --foreground: #39221e;
+  --card: #f8f5f0;
+  --popover: #f8f5f0;
+  --primary: #307d33;
+  --primary-foreground: #ffffff;
+  --secondary: #daecdc;
+  --muted: #f2e8dc;
+  --accent: #cae5cc99;
+  --muted-foreground: #653f32;
+  --destructive: #af4a41;
+  --border: #e0d2c0;
+  --input: #d3c5b3;
+  --ring: #4d764d;
+  --sidebar: #f6e8d5;
+  --sidebar-accent: #c6e2c799;
+  --sidebar-border: #e0d2c0;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #0473a9;
+  --waiting: #b05824;
+  --success: #067c66;
+  --thinking: #557255;
+  --warning: #8f6402;
+  --emphasis: #1f5521;
+  --code-keyword: #0f5917;
+  --code-string: #654703;
+  --code-number: #86311b;
+  --code-type: #045370;
+}
+
+.dark {
+  --background: #1c2a1f;
+  --foreground: #eae5df;
+  --card: #273929;
+  --popover: #314433;
+  --primary: #5dab5f;
+  --primary-foreground: #0a1f0c;
+  --secondary: #324331;
+  --muted: #223024;
+  --accent: #344a35;
+  --muted-foreground: #beb4a8;
+  --destructive: #eb8276;
+  --border: #445543;
+  --input: #4e604c;
+  --ring: #79a378;
+  --sidebar: #142c1a;
+  --sidebar-accent: #324933;
+  --sidebar-border: #445543;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #7ed0fe;
+  --waiting: #fd9f67;
+  --success: #40cfa9;
+  --thinking: #9cbb9c;
+  --warning: #e9ac4c;
+  --emphasis: #c0ecbf;
+  --code-keyword: #94d394;
+  --code-string: #e9bd71;
+  --code-number: #ffb09d;
+  --code-type: #70cff9;
+}

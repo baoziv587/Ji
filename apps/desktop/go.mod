@@ -7,6 +7,9 @@ tool github.com/egoist/mygo/cmd/mygo
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/egoist/mygo v0.3.7
+	github.com/lucasb-eyer/go-colorful v1.4.1
+	github.com/mazznoer/csscolorparser v0.1.8
+	github.com/tdewolff/parse/v2 v2.8.16
 	github.com/yuin/goldmark v1.8.6
 )
 

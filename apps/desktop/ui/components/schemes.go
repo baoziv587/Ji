@@ -1,261 +1,162 @@
 package components
 
-import "github.com/egoist/mygo/ui"
+import (
+	"embed"
+	"fmt"
+	"io"
+	"reflect"
+	"strings"
+	"unicode"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/mazznoer/csscolorparser"
+	"github.com/tdewolff/parse/v2"
+	"github.com/tdewolff/parse/v2/css"
+)
+
+// Each scheme is a stylesheet in schemes/, written as shadcn/ui's themes
+// are: the light palette in :root, the dark in .dark, a token to a custom
+// property of its name in kebab case (SidebarAccent is --sidebar-accent).
+// A theme exported from shadcn/ui's tools can be pasted in whole: what is
+// not a token here (charts, fonts, shadows, the @theme block) is passed
+// over, and Ji's own tokens, Info to CodeType, are added to it. The scheme
+// is named after its file.
+//
+//go:embed schemes/*.css
+var schemeFiles embed.FS
+
+// defaultScheme is the file of the scheme listed first, the rest after it
+// by name.
+const defaultScheme = "forest.css"
 
 // Schemes are the color schemes to choose from, the default first.
-var Schemes = []*Scheme{&forest, &graphite, &lagoon, &slate}
+var Schemes = loadSchemes()
 
-// Forest: warm paper and a forest green. Done is a sea green, apart from
-// the brand.
-var forest = Scheme{
-	Name: "Forest",
-	Light: Palette{
-		Background:        ui.Hex("#F8F5F0"),
-		Foreground:        ui.Hex("#39221E"),
-		Card:              ui.Hex("#F8F5F0"),
-		Popover:           ui.Hex("#F8F5F0"),
-		Primary:           ui.Hex("#307D33"),
-		PrimaryForeground: ui.Hex("#FFFFFF"),
-		Secondary:         ui.Hex("#DAECDC"),
-		Muted:             ui.Hex("#F2E8DC"),
-		Accent:            ui.Hex("#CAE5CC"),
-		MutedForeground:   ui.Hex("#653F32"),
-		Destructive:       ui.Hex("#AF4A41"),
-		Border:            ui.Hex("#E0D2C0"),
-		Input:             ui.Hex("#D3C5B3"),
-		Ring:              ui.Hex("#4D764D"),
-		Sidebar:           ui.Hex("#F6E8D5"),
-		SidebarAccent:     ui.Hex("#C6E2C7"),
-		SidebarBorder:     ui.Hex("#E0D2C0"),
-		Info:              ui.Hex("#0473A9"),
-		Waiting:           ui.Hex("#B05824"),
-		Success:           ui.Hex("#067C66"),
-		Thinking:          ui.Hex("#557255"),
-		Warning:           ui.Hex("#8F6402"),
-		Emphasis:          ui.Hex("#1F5521"),
-		CodeKeyword:       ui.Hex("#0F5917"),
-		CodeString:        ui.Hex("#654703"),
-		CodeNumber:        ui.Hex("#86311B"),
-		CodeType:          ui.Hex("#045370"),
-	},
-	Dark: Palette{
-		Background:        ui.Hex("#1C2A1F"),
-		Foreground:        ui.Hex("#EAE5DF"),
-		Card:              ui.Hex("#273929"),
-		Popover:           ui.Hex("#314433"),
-		Primary:           ui.Hex("#5DAB5F"),
-		PrimaryForeground: ui.Hex("#0A1F0C"),
-		Secondary:         ui.Hex("#324331"),
-		Muted:             ui.Hex("#223024"),
-		Accent:            ui.Hex("#344A35"),
-		MutedForeground:   ui.Hex("#BEB4A8"),
-		Destructive:       ui.Hex("#EB8276"),
-		Border:            ui.Hex("#445543"),
-		Input:             ui.Hex("#4E604C"),
-		Ring:              ui.Hex("#79A378"),
-		Sidebar:           ui.Hex("#142C1A"),
-		SidebarAccent:     ui.Hex("#324933"),
-		SidebarBorder:     ui.Hex("#445543"),
-		Info:              ui.Hex("#7ED0FE"),
-		Waiting:           ui.Hex("#FD9F67"),
-		Success:           ui.Hex("#40CFA9"),
-		Thinking:          ui.Hex("#9CBB9C"),
-		Warning:           ui.Hex("#E9AC4C"),
-		Emphasis:          ui.Hex("#C0ECBF"),
-		CodeKeyword:       ui.Hex("#94D394"),
-		CodeString:        ui.Hex("#E9BD71"),
-		CodeNumber:        ui.Hex("#FFB09D"),
-		CodeType:          ui.Hex("#70CFF9"),
-	},
+func loadSchemes() []*Scheme {
+	files, err := schemeFiles.ReadDir("schemes")
+	if err != nil {
+		panic(err)
+	}
+	var schemes []*Scheme
+	for _, f := range files {
+		css, err := schemeFiles.ReadFile("schemes/" + f.Name())
+		if err != nil {
+			panic(err)
+		}
+		s, err := ParseScheme(schemeName(f.Name()), string(css))
+		if err != nil {
+			panic(fmt.Sprintf("schemes/%s: %v", f.Name(), err))
+		}
+		if f.Name() == defaultScheme {
+			schemes = append([]*Scheme{s}, schemes...)
+		} else {
+			schemes = append(schemes, s)
+		}
+	}
+	return schemes
 }
 
-// Graphite: a cool graphite console and a clear blue.
-var graphite = Scheme{
-	Name: "Graphite",
-	Light: Palette{
-		Background:        ui.Hex("#F7F8FA"),
-		Foreground:        ui.Hex("#272A32"),
-		Card:              ui.Hex("#FFFFFF"),
-		Popover:           ui.Hex("#FFFFFF"),
-		Primary:           ui.Hex("#4164B5"),
-		PrimaryForeground: ui.Hex("#FFFFFF"),
-		Secondary:         ui.Hex("#E6E9F0"),
-		Muted:             ui.Hex("#EAEDF1"),
-		Accent:            ui.Hex("#E2E6EE"),
-		MutedForeground:   ui.Hex("#4F596D"),
-		Destructive:       ui.Hex("#B24E58"),
-		Border:            ui.Hex("#D2D7E1"),
-		Input:             ui.Hex("#C3CAD8"),
-		Ring:              ui.Hex("#546795"),
-		Sidebar:           ui.Hex("#EBF1FE"),
-		SidebarAccent:     ui.Hex("#D5E2FF"),
-		SidebarBorder:     ui.Hex("#D2D7E1"),
-		Info:              ui.Hex("#0473A9"),
-		Waiting:           ui.Hex("#B05824"),
-		Success:           ui.Hex("#2A7F3A"),
-		Thinking:          ui.Hex("#59698B"),
-		Warning:           ui.Hex("#8F6402"),
-		Emphasis:          ui.Hex("#2C457D"),
-		CodeKeyword:       ui.Hex("#2D4C91"),
-		CodeString:        ui.Hex("#205A11"),
-		CodeNumber:        ui.Hex("#863606"),
-		CodeType:          ui.Hex("#005858"),
-	},
-	Dark: Palette{
-		Background:        ui.Hex("#16181D"),
-		Foreground:        ui.Hex("#D9DDE5"),
-		Card:              ui.Hex("#21252F"),
-		Popover:           ui.Hex("#2B2F39"),
-		Primary:           ui.Hex("#79A2F8"),
-		PrimaryForeground: ui.Hex("#0F1420"),
-		Secondary:         ui.Hex("#292F3C"),
-		Muted:             ui.Hex("#12151C"),
-		Accent:            ui.Hex("#2E3442"),
-		MutedForeground:   ui.Hex("#ACB6CB"),
-		Destructive:       ui.Hex("#EB8192"),
-		Border:            ui.Hex("#3A3F4D"),
-		Input:             ui.Hex("#424A5D"),
-		Ring:              ui.Hex("#8DA4D5"),
-		Sidebar:           ui.Hex("#171E2C"),
-		SidebarAccent:     ui.Hex("#25314B"),
-		SidebarBorder:     ui.Hex("#3A3F4D"),
-		Info:              ui.Hex("#7ED0FE"),
-		Waiting:           ui.Hex("#FD9F67"),
-		Success:           ui.Hex("#9FCE6F"),
-		Thinking:          ui.Hex("#A0B1D5"),
-		Warning:           ui.Hex("#E9AC4C"),
-		Emphasis:          ui.Hex("#CEDEFE"),
-		CodeKeyword:       ui.Hex("#8EB0F7"),
-		CodeString:        ui.Hex("#8BC281"),
-		CodeNumber:        ui.Hex("#ED9C79"),
-		CodeType:          ui.Hex("#4BC6C7"),
-	},
+// schemeName is a file's name as the settings show it: "ocean-mist.css"
+// is Ocean Mist.
+func schemeName(file string) string {
+	words := strings.Fields(strings.NewReplacer("-", " ", "_", " ").Replace(strings.TrimSuffix(file, ".css")))
+	for i, w := range words {
+		words[i] = strings.ToUpper(w[:1]) + w[1:]
+	}
+	return strings.Join(words, " ")
 }
 
-// Lagoon: cool mineral greys and a deep teal. Info, a cyan in the others,
-// is a blue here.
-var lagoon = Scheme{
-	Name: "Lagoon",
-	Light: Palette{
-		Background:        ui.Hex("#F5F8F8"),
-		Foreground:        ui.Hex("#192D32"),
-		Card:              ui.Hex("#FFFFFF"),
-		Popover:           ui.Hex("#FFFFFF"),
-		Primary:           ui.Hex("#06766E"),
-		PrimaryForeground: ui.Hex("#FFFFFF"),
-		Secondary:         ui.Hex("#DDECEB"),
-		Muted:             ui.Hex("#E5EEEE"),
-		Accent:            ui.Hex("#D6EAE7"),
-		MutedForeground:   ui.Hex("#3F5A60"),
-		Destructive:       ui.Hex("#B24E58"),
-		Border:            ui.Hex("#CBDAD9"),
-		Input:             ui.Hex("#B8CFCE"),
-		Ring:              ui.Hex("#24756E"),
-		Sidebar:           ui.Hex("#E1F6F6"),
-		SidebarAccent:     ui.Hex("#BAE7E1"),
-		SidebarBorder:     ui.Hex("#CBDAD9"),
-		Info:              ui.Hex("#385CAB"),
-		Waiting:           ui.Hex("#B05824"),
-		Success:           ui.Hex("#2A7F3A"),
-		Thinking:          ui.Hex("#40746E"),
-		Warning:           ui.Hex("#8F6402"),
-		Emphasis:          ui.Hex("#00544E"),
-		CodeKeyword:       ui.Hex("#025852"),
-		CodeString:        ui.Hex("#684900"),
-		CodeNumber:        ui.Hex("#88331F"),
-		CodeType:          ui.Hex("#02508D"),
-	},
-	Dark: Palette{
-		Background:        ui.Hex("#0F1A1C"),
-		Foreground:        ui.Hex("#D1E0E0"),
-		Card:              ui.Hex("#13292D"),
-		Popover:           ui.Hex("#1C3337"),
-		Primary:           ui.Hex("#2BD5BE"),
-		PrimaryForeground: ui.Hex("#042F2E"),
-		Secondary:         ui.Hex("#183338"),
-		Muted:             ui.Hex("#081618"),
-		Accent:            ui.Hex("#1A393E"),
-		MutedForeground:   ui.Hex("#9EBCC0"),
-		Destructive:       ui.Hex("#EB8192"),
-		Border:            ui.Hex("#274549"),
-		Input:             ui.Hex("#2E5056"),
-		Ring:              ui.Hex("#7FCABC"),
-		Sidebar:           ui.Hex("#012328"),
-		SidebarAccent:     ui.Hex("#16413D"),
-		SidebarBorder:     ui.Hex("#274549"),
-		Info:              ui.Hex("#93B7FF"),
-		Waiting:           ui.Hex("#FD9F67"),
-		Success:           ui.Hex("#9FCE6F"),
-		Thinking:          ui.Hex("#89BDB4"),
-		Warning:           ui.Hex("#E9AC4C"),
-		Emphasis:          ui.Hex("#A6EFE1"),
-		CodeKeyword:       ui.Hex("#53C7B5"),
-		CodeString:        ui.Hex("#D6AA5E"),
-		CodeNumber:        ui.Hex("#F19A85"),
-		CodeType:          ui.Hex("#7AB6F4"),
-	},
+// ParseScheme reads a scheme's stylesheet: every token, light and dark,
+// must be there.
+func ParseScheme(name, stylesheet string) (*Scheme, error) {
+	blocks := map[string]map[string]string{}
+	var properties map[string]string
+	parser := css.NewParser(parse.NewInputString(stylesheet), false)
+	for done := false; !done; {
+		grammar, _, data := parser.Next()
+		switch grammar {
+		case css.ErrorGrammar:
+			if err := parser.Err(); err != io.EOF {
+				return nil, err
+			}
+			done = true
+		case css.BeginRulesetGrammar:
+			var selector strings.Builder
+			for _, v := range parser.Values() {
+				selector.Write(v.Data)
+			}
+			properties = nil
+			if s := selector.String(); s == ":root" || s == ".dark" {
+				properties = map[string]string{}
+				blocks[s] = properties
+			}
+		case css.CustomPropertyGrammar:
+			if properties != nil {
+				properties[string(data)] = strings.TrimSpace(string(parser.Values()[0].Data))
+			}
+		}
+	}
+
+	s := &Scheme{Name: name}
+	for _, b := range []struct {
+		selector string
+		palette  *Palette
+	}{{":root", &s.Light}, {".dark", &s.Dark}} {
+		properties, ok := blocks[b.selector]
+		if !ok {
+			return nil, fmt.Errorf("no %s rule", b.selector)
+		}
+		if err := readPalette(properties, b.palette); err != nil {
+			return nil, fmt.Errorf("%s: %w", b.selector, err)
+		}
+	}
+	return s, nil
 }
 
-// Slate: a soft blue-grey ground, a deep slate in the dark, and an ice blue.
-// Info is a teal, apart from the brand.
-var slate = Scheme{
-	Name: "Slate",
-	Light: Palette{
-		Background:        ui.Hex("#ECEFF4"),
-		Foreground:        ui.Hex("#292F3B"),
-		Card:              ui.Hex("#F5F7FA"),
-		Popover:           ui.Hex("#F5F7FA"),
-		Primary:           ui.Hex("#296B9C"),
-		PrimaryForeground: ui.Hex("#FFFFFF"),
-		Secondary:         ui.Hex("#DAE1EC"),
-		Muted:             ui.Hex("#DEE4ED"),
-		Accent:            ui.Hex("#D5DDED"),
-		MutedForeground:   ui.Hex("#3F4B62"),
-		Destructive:       ui.Hex("#A9464D"),
-		Border:            ui.Hex("#C6CFDD"),
-		Input:             ui.Hex("#B7C2D3"),
-		Ring:              ui.Hex("#3E6A8F"),
-		Sidebar:           ui.Hex("#DFE9F9"),
-		SidebarAccent:     ui.Hex("#BED5F3"),
-		SidebarBorder:     ui.Hex("#C6CFDD"),
-		Info:              ui.Hex("#06766E"),
-		Waiting:           ui.Hex("#B05824"),
-		Success:           ui.Hex("#2A7F3A"),
-		Thinking:          ui.Hex("#4D6D88"),
-		Warning:           ui.Hex("#8F6402"),
-		Emphasis:          ui.Hex("#034C78"),
-		CodeKeyword:       ui.Hex("#024C7B"),
-		CodeString:        ui.Hex("#285300"),
-		CodeNumber:        ui.Hex("#812F0D"),
-		CodeType:          ui.Hex("#624400"),
-	},
-	Dark: Palette{
-		Background:        ui.Hex("#232934"),
-		Foreground:        ui.Hex("#E2E6ED"),
-		Card:              ui.Hex("#2D3749"),
-		Popover:           ui.Hex("#374157"),
-		Primary:           ui.Hex("#74C3D9"),
-		PrimaryForeground: ui.Hex("#1F2530"),
-		Secondary:         ui.Hex("#374157"),
-		Muted:             ui.Hex("#1D2433"),
-		Accent:            ui.Hex("#3B465F"),
-		MutedForeground:   ui.Hex("#ACB6CA"),
-		Destructive:       ui.Hex("#EB8089"),
-		Border:            ui.Hex("#495269"),
-		Input:             ui.Hex("#505D78"),
-		Ring:              ui.Hex("#7AC3D6"),
-		Sidebar:           ui.Hex("#192338"),
-		SidebarAccent:     ui.Hex("#30435B"),
-		SidebarBorder:     ui.Hex("#495269"),
-		Info:              ui.Hex("#85C4C3"),
-		Waiting:           ui.Hex("#FA9D65"),
-		Success:           ui.Hex("#9EC27E"),
-		Thinking:          ui.Hex("#89BBC9"),
-		Warning:           ui.Hex("#F4C96E"),
-		Emphasis:          ui.Hex("#A6EBFE"),
-		CodeKeyword:       ui.Hex("#66D5F2"),
-		CodeString:        ui.Hex("#A7D68F"),
-		CodeNumber:        ui.Hex("#FFB59C"),
-		CodeType:          ui.Hex("#ECC073"),
-	},
+func readPalette(properties map[string]string, p *Palette) error {
+	v := reflect.ValueOf(p).Elem()
+	var missing []string
+	for i := range v.NumField() {
+		property := "--" + kebab(v.Type().Field(i).Name)
+		value, ok := properties[property]
+		if !ok {
+			missing = append(missing, property)
+			continue
+		}
+		c, err := ParseColor(value)
+		if err != nil {
+			return fmt.Errorf("%s: %w", property, err)
+		}
+		v.Field(i).Set(reflect.ValueOf(c))
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func kebab(name string) string {
+	var b strings.Builder
+	for i, r := range name {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				b.WriteByte('-')
+			}
+			r = unicode.ToLower(r)
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// ParseColor reads a CSS color as shadcn/ui's themes write them: hex,
+// rgb(), hsl(), oklch() or any other CSS color, with an alpha or not. One
+// outside sRGB is clipped into it.
+func ParseColor(value string) (ui.Color, error) {
+	c, err := csscolorparser.Parse(value)
+	if err != nil {
+		return ui.Color{}, fmt.Errorf("%q: %w", value, err)
+	}
+	r, g, b, _ := c.Clamp().RGBA255()
+	return ui.RGBA(r, g, b, float32(c.A)), nil
 }
