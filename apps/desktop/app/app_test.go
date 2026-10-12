@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image/png"
 	"math"
@@ -763,5 +764,28 @@ func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
 	}
 	if a.views["a"].t.State.Mode != "ask" {
 		t.Errorf("mode %q: the status line takes a session out of yolo, back to ask", a.views["a"].t.State.Mode)
+	}
+}
+
+// A scheme's stylesheet saved shows in the next frame; one that does not
+// read leaves the schemes as they were, and says what is wrong.
+func TestSchemesChangeAsTheyAreSaved(t *testing.T) {
+	a, _ := testApp()
+	builtIn := components.Schemes
+	defer func() { components.Schemes = builtIn }()
+	tester := ui.NewTester(a.View, 1000, 700)
+	tester.Frame()
+
+	edited := *builtIn[0]
+	edited.Light.Background = ui.Hex("#ffeedd")
+	a.SchemesChanged([]*components.Scheme{&edited}, nil)
+	tester.Frame()
+	if got := components.PaletteOf(a.theme).Background; got != edited.Light.Background {
+		t.Errorf("background %+v, want the edited %+v", got, edited.Light.Background)
+	}
+
+	a.SchemesChanged(nil, errors.New("schemes/forest.css: :root: missing --foreground"))
+	if a.toast == nil || !strings.Contains(a.toast.message, "missing --foreground") || len(components.Schemes) != 1 {
+		t.Errorf("toast %+v, schemes %d", a.toast, len(components.Schemes))
 	}
 }

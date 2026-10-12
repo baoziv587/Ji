@@ -1,10 +1,14 @@
 package components
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -97,4 +101,56 @@ func TestSchemesAreNamedAfterTheirFiles(t *testing.T) {
 	if got := schemeName("ocean-mist.css"); got != "Ocean Mist" {
 		t.Errorf("ocean-mist.css is %q", got)
 	}
+}
+
+// A stylesheet saved shows at once, or what is wrong with it.
+func TestSchemesAreReadAgainAsTheyAreSaved(t *testing.T) {
+	if source := SchemesSource(); !strings.HasSuffix(source, filepath.FromSlash("ui/components/schemes")) {
+		t.Errorf("schemes watched in %q", source)
+	}
+
+	forest, err := schemeFiles.ReadFile("schemes/forest.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	type read struct {
+		schemes []*Scheme
+		err     error
+	}
+	reads := make(chan read, 8)
+	go WatchSchemes(ctx, dir, func(schemes []*Scheme, err error) { reads <- read{schemes, err} })
+
+	// save writes the file again until a read of it is as wanted: the watch
+	// starts on its own, and a save before it may still be read
+	save := func(file, css string, wanted func(read) bool) {
+		t.Helper()
+		var last read
+		for range 20 {
+			if err := os.WriteFile(filepath.Join(dir, file), []byte(css), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case last = <-reads:
+				if wanted(last) {
+					return
+				}
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+		t.Errorf("%s saved, read as %+v", file, last)
+	}
+
+	save("forest.css", strings.Replace(string(forest), "--primary: #307d33", "--primary: #ca3214", 1), func(r read) bool {
+		return r.err == nil && len(r.schemes) == 1 && r.schemes[0].Light.Primary == ui.Hex("#ca3214")
+	})
+	save("forest.css", strings.Replace(string(forest), "--foreground: #39221e;", "", 1), func(r read) bool {
+		return r.err != nil && strings.Contains(r.err.Error(), "schemes/forest.css: :root: missing --foreground")
+	})
+	save("forest.css", string(forest), func(r read) bool { return r.err == nil })
+	save("ocean-mist.css", string(forest), func(r read) bool {
+		return r.err == nil && len(r.schemes) == 2 && r.schemes[0].Name == "Forest" && r.schemes[1].Name == "Ocean Mist"
+	})
 }
