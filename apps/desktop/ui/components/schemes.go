@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"io/fs"
 	"reflect"
 	"strings"
 	"unicode"
@@ -29,31 +30,48 @@ var schemeFiles embed.FS
 // by name.
 const defaultScheme = "forest.css"
 
-// Schemes are the color schemes to choose from, the default first.
-var Schemes = loadSchemes()
+// Schemes are the color schemes to choose from, the default first: those
+// built in, or as WatchSchemes last read them.
+var Schemes = builtInSchemes()
 
-func loadSchemes() []*Scheme {
-	files, err := schemeFiles.ReadDir("schemes")
+func builtInSchemes() []*Scheme {
+	dir, err := fs.Sub(schemeFiles, "schemes")
 	if err != nil {
 		panic(err)
 	}
+	schemes, err := LoadSchemes(dir)
+	if err != nil {
+		panic(err)
+	}
+	return schemes
+}
+
+// LoadSchemes reads every stylesheet in dir, the default first.
+func LoadSchemes(dir fs.FS) ([]*Scheme, error) {
+	files, err := fs.Glob(dir, "*.css")
+	if err != nil {
+		return nil, err
+	}
 	var schemes []*Scheme
-	for _, f := range files {
-		css, err := schemeFiles.ReadFile("schemes/" + f.Name())
+	for _, file := range files {
+		css, err := fs.ReadFile(dir, file)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
-		s, err := ParseScheme(schemeName(f.Name()), string(css))
+		s, err := ParseScheme(schemeName(file), string(css))
 		if err != nil {
-			panic(fmt.Sprintf("schemes/%s: %v", f.Name(), err))
+			return nil, fmt.Errorf("schemes/%s: %w", file, err)
 		}
-		if f.Name() == defaultScheme {
+		if file == defaultScheme {
 			schemes = append([]*Scheme{s}, schemes...)
 		} else {
 			schemes = append(schemes, s)
 		}
 	}
-	return schemes
+	if len(schemes) == 0 {
+		return nil, fmt.Errorf("no stylesheet in schemes/")
+	}
+	return schemes, nil
 }
 
 // schemeName is a file's name as the settings show it: "ocean-mist.css"

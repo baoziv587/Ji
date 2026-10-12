@@ -77,6 +77,16 @@ func (a *App) applyTheme(c *ui.Context) {
 	c.SetTheme(a.theme)
 }
 
+// SchemesChanged shows the schemes as their stylesheets were read again,
+// or what is wrong with one, which leaves the schemes as they were.
+func (a *App) SchemesChanged(schemes []*components.Scheme, err error) {
+	if err != nil {
+		a.toast = &toast{message: "Could not read the color schemes: " + err.Error()}
+		return
+	}
+	components.Schemes = schemes
+}
+
 // vibrant is whether the window shows the system's material, light or
 // dark as the app's appearance is (main sets it from the settings): not in
 // the frame a change of the settings is drawn in, before it follows.

@@ -134,6 +134,17 @@ func main() {
 			Content:        ui.View(a.View),
 		})
 		go a.Follow(ctx)
+		// Run from the source, a scheme's stylesheet shows as it is saved
+		if dir := components.SchemesSource(); dir != "" {
+			go func() {
+				err := components.WatchSchemes(ctx, dir, func(schemes []*components.Scheme, err error) {
+					win.Update(func() { a.SchemesChanged(schemes, err) })
+				})
+				if err != nil {
+					log.Print(err)
+				}
+			}()
+		}
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		cancel()
