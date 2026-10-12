@@ -120,8 +120,36 @@ type Provider struct {
 	Source string `json:"source,omitempty"`
 	// Whether /login signs in to it.
 	Login bool `json:"login"`
+	// Whether a key can be typed in for it, as StoreKey does, and whether
+	// /login can sign in to it in the browser.
+	APIKey bool `json:"apiKey"`
+	OAuth  bool `json:"oauth"`
+	// Whether what it has, a key or a login, is kept in ~/.ji, so that
+	// ForgetKey forgets it.
+	Stored bool `json:"stored"`
 	// How many chat models it offers.
 	Models int `json:"models"`
+	// Set for an endpoint the person added.
+	Endpoint *Endpoint `json:"endpoint,omitempty"`
+}
+
+// Endpoint is a server that speaks OpenAI's chat completions, added as a
+// provider. Its ID is made of its name when it is added.
+type Endpoint struct {
+	ID      string `json:"id,omitempty"`
+	Name    string `json:"name,omitempty"`
+	BaseURL string `json:"baseUrl"`
+	// Sent to be stored; never sent back. Empty keeps the stored one.
+	Key    string          `json:"key,omitempty"`
+	Models []EndpointModel `json:"models"`
+}
+
+// EndpointModel is a model of an endpoint. Unset, the window is the
+// service's default and the model does not think.
+type EndpointModel struct {
+	ID            string `json:"id"`
+	ContextWindow int    `json:"contextWindow,omitempty"`
+	Reasoning     bool   `json:"reasoning,omitempty"`
 }
 
 // Model is one of a provider's chat models.
@@ -233,6 +261,18 @@ type Agent interface {
 	Providers(ctx context.Context) ([]Provider, error)
 	// Models is a provider's chat models.
 	Models(ctx context.Context, provider string) ([]Model, error)
+	// StoreKey keeps a provider's key in ~/.ji, as /login does; it is
+	// used in place of the environment's. Each change returns the
+	// providers as they are after it.
+	StoreKey(ctx context.Context, provider, key string) ([]Provider, error)
+	// ForgetKey forgets the key or login kept, as /logout does.
+	ForgetKey(ctx context.Context, provider string) ([]Provider, error)
+	// KeepEndpoint adds an endpoint, or changes the one of its ID.
+	KeepEndpoint(ctx context.Context, e Endpoint) ([]Provider, error)
+	RemoveEndpoint(ctx context.Context, id string) ([]Provider, error)
+	// ProbeEndpoint is the model ids the server at baseURL lists, asked
+	// with key, or the stored key of endpoint id when key is empty.
+	ProbeEndpoint(ctx context.Context, baseURL, key, id string) ([]string, error)
 	// Follow calls fn with every event of the session after seq, in order,
 	// until ctx ends, connecting again after a drop.
 	Follow(ctx context.Context, id string, after int, fn func(Event))

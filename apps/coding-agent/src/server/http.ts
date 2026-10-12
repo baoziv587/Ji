@@ -7,6 +7,14 @@
 //   GET  /api/providers                             {providers}: every provider of the catalog, the detected ones
 //                                                   (a key in the environment, or a login) marked as such
 //   GET  /api/providers/:id/models                  {models}: the provider's chat models
+//   PUT  /api/providers/:id/key       {key}         stores the key in ~/.ji, as /login does: {providers}
+//   DELETE /api/providers/:id/key                   forgets the stored key or login, as /logout does: {providers}
+//
+//   POST /api/endpoints               {id?, name, baseUrl, key?, models}  adds an OpenAI-compatible endpoint, or
+//                                                   changes the one of id: {providers}
+//   DELETE /api/endpoints/:id                       removes it and its key: {providers}
+//   POST /api/endpoints/probe         {baseUrl, key?, id?}  {models}: the ids the server lists, asked with the key,
+//                                                   or else the stored key of endpoint id
 //
 //   GET  /api/sessions                              {sessions, defaultRoot}
 //   POST /api/sessions                {root?, model?}  a new session, working in root (default: defaultRoot), on
@@ -33,6 +41,7 @@ import type { Reply } from '@ji.dev/plugin-choices'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { Mode } from '../features/permissions.ts'
 import type { ServiceEvent } from './events.ts'
+import type { EndpointInput } from './providers.ts'
 import type { SessionHub, SessionSummary } from './sessions.ts'
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
@@ -40,7 +49,15 @@ import { models } from '@ji.dev/llm'
 import { DISMISSED } from '@ji.dev/plugin-choices'
 import { errorMessage } from '@ji.dev/utils'
 import { MODES } from '../features/permissions.ts'
-import { modelViews, providerViews } from './providers.ts'
+import {
+  dropEndpoint,
+  forgetKey,
+  keepEndpoint,
+  modelViews,
+  probeEndpoint,
+  providerViews,
+  storeKey,
+} from './providers.ts'
 import { SessionNotFoundError } from './sessions.ts'
 
 /** A comment line on an idle stream, so neither side takes the connection for dead. */
@@ -53,6 +70,8 @@ export interface AgentHttpOptions {
   hub: SessionHub
   /** Where a session is made when the client names no folder. */
   defaultRoot: string
+  /** Where the endpoints are kept, ~/.ji; without it, none can be added. */
+  auth?: string
 }
 
 export function createAgentHttpServer(options: AgentHttpOptions): Server {
@@ -67,7 +86,11 @@ export function createAgentHttpServer(options: AgentHttpOptions): Server {
   })
 }
 
-async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function route(
+  { hub, defaultRoot, auth }: AgentHttpOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://localhost')
   const method = req.method ?? 'GET'
   const noRoute = (): HttpError => new HttpError(404, `no route for ${method} ${url.pathname}`)
@@ -84,18 +107,49 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
     hub.setMode(mode)
     return sendJson(res, 200, { mode })
   }
-  if (collection === 'providers' && method === 'GET') {
-    if (id === undefined) {
-      return sendJson(res, 200, { providers: await providerViews() })
+  const providers = async (): Promise<void> => sendJson(res, 200, { providers: await providerViews(auth) })
+  if (collection === 'providers') {
+    if (id === undefined && method === 'GET') {
+      return providers()
     }
-    if (action !== 'models') {
-      throw noRoute()
-    }
-    const provider = decodeURIComponent(id)
+    const provider = decodeURIComponent(id ?? '')
     if (models.getProvider(provider) === undefined) {
       throw new HttpError(404, `no provider ${provider}`)
     }
-    return sendJson(res, 200, { models: modelViews(provider) })
+    if (action === 'models' && method === 'GET') {
+      return sendJson(res, 200, { models: modelViews(provider) })
+    }
+    if (action === 'key' && method === 'PUT') {
+      await storeKey(provider, (await RequestBody.read(req)).string('key'))
+      return providers()
+    }
+    if (action === 'key' && method === 'DELETE') {
+      await forgetKey(provider)
+      return providers()
+    }
+    throw noRoute()
+  }
+  if (collection === 'endpoints') {
+    if (auth === undefined) {
+      throw new HttpError(404, 'this service keeps no endpoints')
+    }
+    if (method === 'DELETE' && id !== undefined) {
+      await dropEndpoint(auth, decodeURIComponent(id))
+      return providers()
+    }
+    if (method !== 'POST') {
+      throw noRoute()
+    }
+    const body = await RequestBody.read(req)
+    if (id === 'probe') {
+      const found = await probeEndpoint(body.string('baseUrl'), body.optional('key'), body.optional('id'))
+      return sendJson(res, 200, { models: found })
+    }
+    if (id !== undefined) {
+      throw noRoute()
+    }
+    await keepEndpoint(auth, body.endpoint())
+    return providers()
   }
   if (collection !== 'sessions') {
     throw noRoute()
@@ -106,8 +160,7 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
       return sendJson(res, 200, { sessions: hub.list(), defaultRoot })
     }
     const body = await RequestBody.read(req)
-    const model = body.stringOr('model', '')
-    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot), model === '' ? undefined : model))
+    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot), body.optional('model')))
   }
 
   const sessionId = decodeURIComponent(id)
@@ -250,8 +303,31 @@ class RequestBody {
 
   /** The field when it is a string with something in it; `fallback` otherwise. */
   stringOr(name: string, fallback: string): string {
+    return this.optional(name) ?? fallback
+  }
+
+  /** The field when it is a string with something in it. */
+  optional(name: string): string | undefined {
     const value = this.fields[name]
-    return typeof value === 'string' && value !== '' ? value : fallback
+    return typeof value === 'string' && value !== '' ? value : undefined
+  }
+
+  endpoint(): EndpointInput {
+    const { models } = this.fields
+    if (!Array.isArray(models) || !models.every(m => isRecord(m) && typeof m.id === 'string')) {
+      throw new HttpError(400, '"models" must be a list of {id, contextWindow?, reasoning?}')
+    }
+    return {
+      id: this.optional('id'),
+      name: this.string('name'),
+      baseUrl: this.string('baseUrl'),
+      key: this.optional('key'),
+      models: models.map(m => ({
+        id: m.id as string,
+        contextWindow: typeof m.contextWindow === 'number' ? m.contextWindow : undefined,
+        reasoning: m.reasoning === true,
+      })),
+    }
   }
 
   mode(): Mode {

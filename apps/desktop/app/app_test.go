@@ -40,6 +40,13 @@ type fakeAgent struct {
 	live map[string]func(agent.Event)
 	// The models each session was switched to, in turn
 	models map[string][]string
+	// The providers as changed, testProviders until then; the keys stored,
+	// the endpoints kept and removed, and what the probe finds.
+	providers []agent.Provider
+	keys      map[string]string
+	endpoints []agent.Endpoint
+	removed   []string
+	probed    []string
 }
 
 func (f *fakeAgent) FollowSessions(context.Context, func(agent.Sessions), func(error)) {}
@@ -88,7 +95,62 @@ func (f *fakeAgent) UseModel(_ context.Context, id, model string) (agent.State, 
 	return agent.State{ID: id, Model: model, Mode: "ask"}, nil
 }
 func (f *fakeAgent) Providers(context.Context) ([]agent.Provider, error) {
-	return testProviders, nil
+	return f.listed(), nil
+}
+func (f *fakeAgent) listed() []agent.Provider {
+	if f.providers == nil {
+		f.providers = append([]agent.Provider{}, testProviders...)
+	}
+	return f.providers
+}
+func (f *fakeAgent) StoreKey(_ context.Context, provider, key string) ([]agent.Provider, error) {
+	if f.keys == nil {
+		f.keys = map[string]string{}
+	}
+	f.keys[provider] = key
+	for i, p := range f.listed() {
+		if p.ID == provider {
+			f.providers[i].Detected, f.providers[i].Stored, f.providers[i].Source = true, true, "stored credential"
+		}
+	}
+	return f.providers, nil
+}
+func (f *fakeAgent) ForgetKey(_ context.Context, provider string) ([]agent.Provider, error) {
+	f.removed = append(f.removed, provider)
+	for i, p := range f.listed() {
+		if p.ID == provider {
+			f.providers[i].Detected, f.providers[i].Stored, f.providers[i].Source = false, false, ""
+		}
+	}
+	return f.providers, nil
+}
+func (f *fakeAgent) KeepEndpoint(_ context.Context, e agent.Endpoint) ([]agent.Provider, error) {
+	f.endpoints = append(f.endpoints, e)
+	id := e.ID
+	if id == "" {
+		id = strings.ReplaceAll(strings.ToLower(e.Name), " ", "-")
+	}
+	kept := e
+	kept.Key = ""
+	f.providers = append(f.listed(), agent.Provider{ID: id, Name: e.Name, Detected: true, Source: "no key", APIKey: true, Models: len(e.Models), Endpoint: &kept})
+	return f.providers, nil
+}
+func (f *fakeAgent) RemoveEndpoint(_ context.Context, id string) ([]agent.Provider, error) {
+	f.removed = append(f.removed, id)
+	var left []agent.Provider
+	for _, p := range f.listed() {
+		if p.ID != id {
+			left = append(left, p)
+		}
+	}
+	f.providers = left
+	return left, nil
+}
+func (f *fakeAgent) ProbeEndpoint(_ context.Context, baseURL, _, _ string) ([]string, error) {
+	if f.probed == nil {
+		return nil, fmt.Errorf("could not reach %s/models: ECONNREFUSED", baseURL)
+	}
+	return f.probed, nil
 }
 func (f *fakeAgent) Models(_ context.Context, provider string) ([]agent.Model, error) {
 	return testModels[provider], nil
@@ -106,9 +168,9 @@ func (f *fakeAgent) Follow(_ context.Context, id string, _ int, fn func(agent.Ev
 
 // testProviders are the catalog's providers, two of them detected.
 var testProviders = []agent.Provider{
-	{ID: "deepseek", Name: "DeepSeek", Detected: true, Source: "DEEPSEEK_API_KEY", Login: true, Models: 2},
-	{ID: "groq", Name: "Groq", Detected: true, Source: "stored credential", Login: true, Models: 2},
-	{ID: "openai", Name: "OpenAI", Login: true, Models: 44},
+	{ID: "deepseek", Name: "DeepSeek", Detected: true, Source: "DEEPSEEK_API_KEY", Login: true, APIKey: true, Models: 2},
+	{ID: "groq", Name: "Groq", Detected: true, Source: "stored credential", Login: true, APIKey: true, Stored: true, Models: 2},
+	{ID: "openai", Name: "OpenAI", Login: true, APIKey: true, OAuth: true, Models: 44},
 	{ID: "amazon-bedrock", Name: "Amazon Bedrock", Models: 185},
 }
 
@@ -529,13 +591,16 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 // with the menu of commands open on what is typed, APPROVALS=yolo with
 // that mode chosen in the settings, USAGE=1 with the history 3/4 full and
 // what was spent open, COMPACT=1 with a compaction done and one running,
-// MODELS=1 with the picker of models open.
+// MODELS=1 with the picker of models open. In the settings, ENDPOINT=1
+// adds an endpoint to the providers, REMOVING=<id> asks to remove one,
+// and ADDING=list, key or endpoint opens the form there, PROBLEM=<text>
+// saying what went wrong in the endpoint's.
 func TestSnapshot(t *testing.T) {
 	out := os.Getenv("SNAPSHOT")
 	if out == "" {
 		t.Skip("SNAPSHOT is not set")
 	}
-	a, _ := testApp()
+	a, fake := testApp()
 	view := a.views["a"]
 	for _, e := range []agent.Event{
 		{Type: "state", State: &agent.State{ID: "a", Root: "/code/web", Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}, Replying: true, Tools: []string{"bash", "grep", "read", "edit", "ask_user"}, Commands: testCommands}},
@@ -595,6 +660,24 @@ func TestSnapshot(t *testing.T) {
 	if os.Getenv("SETTINGS") == "1" {
 		a.OpenSettings()
 		a.othersOpen = os.Getenv("OTHERS") == "1"
+		if os.Getenv("ENDPOINT") == "1" {
+			fake.providers = append(append([]agent.Provider{}, testProviders...), agent.Provider{
+				ID: "ollama", Name: "Ollama", Detected: true, Source: "no key", APIKey: true, Models: 3,
+				Endpoint: &agent.Endpoint{BaseURL: "http://localhost:11434/v1", Models: []agent.EndpointModel{{ID: "qwen2.5-coder:14b"}}},
+			})
+			a.loadProviders()
+		}
+		a.removing = os.Getenv("REMOVING")
+		switch os.Getenv("ADDING") {
+		case "list":
+			a.openProviderForm(&providerForm{})
+		case "key":
+			a.keyForm("openai")
+		case "endpoint":
+			a.openProviderForm(&providerForm{chosen: true, listed: true, name: "Ollama", baseURL: "http://localhost:11434/v1",
+				models: []string{"deepseek-r1:14b", "llama3.1:8b", "qwen2.5-coder:14b"}, kept: []bool{true, false, true},
+				problem: os.Getenv("PROBLEM")})
+		}
 	}
 	if os.Getenv("MODELS") == "1" {
 		view.models = modelPicker{open: true, provider: "deepseek"}

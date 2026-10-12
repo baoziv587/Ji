@@ -8,8 +8,11 @@ import type { ServiceEvent, ServiceState } from '../src/server/events.ts'
 import type { ModelView, ProviderView } from '../src/server/providers.ts'
 import type { SessionSummary } from '../src/server/sessions.ts'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { models, useCredentialStore } from '@ji.dev/llm'
+import { createFileCredentialStore } from '@ji.dev/plugin-auth'
 import { assistantMessage, createFakeModel, toolUse } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { createAgentHttpServer } from '../src/server/http.ts'
@@ -298,6 +301,110 @@ describe('models over HTTP', () => {
     expect(unknown.status).toBe(404)
   })
 
+  it('should store a typed key in place of the variable, and forget it again', async () => {
+    // Arrange
+    vi.stubEnv('MISTRAL_API_KEY', '')
+    onTestFinished(() => {
+      vi.unstubAllEnvs()
+    })
+    const auth = scratch()
+    useCredentialStore(createFileCredentialStore(join(auth, 'auth.json')))
+    const { url } = await serve([], scratch(), auth)
+
+    // Act
+    const stored = (await send(url, 'PUT', '/api/providers/mistral/key', { key: ' sk-mistral ' })) as Listed
+    const forgotten = (await send(url, 'DELETE', '/api/providers/mistral/key')) as Listed
+    const empty = await fetch(`${url}/api/providers/mistral/key`, { method: 'PUT', body: '{"key":""}' })
+
+    // Assert
+    expect(stored.providers.find(p => p.id === 'mistral')).toMatchObject({
+      detected: true,
+      source: 'stored credential',
+      apiKey: true,
+      stored: true,
+    })
+    expect(forgotten.providers.find(p => p.id === 'mistral')).toMatchObject({ detected: false, stored: false })
+    expect(empty.status).toBe(400)
+  })
+
+  it('should add an endpoint of the models its server lists, then change and remove it', async () => {
+    // Arrange
+    const auth = scratch()
+    useCredentialStore(createFileCredentialStore(join(auth, 'auth.json')))
+    const local = await modelServer(['qwen2.5-coder', 'llama3'])
+    const { url } = await serve([], scratch(), auth)
+    onTestFinished(() => models.deleteProvider('local-llm'))
+
+    // Act
+    const probed = await post(url, '/api/endpoints/probe', { baseUrl: local })
+    const added = (await post(url, '/api/endpoints', {
+      name: 'Local LLM',
+      baseUrl: `${local}/`,
+      models: [{ id: 'qwen2.5-coder' }],
+    })) as Listed
+    const listed = (await (await fetch(`${url}/api/providers/local-llm/models`)).json()) as { models: ModelView[] }
+    const again = await fetch(`${url}/api/endpoints`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'local llm', baseUrl: local, models: [{ id: 'llama3' }] }),
+    })
+    const changed = (await post(url, '/api/endpoints', {
+      id: 'local-llm',
+      name: 'Local LLM',
+      baseUrl: local,
+      key: 'sk-local',
+      models: [{ id: 'llama3', contextWindow: 8192, reasoning: true }],
+    })) as Listed
+    const removed = (await send(url, 'DELETE', '/api/endpoints/local-llm')) as Listed
+
+    // Assert
+    expect(probed).toEqual({ models: ['llama3', 'qwen2.5-coder'] })
+    expect(added.providers.find(p => p.id === 'local-llm')).toMatchObject({
+      name: 'Local LLM',
+      detected: true,
+      source: 'no key',
+      stored: false,
+      models: 1,
+      endpoint: { baseUrl: local, models: [{ id: 'qwen2.5-coder' }] },
+    })
+    expect(listed.models).toEqual([
+      { id: 'qwen2.5-coder', name: 'qwen2.5-coder', contextWindow: 256_000, reasoning: false },
+    ])
+    expect(again.status).toBe(400)
+    expect(changed.providers.find(p => p.id === 'local-llm')).toMatchObject({
+      source: 'stored credential',
+      stored: true,
+      endpoint: { models: [{ id: 'llama3', contextWindow: 8192, reasoning: true }] },
+    })
+    expect(readFileSync(join(auth, 'providers.json'), 'utf8')).not.toContain('sk-local')
+    expect(removed.providers.some(p => p.id === 'local-llm')).toBe(false)
+    expect(readFileSync(join(auth, 'auth.json'), 'utf8')).not.toContain('sk-local')
+  })
+
+  it('should say why an endpoint lists no models', async () => {
+    // Arrange
+    const locked = await modelServer(['llama3'], 'sk-right')
+    const { url } = await serve([], scratch(), scratch())
+
+    // Act
+    const refused = await fetch(`${url}/api/endpoints/probe`, {
+      method: 'POST',
+      body: JSON.stringify({ baseUrl: locked, key: 'sk-wrong' }),
+    })
+    const allowed = await post(url, '/api/endpoints/probe', { baseUrl: locked, key: 'sk-right' })
+    const nowhere = await fetch(`${url}/api/endpoints/probe`, {
+      method: 'POST',
+      body: JSON.stringify({ baseUrl: 'localhost:1234' }),
+    })
+
+    // Assert
+    expect(refused.status).toBe(400)
+    expect(await refused.json()).toEqual({ error: `${locked}/models refused the key (401)` })
+    expect(allowed).toEqual({ models: ['llama3'] })
+    expect(await nowhere.json()).toEqual({
+      error: '"localhost:1234" is not an address: it starts with http:// or https://',
+    })
+  })
+
   it('should switch a session to another model for its next reply, and open it on that model again', async () => {
     // Arrange
     const sessions = scratch()
@@ -467,7 +574,7 @@ async function serve(
   onTestFinished(() => fake.dispose())
   const store = new SessionStore(sessions)
   const hub = new SessionHub({ store, opener: new SessionOpener({ store, model: fake.model, thinking: 'off', auth }) })
-  const server = createAgentHttpServer({ hub, defaultRoot: root })
+  const server = createAgentHttpServer({ hub, defaultRoot: root, auth })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   onTestFinished(async () => {
     server.closeAllConnections()
@@ -568,6 +675,30 @@ async function modeOf(url: string, id: string): Promise<string> {
   const response = await fetch(`${url}/api/sessions/${id}/state`)
   const state = (await response.json()) as { mode: string }
   return state.mode
+}
+
+interface Listed {
+  providers: ProviderView[]
+}
+
+/** An OpenAI-compatible server that lists these models at /v1/models, to the key given if any; its base URL. */
+async function modelServer(ids: string[], key?: string): Promise<string> {
+  const server = createServer((req, res) => {
+    if (key !== undefined && req.headers.authorization !== `Bearer ${key}`) {
+      res.writeHead(401).end()
+      return
+    }
+    res.writeHead(req.url === '/v1/models' ? 200 : 404, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ object: 'list', data: ids.map(id => ({ id, object: 'model' })) }))
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  onTestFinished(() => new Promise<void>(resolve => server.close(() => resolve())))
+  return `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`
+}
+
+async function send(url: string, method: string, path: string, body?: unknown): Promise<unknown> {
+  const response = await fetch(`${url}${path}`, { method, body: body === undefined ? undefined : JSON.stringify(body) })
+  return response.json()
 }
 
 async function post(url: string, path: string, body: unknown): Promise<unknown> {
