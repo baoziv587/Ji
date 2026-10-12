@@ -1,19 +1,20 @@
-// What a session is opened with: the terminal's tools working in the session's folder, its own permissions, the
-// terminal's commands, /login and the skills' too, talking to the client, and the jsonl plugin writing every run event
+// What a session is opened with: the model it ran on last, the terminal's tools working in the session's folder, its
+// own permissions, the terminal's commands, /login and the skills' too, talking to the client, and the jsonl plugin writing every run event
 // to the session's log, which is what it is read back from next time.
 
 import type { Api, Model, ThinkingLevel } from '@ji.dev/llm'
-import type { Plugins } from '../agent/agent.ts'
+import type { Plugins, StartOptions } from '../agent/agent.ts'
 import type { Feature } from '../features/feature.ts'
 import type { Mode } from '../features/permissions.ts'
 import type { CommandClient } from './service.ts'
 import type { Opener } from './sessions.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
+import { findModel, nearestThinking } from '@ji.dev/llm'
 import { localWorkspace } from '@ji.dev/plugin-files'
 import { jsonl } from '@ji.dev/plugin-jsonl'
 import { createLocalExecutor } from '@ji.dev/plugin-shell'
 import { errorMessage } from '@ji.dev/utils'
-import { createPlugins, startAgent } from '../agent/agent.ts'
+import { createPlugins } from '../agent/agent.ts'
 import { createAuthFeature } from '../features/auth.ts'
 import { Permissions } from '../features/permissions.ts'
 import { createSkillsFeature } from '../features/skills.ts'
@@ -39,8 +40,9 @@ export class SessionOpener implements Opener {
   }
 
   /** Opens a session in a mode: what waits for a yes in it from the start. */
-  open({ id, root }: SessionMeta, mode: Mode): AgentService {
-    const { store, model, thinking } = this.options
+  open(meta: SessionMeta, mode: Mode): AgentService {
+    const { id, root } = meta
+    const { store } = this.options
     const workspace = localWorkspace(root, { allow: () => true })
     const plugins = createPlugins(workspace, createLocalExecutor({ cwd: root }))
     const permissions = new Permissions(workspace, plugins.files, plugins.shell, { mode })
@@ -50,9 +52,27 @@ export class SessionOpener implements Opener {
       root,
       permissions,
       features: client => this.featuresOf(id, plugins, permissions, client),
-      start: (asking, features) => startAgent({ root, model, thinking, features, asking }),
+      start: (asking, features) => ({ root, features, asking, ...this.modelOf(meta) }),
       history: historyOf(store.records(id)),
     })
+  }
+
+  /**
+   * The model the session ran on last, at the default's thinking or the nearest it takes; the default when it has none,
+   * or one the catalog no longer has.
+   */
+  private modelOf({ model: spec }: SessionMeta): Pick<StartOptions, 'model' | 'thinking'> {
+    const { model, thinking } = this.options
+    if (spec === undefined) {
+      return { model, thinking }
+    }
+
+    try {
+      const found = findModel(spec)
+      return { model: found, thinking: nearestThinking(found, thinking) }
+    } catch {
+      return { model, thinking }
+    }
   }
 
   /** As in the terminal, and the log written to the store. */

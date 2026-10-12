@@ -4,8 +4,13 @@
 //   GET  /api/events                                the list of sessions, at once and again whenever it changes
 //   POST /api/mode                    {mode}        every session's mode, those opened later included: ask, auto or
 //                                                   yolo
+//   GET  /api/providers                             {providers}: every provider of the catalog, the detected ones
+//                                                   (a key in the environment, or a login) marked as such
+//   GET  /api/providers/:id/models                  {models}: the provider's chat models
+//
 //   GET  /api/sessions                              {sessions, defaultRoot}
-//   POST /api/sessions                {root?}       a new session, working in root (default: defaultRoot)
+//   POST /api/sessions                {root?, model?}  a new session, working in root (default: defaultRoot), on
+//                                                   model, 'provider/id' (default: the service's --model)
 //   POST /api/sessions/:id/archive    {archived}    out of the list's way, or back
 //
 //   GET  /api/sessions/:id/state                    a session's state, as in its 'state' event
@@ -19,6 +24,8 @@
 //   POST /api/sessions/:id/mode       {mode?}       sets the session's mode; without one, switches between ask and
 //                                                   auto
 //   POST /api/sessions/:id/thinking   {level}
+//   POST /api/sessions/:id/model      {model}       'provider/id': the model of the next reply, and of the session
+//                                                   when it opens again; not while it replies
 //
 // An error is {error: message} with a 4xx status.
 
@@ -29,9 +36,11 @@ import type { ServiceEvent } from './events.ts'
 import type { SessionHub, SessionSummary } from './sessions.ts'
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
+import { models } from '@ji.dev/llm'
 import { DISMISSED } from '@ji.dev/plugin-choices'
 import { errorMessage } from '@ji.dev/utils'
 import { MODES } from '../features/permissions.ts'
+import { modelViews, providerViews } from './providers.ts'
 import { SessionNotFoundError } from './sessions.ts'
 
 /** A comment line on an idle stream, so neither side takes the connection for dead. */
@@ -75,6 +84,19 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
     hub.setMode(mode)
     return sendJson(res, 200, { mode })
   }
+  if (collection === 'providers' && method === 'GET') {
+    if (id === undefined) {
+      return sendJson(res, 200, { providers: await providerViews() })
+    }
+    if (action !== 'models') {
+      throw noRoute()
+    }
+    const provider = decodeURIComponent(id)
+    if (models.getProvider(provider) === undefined) {
+      throw new HttpError(404, `no provider ${provider}`)
+    }
+    return sendJson(res, 200, { models: modelViews(provider) })
+  }
   if (collection !== 'sessions') {
     throw noRoute()
   }
@@ -84,7 +106,8 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
       return sendJson(res, 200, { sessions: hub.list(), defaultRoot })
     }
     const body = await RequestBody.read(req)
-    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot)))
+    const model = body.stringOr('model', '')
+    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot), model === '' ? undefined : model))
   }
 
   const sessionId = decodeURIComponent(id)
@@ -132,6 +155,9 @@ async function route({ hub, defaultRoot }: AgentHttpOptions, req: IncomingMessag
       return sendJson(res, 200, service.state())
     case 'thinking':
       service.think(body.string('level'))
+      return sendJson(res, 200, service.state())
+    case 'model':
+      service.useModel(body.string('model'))
       return sendJson(res, 200, service.state())
     default:
       throw noRoute()

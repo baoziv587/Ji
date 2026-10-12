@@ -5,7 +5,7 @@ import type { Agent, AnyPlugin, Api, Model, Plugin, ThinkingLevel } from '@ji.de
 import type { FilesPlugin, Workspace } from '@ji.dev/plugin-files'
 import type { CommandExecutor, ShellPlugin } from '@ji.dev/plugin-shell'
 import type { Feature } from '../features/feature.ts'
-import { createAgent, findModel } from '@ji.dev/llm'
+import { createAgent, findModel, nearestThinking } from '@ji.dev/llm'
 import { createCompactionPlugin } from '@ji.dev/plugin-compaction'
 import { files } from '@ji.dev/plugin-files'
 import { createSearchPlugin, createShellPlugin } from '@ji.dev/plugin-shell'
@@ -57,6 +57,16 @@ export function startAgent({ root, model, thinking, features, asking }: StartOpt
     system: `You are a concise assistant running in a terminal. Use tools when they help. File paths are relative to ${root}.`,
     plugins: [...contextPlugins(limit), ...pluginList(features, asking)],
   })
+}
+
+/**
+ * The agent `options` started, on another model: what /model switches to. The thinking level stays, or goes to the
+ * nearest the model takes, and the history is compacted against the new model's context window. Throws
+ * UnknownModelError with the closest match.
+ */
+export function startOn(spec: string, options: StartOptions): Agent {
+  const model = findModel(spec)
+  return startAgent({ ...options, model, thinking: nearestThinking(model, options.thinking) })
 }
 
 /**

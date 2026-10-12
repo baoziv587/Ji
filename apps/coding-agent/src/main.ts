@@ -1,5 +1,6 @@
 import type { Agent, ThinkingLevel } from '@ji.dev/llm'
 import type { Element } from '@ji.dev/tui'
+import type { StartOptions } from './agent/agent.ts'
 import type { Feature } from './features/feature.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -11,7 +12,7 @@ import { choices } from '@ji.dev/plugin-choices'
 import { localWorkspace } from '@ji.dev/plugin-files'
 import { createLocalExecutor } from '@ji.dev/plugin-shell'
 import { abbreviateHomePath, dimText, formatKeyHint, Screen, Status } from '@ji.dev/tui'
-import { contextLimitOf, createPlugins, startAgent, toolNamesOf } from './agent/agent.ts'
+import { contextLimitOf, createPlugins, startAgent, startOn, toolNamesOf } from './agent/agent.ts'
 import { Conversation } from './agent/conversation.ts'
 import { createAuthFeature } from './features/auth.ts'
 import { Permissions } from './features/permissions.ts'
@@ -91,6 +92,18 @@ const features: Feature[] = [
  */
 const asking = choices({ answer: answering.answer, approve: features.flatMap(f => f.approve ?? []) })
 
+/**
+ * The model comes from --model, or DEEPSEEK_MODEL, and the level from DEEPSEEK_THINKING; /model switches to another,
+ * the rest as it is.
+ */
+const started: StartOptions = {
+  root: ROOT,
+  model: ARGS.model ?? `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-flash'}`,
+  thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
+  features,
+  asking,
+}
+
 const conversation = new Conversation(startAgentOrQuit())
 
 const TOOLS = toolNamesOf(features, asking)
@@ -103,6 +116,7 @@ const commands = createCommandMenu({
   send: message => input.send(message),
   quit,
   extra: () => features.flatMap(f => f.commands ?? []),
+  startOn: spec => startOn(spec, { ...started, thinking: conversation.agent.thinking }),
 })
 
 /** The input line and its keys; a reply shows on the stage, the conversation's part of the screen. */
@@ -150,19 +164,10 @@ function buildView(): Element {
 
 // Starting and quitting
 
-/**
- * The model comes from --model, or DEEPSEEK_MODEL, and the level from DEEPSEEK_THINKING. A typo in either stops the
- * coding agent before the first prompt, with the choices listed.
- */
+/** A typo in the model or the level stops the coding agent before the first prompt, with the choices listed. */
 function startAgentOrQuit(): Agent {
   try {
-    return startAgent({
-      root: ROOT,
-      model: ARGS.model ?? `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-flash'}`,
-      thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
-      features,
-      asking,
-    })
+    return startAgent(started)
   } catch (error) {
     if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
       cancel(error.message)

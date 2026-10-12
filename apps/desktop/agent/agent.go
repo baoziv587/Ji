@@ -108,6 +108,30 @@ func (h *HelpSection) UnmarshalJSON(b []byte) error {
 	return json.Unmarshal(raw.Rows, &h.Rows)
 }
 
+// Provider is one of the catalog's providers, and whether a model of it
+// can be used now.
+type Provider struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// It has a key now: in the environment, kept by /login, or a sign-in.
+	Detected bool `json:"detected"`
+	// Where the key comes from, as DEEPSEEK_API_KEY or "stored credential";
+	// none when not detected.
+	Source string `json:"source,omitempty"`
+	// Whether /login signs in to it.
+	Login bool `json:"login"`
+	// How many chat models it offers.
+	Models int `json:"models"`
+}
+
+// Model is one of a provider's chat models.
+type Model struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	ContextWindow int    `json:"contextWindow"`
+	Reasoning     bool   `json:"reasoning"`
+}
+
 // Option is one answer a question offers.
 type Option struct {
 	Value string `json:"value"`
@@ -181,9 +205,9 @@ type Agent interface {
 	// until ctx ends, connecting again after a drop; status reports each
 	// connection and drop.
 	FollowSessions(ctx context.Context, fn func(Sessions), status func(error))
-	// CreateSession starts a session in root; the service's default folder
-	// when root is empty.
-	CreateSession(ctx context.Context, root string) (Session, error)
+	// CreateSession starts a session in root, on model, "provider/id"; the
+	// service's default folder and model for those left empty.
+	CreateSession(ctx context.Context, root, model string) (Session, error)
 	Archive(ctx context.Context, id string, archived bool) (Session, error)
 
 	State(ctx context.Context, id string) (State, error)
@@ -202,6 +226,13 @@ type Agent interface {
 	// SetModes sets every session's mode, those started later included.
 	SetModes(ctx context.Context, mode string) error
 	Think(ctx context.Context, id, level string) (State, error)
+	// UseModel switches a session to a model, "provider/id", for its next
+	// reply; refused while it replies.
+	UseModel(ctx context.Context, id, model string) (State, error)
+	// Providers is every provider of the catalog, the detected ones marked.
+	Providers(ctx context.Context) ([]Provider, error)
+	// Models is a provider's chat models.
+	Models(ctx context.Context, provider string) ([]Model, error)
 	// Follow calls fn with every event of the session after seq, in order,
 	// until ctx ends, connecting again after a drop.
 	Follow(ctx context.Context, id string, after int, fn func(Event))

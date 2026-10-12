@@ -1,6 +1,7 @@
 // The coding agent's commands in the terminal (agent/commands.ts): what they say goes to the log, /help with the
 // terminal's keys, and the menu of them opens as a `/` is typed.
 
+import type { Agent } from '@ji.dev/llm'
 import type { Command } from '../agent/commands.ts'
 import type { Conversation } from '../agent/conversation.ts'
 import { log } from '@clack/prompts'
@@ -19,6 +20,8 @@ export interface CommandContext {
   quit: () => void
   /** The features' commands, after the built-in ones; read every time, as they can change. */
   extra?: () => Command[]
+  /** The agent on another model, for /model. */
+  startOn?: (spec: string) => Agent
 }
 
 export function createCommandMenu(context: CommandContext): CommandMenu {
