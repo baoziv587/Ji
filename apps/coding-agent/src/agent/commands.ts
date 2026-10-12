@@ -1,11 +1,13 @@
 // The coding agent's commands, the same wherever it runs: in the terminal (ui/commands.ts) and in a session of the
-// service (server/service.ts). /think switches the thinking level, /fast the priority tier of OpenAI's models, /compact
+// service (server/service.ts). /model switches the model, /think the thinking level, /fast the priority tier of OpenAI's models, /compact
 // summarizes the conversation so far, /help lists the commands, the keys by when they work, the mode and the tools,
 // /exit quits; the features add theirs after them. What a command has to say goes through `say`: the log in the
 // terminal, events for the service's client.
 
+import type { Agent } from '@ji.dev/llm'
 import type { Conversation } from './conversation.ts'
 import { COMPACT_COMMAND } from '@ji.dev/plugin-compaction'
+import { errorMessage } from '@ji.dev/utils'
 import { supportsFastMode } from './fast.ts'
 
 export interface Command {
@@ -51,14 +53,28 @@ export interface CommandOptions {
   keys?: HelpSection[]
   /** The features' commands, after the built-in ones; read every time, as they can change. */
   extra?: () => Command[]
+  /** The agent on another model, 'provider/id' (agent.ts' startOn); without it, no /model. */
+  startOn?: (spec: string) => Agent
 }
 
 /** The commands, built-in ones first; read every time, as the features' can change. */
 export function createCommands(options: CommandOptions): () => Command[] {
-  const { conversation, tools, mode, send, quit, say, help, keys = [], extra = () => [] } = options
+  const { conversation, tools, mode, send, quit, say, help, keys = [], extra = () => [], startOn } = options
   const levels = (): string[] => [...conversation.agent.model.thinkingLevels]
+  const switching: Command[] =
+    startOn === undefined
+      ? []
+      : [
+          {
+            name: '/model',
+            arg: '<provider/id>',
+            hint: 'switches the model',
+            run: arg => switchModel(conversation, arg.trim(), startOn, say),
+          },
+        ]
 
   const commands = (): Command[] => [
+    ...switching,
     {
       name: '/think',
       arg: `<${levels().join('|')}>`,
@@ -115,6 +131,25 @@ export function runCommand(commands: readonly Command[], line: string, warn: (te
 
   command.run(arg)
   return 'ran'
+}
+
+/** The model given; without one, the model now. An unknown one is told with the closest match. */
+function switchModel(conversation: Conversation, spec: string, startOn: (spec: string) => Agent, say: Say): void {
+  const { model } = conversation.agent
+  if (spec === '') {
+    say.info(`Model: ${model.provider}/${model.id}. Change it with /model <provider/id>.`)
+    return
+  }
+
+  try {
+    conversation.use(startOn(spec))
+  } catch (error) {
+    say.error(errorMessage(error))
+    return
+  }
+
+  const { model: now, thinking } = conversation.agent
+  say.success(`Model: ${now.provider}/${now.id}, thinking ${thinking}`)
 }
 
 /** The level given; without one, or an unknown one, the level now and the choices. */

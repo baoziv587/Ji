@@ -1,6 +1,7 @@
 // The sessions on disk, two files each in one folder (~/.ji/sessions by default):
 //
-//   <id>.json    what the list shows: the folder it works in, its title, when it was made and last used, archived
+//   <id>.json    what the list shows: the folder it works in, its title, when it was made and last used, archived,
+//                and the model it runs on
 //   <id>.jsonl   its log, one run event a line, as @ji.dev/plugin-jsonl writes it: what it is read back from
 //
 // Nothing is ever deleted: an archived session keeps both files.
@@ -32,6 +33,8 @@ export interface SessionMeta {
   created: number
   updated: number
   archived: boolean
+  /** 'provider/id' it runs on, switched to or the default when it opened: it opens on it again. */
+  model?: string
 }
 
 export class SessionStore {
@@ -57,9 +60,9 @@ export class SessionStore {
       })
   }
 
-  create(root: string): SessionMeta {
+  create(root: string, model?: string): SessionMeta {
     const now = Date.now()
-    const meta: SessionMeta = { id: randomUUID(), root, title: '', created: now, updated: now, archived: false }
+    const meta: SessionMeta = { id: randomUUID(), root, title: '', created: now, updated: now, archived: false, model }
     this.save(meta)
     return meta
   }

@@ -1,15 +1,17 @@
 package app
 
 // The settings, in place of the session: how the window looks, light or
-// dark and in which colors, and what waits for a yes in the sessions. A
-// choice shows at once and is kept.
+// dark and in which colors, what waits for a yes in the sessions, and the
+// providers whose models they can pick. A choice shows at once and is kept.
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/egoist/mygo/ui"
 
+	"desktop/agent"
 	"desktop/ui/components"
 	"desktop/ui/icons"
 )
@@ -24,6 +26,9 @@ type Settings struct {
 	// Approvals is every session's mode: ask, auto or yolo. Unset, each
 	// starts in the service's own.
 	Approvals string `json:"approvals,omitempty"`
+	// Model is what a new session starts on, "provider/id". Unset, the
+	// service's own, its --model.
+	Model string `json:"model,omitempty"`
 }
 
 // DefaultSettings are the settings of a first run, under those kept.
@@ -46,7 +51,10 @@ var approvals = []struct{ mode, note string }{
 	{"yolo", "Nothing waits for a yes."},
 }
 
-func (a *App) OpenSettings() { a.settingsOpen = true }
+func (a *App) OpenSettings() {
+	a.settingsOpen = true
+	a.loadProviders()
+}
 
 // saveSettings hands the settings on to be kept when they have changed.
 func (a *App) saveSettings() {
@@ -98,6 +106,7 @@ func (a *App) settings(c *ui.Context) {
 				ui.Column(c).Grow(1).MaxWidth(636).Gap(56).Children(func() {
 					ui.Column(c).Gap(24).Children(func() { a.appearance(c) })
 					ui.Column(c).Gap(16).Children(func() { a.approvals(c) })
+					ui.Column(c).Gap(16).Children(func() { a.providers(c) })
 				})
 			})
 		})
@@ -340,4 +349,179 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 			}
 		})
 	})
+}
+
+// providers is the catalog's providers: those detected, with where their
+// key comes from, then the others, folded, each with a way to log in where
+// there is one.
+func (a *App) providers(c *ui.Context) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+
+	var detected, others []agent.Provider
+	for _, provider := range a.catalog.providers {
+		if provider.Detected {
+			detected = append(detected, provider)
+		} else {
+			others = append(others, provider)
+		}
+	}
+
+	ui.Row(c).Gap(12).AlignItems(ui.Start).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(4).Children(func() {
+			ui.Text(c, "Providers").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
+			ui.Text(c, "Detected from their API key variables and what /login kept. A session picks its model among theirs, in its title bar.").
+				TextColor(p.MutedForeground)
+		})
+		if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.RefreshCw}).
+			Label("Check providers again").Tooltip("Check again").Clicked() {
+			a.loadProviders()
+		}
+	})
+
+	if a.catalog.problem != "" {
+		ui.Text(c, a.catalog.problem).TextColor(p.Destructive).Selectable()
+	}
+	if !a.catalog.listed {
+		if a.catalog.problem == "" {
+			ui.Text(c, "Reading the providers…").TextColor(p.MutedForeground)
+		}
+		return
+	}
+
+	a.defaultModel(c)
+
+	if len(detected) == 0 {
+		ui.Row(c).Padding(12, 16).Radius(t.Radius+2).Border(1, p.Border).Children(func() {
+			ui.Text(c, "None has a key yet: set one's API key variable before starting Ji Agent, or log in to one below.").
+				TextColor(p.MutedForeground).Shrink(1)
+		})
+	} else {
+		providerRows(c, detected, func(provider agent.Provider) {
+			figures(c, modelCount(provider.Models), p.MutedForeground)
+			components.Tag(c, provider.Source, p.Success).Tooltip("Where its key comes from")
+		})
+	}
+
+	if len(others) == 0 {
+		return
+	}
+	_, _, inSession := a.current()
+	components.Disclosure(c, fmt.Sprintf("Not detected (%d)", len(others)), ui.Color{}, &a.othersOpen, func() {
+		providerRows(c, others, func(provider agent.Provider) {
+			if !provider.Login {
+				ui.Text(c, "Set up in the environment").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine()
+				return
+			}
+			login := components.Button(c, "Log in", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall, Disabled: !inSession}).
+				Label("Log in to " + provider.Name)
+			tip := "/login " + provider.ID + " in the session shown"
+			if !inSession {
+				tip = "Open a session first: /login asks its questions there"
+			}
+			login.Tooltip(tip)
+			if login.Clicked() {
+				a.loginTo(provider.ID)
+			}
+		})
+	})
+}
+
+// defaultModel is the model new sessions start on, as the appearance's
+// rows are laid out: what it is to the left, the picker of models and a
+// way back to the service's own to the right.
+func (a *App) defaultModel(c *ui.Context) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	model := a.Settings.Model
+
+	ui.Row(c).Gap(16).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, "Default model").FontWeight(500)
+			note := "New sessions start on it; each can switch in its title bar."
+			if model == "" {
+				note = "None chosen: new sessions start on the service's own, its --model."
+			}
+			ui.Text(c, note).TextColor(p.MutedForeground)
+			if provider, ok := a.provider(providerOf(model)); ok && !provider.Detected {
+				ui.Text(c, provider.Name+" has no key now: its sessions cannot reply until it has one.").TextColor(p.Warning)
+			}
+		})
+
+		ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
+			if model != "" && components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.X}).
+				Label("Use the service's model").Tooltip("Back to the service's own").Clicked() {
+				a.Settings.Model = ""
+			}
+
+			trigger := ui.ButtonBase(c).Height(32).MaxWidth(280).Padding(0, 8, 0, 12).Gap(6).Radius(t.Radius).AlignItems(ui.Center).
+				Border(1, p.Input).FocusRing(false).Transition(components.ColorTransition).Label("Choose the default model")
+			if trigger.Hovered() || a.defaults.open {
+				trigger.Background(p.Accent)
+			}
+			components.FocusRing(trigger, p, 0)
+			trigger.Children(func() {
+				shown, color := model, p.Foreground
+				if model == "" {
+					shown, color = "Service default", p.MutedForeground
+				}
+				ui.Text(c, shown).TextColor(color).SingleLine().Shrink(1)
+				ui.Icon(c, icons.ChevronDown).FontSize(14).TextColor(p.MutedForeground).Shrink(0)
+			})
+			if trigger.Clicked() {
+				a.toggleModels(&a.defaults, model)
+			}
+			a.modelMenu(c, trigger, &a.defaults, model, false, func(spec string) { a.Settings.Model = spec })
+		})
+	})
+}
+
+// provider is the provider of the catalog with this id.
+func (a *App) provider(id string) (agent.Provider, bool) {
+	for _, p := range a.catalog.providers {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return agent.Provider{}, false
+}
+
+// providerRows is providers in one bordered list, a row each: its name and
+// id, then what trail adds.
+func providerRows(c *ui.Context, providers []agent.Provider, trail func(agent.Provider)) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	ui.Column(c).Radius(t.Radius+2).Border(1, p.Border).Clip().Children(func() {
+		for i, provider := range providers {
+			row := ui.Row(c.Key(provider.ID)).Height(48).Padding(0, 16).Gap(12).AlignItems(ui.Center)
+			if i > 0 {
+				row.BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
+			}
+			row.Children(func() {
+				ui.Row(c).Grow(1).Shrink(1).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, provider.Name).FontWeight(500).SingleLine().Shrink(0)
+					ui.Text(c, provider.ID).Font("monospace").FontSize(components.TextCode(t)).TextColor(p.MutedForeground).SingleLine().Shrink(1)
+				})
+				trail(provider)
+			})
+		}
+	})
+}
+
+// loginTo runs /login in the session shown, whose questions ask how and
+// for the key, and shows it.
+func (a *App) loginTo(provider string) {
+	_, view, ok := a.current()
+	if !ok {
+		return
+	}
+	a.settingsOpen = false
+	a.command(view, "/login "+provider)
+}
+
+func modelCount(n int) string {
+	if n == 1 {
+		return "1 model"
+	}
+	return fmt.Sprintf("%d models", n)
 }

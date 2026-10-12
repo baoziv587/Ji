@@ -1,7 +1,8 @@
 // findModel / listModels: resolving 'provider/id' against pi-ai's catalog, and errors a model picker can use.
 import fc from 'fast-check'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { findModel, listModels, UnknownModelError } from '../src/models.ts'
+import { findModel, listModels, nearestThinking, UnknownModelError } from '../src/models.ts'
+import { listProviders } from '../src/providers.ts'
 
 afterEach(() => {
   vi.unstubAllEnvs()
@@ -146,6 +147,50 @@ describe('listModels', () => {
     // Assert
     expect(before).toBe(false)
     expect(await model.hasKey()).toBe(true)
+  })
+})
+
+describe('nearestThinking', () => {
+  it('should keep a level the model takes, and go to the nearest it takes otherwise', () => {
+    // Arrange
+    const model = findModel('deepseek/deepseek-flash')
+
+    // Act
+    const kept = nearestThinking(model, 'high')
+    const moved = nearestThinking(model, 'medium')
+
+    // Assert
+    expect(kept).toBe('high')
+    expect(model.thinkingLevels).toContain(moved)
+  })
+
+  it('should always give a level the model takes', () => {
+    const levels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+    fc.assert(
+      fc.property(fc.constantFrom(...listModels()), fc.constantFrom(...levels), (model, level) => {
+        expect(model.thinkingLevels).toContain(nearestThinking(model, level))
+      }),
+    )
+  })
+})
+
+describe('listProviders', () => {
+  it('should list every provider, those with a key telling where it comes from', async () => {
+    // Arrange
+    vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test')
+    vi.stubEnv('MISTRAL_API_KEY', '')
+
+    // Act
+    const providers = await listProviders()
+
+    // Assert
+    expect(providers.find(p => p.id === 'deepseek')).toEqual({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      auth: { type: 'api_key', source: 'DEEPSEEK_API_KEY' },
+      models: listModels('deepseek').length,
+    })
+    expect(providers.find(p => p.id === 'mistral')?.auth).toBeUndefined()
   })
 })
 

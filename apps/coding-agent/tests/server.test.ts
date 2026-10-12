@@ -4,7 +4,8 @@
 import type { AssistantMessage } from '@ji.dev/llm'
 import type { FakeReply } from '@ji.dev/testing'
 import type { AddressInfo } from 'node:net'
-import type { ServiceEvent } from '../src/server/events.ts'
+import type { ServiceEvent, ServiceState } from '../src/server/events.ts'
+import type { ModelView, ProviderView } from '../src/server/providers.ts'
 import type { SessionSummary } from '../src/server/sessions.ts'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -261,6 +262,132 @@ describe('agent HTTP service', () => {
   })
 })
 
+describe('models over HTTP', () => {
+  it('should list every provider, the detected ones marked with where their key comes from', async () => {
+    // Arrange
+    vi.stubEnv('DEEPSEEK_API_KEY', 'sk-test')
+    vi.stubEnv('MISTRAL_API_KEY', '')
+    onTestFinished(() => {
+      vi.unstubAllEnvs()
+    })
+    const { url } = await serve([])
+
+    // Act
+    const { providers } = (await (await fetch(`${url}/api/providers`)).json()) as { providers: ProviderView[] }
+    const deepseek = providers.find(p => p.id === 'deepseek')
+    const mistral = providers.find(p => p.id === 'mistral')
+
+    // Assert
+    expect(deepseek).toMatchObject({ name: 'DeepSeek', detected: true, source: 'DEEPSEEK_API_KEY', login: true })
+    expect(mistral).toMatchObject({ detected: false, login: true })
+    expect(mistral?.source).toBeUndefined()
+    expect(deepseek?.models).toBeGreaterThan(0)
+  })
+
+  it("should list a provider's models, and none of a provider the catalog lacks", async () => {
+    // Arrange
+    const { url } = await serve([])
+
+    // Act
+    const listed = (await (await fetch(`${url}/api/providers/deepseek/models`)).json()) as { models: ModelView[] }
+    const unknown = await fetch(`${url}/api/providers/nope/models`)
+
+    // Assert
+    expect(listed.models.map(m => m.id)).toContain('deepseek-flash')
+    expect(listed.models[0]).toMatchObject({ name: expect.any(String), contextWindow: expect.any(Number) })
+    expect(unknown.status).toBe(404)
+  })
+
+  it('should switch a session to another model for its next reply, and open it on that model again', async () => {
+    // Arrange
+    const sessions = scratch()
+    const other = createFakeModel([assistantMessage('from the other model')])
+    onTestFinished(() => other.dispose())
+    const spec = `${other.model.provider}/${other.model.id}`
+    const before = await serve([assistantMessage('from the first model')], sessions)
+    const { id } = await create(before.url)
+    const events = await subscribe(`${before.url}/api/sessions/${id}/events`)
+
+    // Act
+    const switched = (await post(before.url, `/api/sessions/${id}/model`, { model: spec })) as ServiceState
+    await post(before.url, `/api/sessions/${id}/messages`, { text: 'hello' })
+    await events.until(e => e.type === 'reply_end')
+    const after = await serve([], sessions)
+    const reopened = (await (await fetch(`${after.url}/api/sessions/${id}/state`)).json()) as ServiceState
+
+    // Assert
+    expect(switched).toMatchObject({ model: spec, thinking: 'off' })
+    expect(texts(events.seen)).toBe('from the other model')
+    expect(reopened.model).toBe(spec)
+  })
+
+  it('should start a session on the model it is created with, and refuse one the catalog lacks', async () => {
+    // Arrange
+    const other = createFakeModel([])
+    onTestFinished(() => other.dispose())
+    const spec = `${other.model.provider}/${other.model.id}`
+    const { url } = await serve([])
+
+    // Act
+    const { id } = (await post(url, '/api/sessions', { model: spec })) as SessionSummary
+    const state = (await (await fetch(`${url}/api/sessions/${id}/state`)).json()) as ServiceState
+    const unknown = await fetch(`${url}/api/sessions`, {
+      method: 'POST',
+      body: JSON.stringify({ model: 'nope/nothing' }),
+    })
+
+    // Assert
+    expect(state.model).toBe(spec)
+    expect(unknown.status).toBe(400)
+    expect(((await unknown.json()) as { error: string }).error).toContain('Unknown provider "nope"')
+  })
+
+  it('should refuse a model the catalog lacks, and a switch while the session replies', async () => {
+    // Arrange
+    const { url } = await serve([assistantMessage([toolUse('bash', { command: 'echo hi' })])])
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+
+    // Act
+    const unknown = await fetch(`${url}/api/sessions/${id}/model`, {
+      method: 'POST',
+      body: JSON.stringify({ model: 'deepseek/deepseek-flsh' }),
+    })
+    await post(url, `/api/sessions/${id}/messages`, { text: 'run it' })
+    await events.until(e => e.type === 'ask')
+    const replying = await fetch(`${url}/api/sessions/${id}/model`, {
+      method: 'POST',
+      body: JSON.stringify({ model: 'deepseek/deepseek-flash' }),
+    })
+
+    // Assert
+    expect(unknown.status).toBe(400)
+    expect(((await unknown.json()) as { error: string }).error).toContain('Did you mean "deepseek/deepseek-flash"?')
+    expect(replying.status).toBe(400)
+    expect(await replying.json()).toEqual({ error: 'Stop the reply before switching models.' })
+  })
+
+  it('should switch the model with /model, and say which it is without one', async () => {
+    // Arrange
+    const other = createFakeModel([])
+    onTestFinished(() => other.dispose())
+    const spec = `${other.model.provider}/${other.model.id}`
+    const { url } = await serve([])
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+
+    // Act
+    await post(url, `/api/sessions/${id}/commands`, { line: `/model ${spec}` })
+    const switched = await events.until(e => e.type === 'notice')
+    await post(url, `/api/sessions/${id}/commands`, { line: '/model' })
+    const told = await events.until(e => e.type === 'notice')
+
+    // Assert
+    expect(switched).toMatchObject({ level: 'success', text: `Model: ${spec}, thinking off` })
+    expect(told).toMatchObject({ level: 'info', text: expect.stringContaining(`Model: ${spec}.`) })
+  })
+})
+
 /** A service on a folder of sessions, a new one by default, whose sessions work in a new folder of their own. */
 describe('commands over HTTP', () => {
   it('should list the commands and run one, telling the client what it said', async () => {
@@ -281,8 +408,8 @@ describe('commands over HTTP', () => {
     // Assert
     expect(ran).toEqual({ result: 'ran' })
     const commands = first.type === 'state' ? first.state.commands : []
-    expect(commands.map(c => c.name)).toEqual(['/think', '/fast', '/compact', '/help', '/exit'])
-    expect(commands[0]).toMatchObject({ arg: '<off>', choices: ['off'] })
+    expect(commands.map(c => c.name)).toEqual(['/model', '/think', '/fast', '/compact', '/help', '/exit'])
+    expect(commands[1]).toMatchObject({ arg: '<off>', choices: ['off'] })
     expect(notice).toMatchObject({ level: 'info', text: expect.stringContaining('Fast mode is for openai') })
     expect(unknown).toMatchObject({ level: 'warn', text: 'No such command: /nope. /help lists them.' })
     expect(help.type === 'help' && help.sections.map(s => s.title)).toEqual(['Commands', 'Mode', 'Tools (5)'])

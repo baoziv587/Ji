@@ -3,7 +3,7 @@
 
 import type { Agent, AgentState, Run, Session, ThinkingLevel } from '@ji.dev/llm'
 import { createSession, RunError } from '@ji.dev/llm'
-import { requestFastTier } from './fast.ts'
+import { requestFastTier, supportsFastMode } from './fast.ts'
 
 /** How a reply that did not finish ended, for the person to pick up from. */
 export interface Unfinished {
@@ -92,6 +92,20 @@ export class Conversation {
   useFastMode(on: boolean): void {
     this.fastMode = on
     this.current = this.current.with({ onPayload: on ? requestFastTier : undefined })
+    this.session.use(this.current)
+  }
+
+  /**
+   * Same conversation, another agent: one on another model, say. Fast mode stays on where the new model has the tier.
+   * Throws while a reply is in progress: its steps so far went to the model it started with.
+   */
+  use(agent: Agent): void {
+    if (this.reply !== undefined) {
+      throw new Error('Stop the reply before switching models.')
+    }
+
+    this.fastMode &&= supportsFastMode(agent.model)
+    this.current = this.fastMode ? agent.with({ onPayload: requestFastTier }) : agent
     this.session.use(this.current)
   }
 

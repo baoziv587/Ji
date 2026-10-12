@@ -26,21 +26,26 @@ type fakeAgent struct {
 	events   map[string][]agent.Event
 	followed []string
 	created  []string
-	sent     map[string][]string
-	commands map[string][]string
-	answers  map[string][][]string
-	archived []string
-	stopped  []string
-	modes    int
+	// The model each session was created on, in turn
+	createdOn []string
+	sent      map[string][]string
+	commands  map[string][]string
+	answers   map[string][][]string
+	archived  []string
+	stopped   []string
+	modes     int
 	// What every session was set to, in turn
 	everyMode []string
 	// Where each session followed takes its events after those played back
 	live map[string]func(agent.Event)
+	// The models each session was switched to, in turn
+	models map[string][]string
 }
 
 func (f *fakeAgent) FollowSessions(context.Context, func(agent.Sessions), func(error)) {}
-func (f *fakeAgent) CreateSession(_ context.Context, root string) (agent.Session, error) {
+func (f *fakeAgent) CreateSession(_ context.Context, root, model string) (agent.Session, error) {
 	f.created = append(f.created, root)
+	f.createdOn = append(f.createdOn, model)
 	return agent.Session{ID: "new", Root: root, Updated: time.Now().UnixMilli()}, nil
 }
 func (f *fakeAgent) Archive(_ context.Context, id string, archived bool) (agent.Session, error) {
@@ -75,6 +80,19 @@ func (f *fakeAgent) SetModes(_ context.Context, mode string) error {
 func (f *fakeAgent) Think(_ context.Context, id, _ string) (agent.State, error) {
 	return agent.State{ID: id}, nil
 }
+func (f *fakeAgent) UseModel(_ context.Context, id, model string) (agent.State, error) {
+	if f.models == nil {
+		f.models = map[string][]string{}
+	}
+	f.models[id] = append(f.models[id], model)
+	return agent.State{ID: id, Model: model, Mode: "ask"}, nil
+}
+func (f *fakeAgent) Providers(context.Context) ([]agent.Provider, error) {
+	return testProviders, nil
+}
+func (f *fakeAgent) Models(_ context.Context, provider string) ([]agent.Model, error) {
+	return testModels[provider], nil
+}
 func (f *fakeAgent) Follow(_ context.Context, id string, _ int, fn func(agent.Event)) {
 	f.followed = append(f.followed, id)
 	for _, e := range f.events[id] {
@@ -84,6 +102,19 @@ func (f *fakeAgent) Follow(_ context.Context, id string, _ int, fn func(agent.Ev
 		f.live = map[string]func(agent.Event){}
 	}
 	f.live[id] = fn
+}
+
+// testProviders are the catalog's providers, two of them detected.
+var testProviders = []agent.Provider{
+	{ID: "deepseek", Name: "DeepSeek", Detected: true, Source: "DEEPSEEK_API_KEY", Login: true, Models: 2},
+	{ID: "groq", Name: "Groq", Detected: true, Source: "stored credential", Login: true, Models: 2},
+	{ID: "openai", Name: "OpenAI", Login: true, Models: 44},
+	{ID: "amazon-bedrock", Name: "Amazon Bedrock", Models: 185},
+}
+
+var testModels = map[string][]agent.Model{
+	"deepseek": {{ID: "deepseek-flash", Name: "DeepSeek Flash", ContextWindow: 128000}, {ID: "deepseek-v4-pro", Name: "DeepSeek V4 Pro", ContextWindow: 128000, Reasoning: true}},
+	"groq":     {{ID: "llama-4-scout", Name: "Llama 4 Scout", ContextWindow: 131072}, {ID: "qwen3-32b", Name: "Qwen3 32B", ContextWindow: 131072}},
 }
 
 // testCommands are the service's commands, as a session lists them.
@@ -497,7 +528,8 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 // DARK=1 for the dark theme, TOAST=1 once the session is archived, MENU=/th
 // with the menu of commands open on what is typed, APPROVALS=yolo with
 // that mode chosen in the settings, USAGE=1 with the history 3/4 full and
-// what was spent open, COMPACT=1 with a compaction done and one running.
+// what was spent open, COMPACT=1 with a compaction done and one running,
+// MODELS=1 with the picker of models open.
 func TestSnapshot(t *testing.T) {
 	out := os.Getenv("SNAPSHOT")
 	if out == "" {
@@ -556,11 +588,18 @@ func TestSnapshot(t *testing.T) {
 	}
 	a.Settings.Theme = os.Getenv("THEME")
 	a.Settings.Approvals = os.Getenv("APPROVALS")
+	a.Settings.Model = os.Getenv("DEFAULT_MODEL")
 	if v, err := strconv.ParseFloat(os.Getenv("TRANSPARENCY"), 64); err == nil {
 		a.Settings.Transparency = v
 	}
 	if os.Getenv("SETTINGS") == "1" {
 		a.OpenSettings()
+		a.othersOpen = os.Getenv("OTHERS") == "1"
+	}
+	if os.Getenv("MODELS") == "1" {
+		view.models = modelPicker{open: true, provider: "deepseek"}
+		a.loadProviders()
+		a.loadModels("deepseek")
 	}
 	if os.Getenv("OPEN") == "1" {
 		view.t.Blocks[1].Work.Open = true
