@@ -1,0 +1,65 @@
+/* Supabase: neutral greys and Supabase's mint green. */
+
+:root {
+  --background: #fcfcfc;
+  --foreground: #2e2e2e;
+  --card: #fcfcfc;
+  --popover: #fcfcfc;
+  --primary: #00774c;
+  --primary-foreground: #fcfcfc;
+  --secondary: #ececec;
+  --muted: #ededed;
+  --accent: #ededed99;
+  --muted-foreground: #595959;
+  --destructive: #b44d34;
+  --border: #dbdbdb;
+  --input: #cecece;
+  --ring: #74ad8e;
+  --sidebar: #fcfcfc;
+  --sidebar-accent: #ededed99;
+  --sidebar-border: #dfdfdf;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #0473a9;
+  --waiting: #b05824;
+  --success: #4f7715;
+  --thinking: #5b7a69;
+  --warning: #8f6402;
+  --emphasis: #015636;
+  --code-keyword: #015636;
+  --code-string: #654703;
+  --code-number: #86311b;
+  --code-type: #045370;
+}
+
+.dark {
+  --background: #121212;
+  --foreground: #d5dbe3;
+  --card: #202020;
+  --popover: #2a2a2a;
+  --primary: #57c791;
+  --primary-foreground: #0f1f17;
+  --secondary: #2a2a2a;
+  --muted: #1c1c1c;
+  --accent: #313131;
+  --muted-foreground: #a8a8a8;
+  --destructive: #e6857e;
+  --border: #333333;
+  --input: #3c3c3c;
+  --ring: #74ad8e;
+  --sidebar: #121212;
+  --sidebar-accent: #313131;
+  --sidebar-border: #292929;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #7ed0fe;
+  --waiting: #fd9f67;
+  --success: #9cc86c;
+  --thinking: #99baa7;
+  --warning: #e9ac4c;
+  --emphasis: #b0e6c8;
+  --code-keyword: #82d2a8;
+  --code-string: #e9bd71;
+  --code-number: #ffb09d;
+  --code-type: #70cff9;
+}
