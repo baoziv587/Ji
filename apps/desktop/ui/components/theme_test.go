@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/lucasb-eyer/go-colorful"
 )
 
 // No color of a scheme is saturated (AGENTS.md): OKLCH chroma at most
@@ -128,24 +129,11 @@ func chroma(c ui.Color) float64 {
 
 // oklch is the OKLCH lightness, chroma and hue in degrees of c.
 func oklch(c ui.Color) (lightness, chroma, hue float64) {
-	linear := func(v uint8) float64 {
-		x := float64(v) / 255
-		if x <= 0.04045 {
-			return x / 12.92
-		}
-		return math.Pow((x+0.055)/1.055, 2.4)
-	}
-	r, g, b := linear(c.R), linear(c.G), linear(c.B)
+	return colorfulOf(c).OkLch()
+}
 
-	l := math.Cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
-	m := math.Cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
-	s := math.Cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
-
-	lightness = 0.2104542553*l + 0.7936177850*m - 0.0040720468*s
-	a := 1.9779984951*l - 2.4285922050*m + 0.4505937099*s
-	bb := 0.0259040371*l + 0.7827717662*m - 0.8086757660*s
-	hue = math.Mod(math.Atan2(bb, a)*180/math.Pi+360, 360)
-	return lightness, math.Hypot(a, bb), hue
+func colorfulOf(c ui.Color) colorful.Color {
+	return colorful.Color{R: float64(c.R) / 255, G: float64(c.G) / 255, B: float64(c.B) / 255}
 }
 
 // Code reads on every surface it is drawn on, at a size under the body's:
@@ -208,14 +196,8 @@ func TestReplyTextReads(t *testing.T) {
 // contrast is WCAG's contrast ratio of a and b.
 func contrast(a, b ui.Color) float64 {
 	luminance := func(c ui.Color) float64 {
-		linear := func(v uint8) float64 {
-			x := float64(v) / 255
-			if x <= 0.04045 {
-				return x / 12.92
-			}
-			return math.Pow((x+0.055)/1.055, 2.4)
-		}
-		return 0.2126*linear(c.R) + 0.7152*linear(c.G) + 0.0722*linear(c.B)
+		r, g, b := colorfulOf(c).LinearRgb()
+		return 0.2126*r + 0.7152*g + 0.0722*b
 	}
 	hi, lo := luminance(a), luminance(b)
 	if hi < lo {
