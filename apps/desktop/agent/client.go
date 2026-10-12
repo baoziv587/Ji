@@ -41,9 +41,9 @@ func (c *Client) FollowSessions(ctx context.Context, fn func(Sessions), status f
 	}, status)
 }
 
-func (c *Client) CreateSession(ctx context.Context, root string) (Session, error) {
+func (c *Client) CreateSession(ctx context.Context, root, model string) (Session, error) {
 	var s Session
-	return s, c.do(ctx, http.MethodPost, "/api/sessions", map[string]string{"root": root}, &s)
+	return s, c.do(ctx, http.MethodPost, "/api/sessions", map[string]string{"root": root, "model": model}, &s)
 }
 
 func (c *Client) Archive(ctx context.Context, id string, archived bool) (Session, error) {
@@ -96,6 +96,27 @@ func (c *Client) SetModes(ctx context.Context, mode string) error {
 func (c *Client) Think(ctx context.Context, id, level string) (State, error) {
 	var s State
 	return s, c.do(ctx, http.MethodPost, sessionPath(id, "thinking"), map[string]string{"level": level}, &s)
+}
+
+func (c *Client) UseModel(ctx context.Context, id, model string) (State, error) {
+	var s State
+	return s, c.do(ctx, http.MethodPost, sessionPath(id, "model"), map[string]string{"model": model}, &s)
+}
+
+func (c *Client) Providers(ctx context.Context) ([]Provider, error) {
+	var out struct {
+		Providers []Provider `json:"providers"`
+	}
+	err := c.do(ctx, http.MethodGet, "/api/providers", nil, &out)
+	return out.Providers, err
+}
+
+func (c *Client) Models(ctx context.Context, provider string) ([]Model, error) {
+	var out struct {
+		Models []Model `json:"models"`
+	}
+	err := c.do(ctx, http.MethodGet, "/api/providers/"+url.PathEscape(provider)+"/models", nil, &out)
+	return out.Models, err
 }
 
 func (c *Client) Follow(ctx context.Context, id string, after int, fn func(Event)) {

@@ -10,15 +10,16 @@ import (
 )
 
 // NewSession starts a session in root, the chosen session's folder when
-// empty, and shows it.
+// empty, on the default model of the settings, and shows it.
 func (a *App) NewSession(root string) {
 	if root == "" {
 		if s, ok := a.session(a.selected); ok {
 			root = s.Root
 		}
 	}
+	model := a.Settings.Model
 	a.call(func(ctx context.Context) error {
-		s, err := a.agent.CreateSession(ctx, root)
+		s, err := a.agent.CreateSession(ctx, root, model)
 		if err == nil {
 			a.update(func() {
 				if _, listed := a.session(s.ID); !listed {

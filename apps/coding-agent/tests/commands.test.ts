@@ -1,6 +1,6 @@
 // The built-in commands: /compact sends the compaction plugin's command, once there is something to compact; /fast
-// switches the priority tier, for OpenAI's models only
-import type { Api, Model, Run } from '@ji.dev/llm'
+// switches the priority tier, for OpenAI's models only; /model switches the model, fast mode with it where it can
+import type { Agent, Api, Model, Run } from '@ji.dev/llm'
 import { createAgent } from '@ji.dev/llm'
 import { COMPACT_COMMAND } from '@ji.dev/plugin-compaction'
 import { assistantMessage, createFakeModel } from '@ji.dev/testing'
@@ -54,6 +54,47 @@ describe('/fast', () => {
 
     // Assert
     expect(conversation.fast).toBe(false)
+  })
+})
+
+describe('/model', () => {
+  it('should keep fast mode on a model with the tier, and turn it off on one without', () => {
+    // Arrange
+    const openai = { ...faux(), provider: 'openai' }
+    const other = faux()
+    const conversation = new Conversation(createAgent({ model: openai }))
+    const startOn = (spec: string): Agent => createAgent({ model: spec === 'openai' ? openai : other })
+    const menu = createCommandMenu({ conversation, tools: [], mode: () => '', send: () => {}, quit: () => {}, startOn })
+    menu.run('/fast on')
+    const seen: [string, boolean][] = []
+
+    // Act
+    for (const line of ['/model openai', '/model other']) {
+      menu.run(line)
+      seen.push([conversation.agent.model.provider, conversation.fast])
+    }
+
+    // Assert
+    expect(seen).toEqual([
+      ['openai', true],
+      [other.provider, false],
+    ])
+  })
+
+  it('should keep the model when the switch fails', () => {
+    // Arrange
+    const conversation = new Conversation(createAgent({ model: faux() }))
+    const before = conversation.agent
+    const startOn = (): Agent => {
+      throw new Error('Unknown model')
+    }
+    const menu = createCommandMenu({ conversation, tools: [], mode: () => '', send: () => {}, quit: () => {}, startOn })
+
+    // Act
+    menu.run('/model nope/nothing')
+
+    // Assert
+    expect(conversation.agent).toBe(before)
   })
 })
 

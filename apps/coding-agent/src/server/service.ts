@@ -9,12 +9,14 @@
 //   switchMode  ask <-> auto, as Shift+Tab in the terminal
 //   setMode     ask, auto or yolo: the one way out of yolo
 //   think       the thinking level of the next model call
+//   useModel    the model of the next reply, 'provider/id'
 //
 // Every event has a sequence number; the log keeps them all, those read back from the session's history first, so a
 // client that connects late or comes back after a drop reads what it missed.
 
 import type { Agent, AuthInteraction, Plugin, Run } from '@ji.dev/llm'
 import type { Questions, Reply } from '@ji.dev/plugin-choices'
+import type { StartOptions } from '../agent/agent.ts'
 import type { Command, Say } from '../agent/commands.ts'
 import type { Unfinished } from '../agent/conversation.ts'
 import type { Feature } from '../features/feature.ts'
@@ -23,7 +25,7 @@ import type { CommandView, Outcome, ServiceEvent, ServiceState, Unnumbered, Usag
 import type { History } from './history.ts'
 import { choices } from '@ji.dev/plugin-choices'
 import { errorMessage } from '@ji.dev/utils'
-import { contextLimitOf, toolNamesOf } from '../agent/agent.ts'
+import { contextLimitOf, startAgent, startOn, toolNamesOf } from '../agent/agent.ts'
 import { createCommands, runCommand } from '../agent/commands.ts'
 import { Conversation } from '../agent/conversation.ts'
 import { UsageMeter } from '../agent/meter.ts'
@@ -37,8 +39,11 @@ export interface AgentServiceOptions {
   permissions: Permissions
   /** The features, made with where their commands talk to: the client. */
   features: (client: CommandClient) => Feature[]
-  /** Starts the agent with the features and the plugin that asks: the questions it asks go to the client. */
-  start: (asking: Plugin, features: Feature[]) => Agent
+  /**
+   * What the agent starts with, given the features and the plugin that asks: the questions it asks go to the client.
+   * A switch of model starts it again from these.
+   */
+  start: (asking: Plugin, features: Feature[]) => StartOptions
   /** What the session said before, read back from its log: the conversation goes on from it. */
   history?: History
 }
@@ -63,6 +68,7 @@ export class AgentService {
   private readonly say: Say
   private readonly features: Feature[]
   private readonly conversation: Conversation
+  private readonly started: StartOptions
   private readonly tools: string[]
   private readonly commands: () => Command[]
   /** How the last reply ended; none before the first. */
@@ -94,7 +100,8 @@ export class AgentService {
       answer: (q, signal) => this.ask(q, signal),
       approve: this.features.flatMap(f => f.approve ?? []),
     })
-    this.conversation = new Conversation(start(asking, this.features), { id, state: history?.state })
+    this.started = start(asking, this.features)
+    this.conversation = new Conversation(startAgent(this.started), { id, state: history?.state })
     this.tools = toolNamesOf(this.features, asking)
 
     this.commands = createCommands({
@@ -108,6 +115,7 @@ export class AgentService {
       say: this.say,
       help: sections => this.log.push({ type: 'help', sections }),
       extra: () => this.features.flatMap(f => f.commands ?? []),
+      startOn: spec => this.startOn(spec),
     })
 
     // The client knows the session, a new one or one read back from its log, from its first events on
@@ -208,6 +216,12 @@ export class AgentService {
     this.emitState()
   }
 
+  /** Throws on a model the catalog does not have, and while a reply is in progress. */
+  useModel(spec: string): void {
+    this.conversation.use(this.startOn(spec))
+    this.emitState()
+  }
+
   /** Resolves once the reply in progress, if any, has ended. */
   settled(): Promise<void> {
     return this.replying
@@ -256,6 +270,10 @@ export class AgentService {
         this.emitState()
       }
     }
+  }
+
+  private startOn(spec: string): Agent {
+    return startOn(spec, { ...this.started, thinking: this.conversation.agent.thinking })
   }
 
   private emitState(): void {

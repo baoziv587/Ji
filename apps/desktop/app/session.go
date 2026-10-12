@@ -44,6 +44,8 @@ type sessionView struct {
 	// the gauge's arc runs down from.
 	usageOpen  bool
 	usageDrain components.Drain
+	// The picker of the session's model.
+	models modelPicker
 }
 
 // restore puts back what was typed and not sent, unless something else

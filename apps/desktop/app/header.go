@@ -11,8 +11,8 @@ import (
 
 // header is the terminal's title, in one line over a rule: the session,
 // the model and its settings muted after it, then its folder; what gives
-// way first as the window narrows is the folder, then the title. Only the
-// thinking level is chosen here: the rest is the session's.
+// way first as the window narrows is the folder, then the title. The model
+// and the thinking level are chosen here: the rest is the session's.
 func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -24,7 +24,7 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 		ui.Text(c, titleOf(s)).FontWeight(600).SingleLine().Shrink(1)
 		if st.Model != "" {
 			dot()
-			ui.Text(c, st.Model).TextColor(p.MutedForeground).SingleLine().Shrink(1).Tooltip("Model")
+			a.modelSelect(c.Key("model"), s, view)
 		}
 		if len(st.ThinkingLevels) > 0 {
 			dot()

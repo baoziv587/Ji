@@ -87,9 +87,12 @@ export type { Stream } from '@ji.dev/kernel'
 export {
   findModel,
   listModels,
+  listProviders,
   type ModelInfo,
   type ModelRef,
   models,
+  nearestThinking,
+  type ProviderInfo,
   registerProvider,
   UnknownModelError,
   UnsupportedThinkingError,

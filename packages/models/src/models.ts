@@ -1,5 +1,5 @@
 import type { Api, Model, ModelThinkingLevel as ThinkingLevel } from '@earendil-works/pi-ai'
-import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
+import { clampThinkingLevel, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import { closest } from '@ji.dev/utils'
 import { models } from './registry.ts'
 
@@ -63,6 +63,11 @@ export function modelInfo(model: Model<Api>): ModelInfo {
     thinkingLevels: getSupportedThinkingLevels(model),
     hasKey: async () => (await models.checkAuth(model.provider)) !== undefined,
   }
+}
+
+/** The level `model` accepts nearest to `level`: a model switched to keeps the thinking it can. */
+export function nearestThinking(model: Model<Api>, level: ThinkingLevel): ThinkingLevel {
+  return clampThinkingLevel(model, level)
 }
 
 /** Models from pi-ai's catalog and the registered providers, of one provider or of all. */

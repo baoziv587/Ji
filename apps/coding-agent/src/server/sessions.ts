@@ -2,7 +2,7 @@
 // back from its log, the first time a client asks for it; until then it is only its line in the list.
 //
 //   list      every session, with what each is doing: what a sidebar shows
-//   create    a new session working in a folder
+//   create    a new session working in a folder, on a model of its own or the default
 //   session   one session's service, opened if need be
 //   archive   out of the list's way, or back in it: nothing is deleted
 //   setMode   what waits for a yes in every session, those opened later included
@@ -13,6 +13,7 @@ import type { AgentService } from './service.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
 import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { findModel } from '@ji.dev/llm'
 
 /** idle, replying, waiting for an answer, or its last reply failed. */
 type SessionStatus = 'idle' | 'running' | 'asking' | 'failed'
@@ -63,14 +64,17 @@ export class SessionHub {
     return [...this.metas.values()].sort((a, b) => b.updated - a.updated).map(meta => this.summaryOf(meta))
   }
 
-  /** Throws when `folder` is not a folder. */
-  create(folder: string): SessionSummary {
+  /**
+   * `model` is 'provider/id', or a bare id one provider offers; without it, the session opens on the opener's default.
+   * Throws when `folder` is not a folder, and UnknownModelError when the catalog has no such model.
+   */
+  create(folder: string, model?: string): SessionSummary {
     const root = resolve(folder)
     if (!isFolder(root)) {
       throw new Error(`${root} is not a folder`)
     }
 
-    const meta = this.store.create(root)
+    const meta = this.store.create(root, model === undefined ? undefined : specOf(model))
     this.metas.set(meta.id, meta)
     this.changed()
     return this.summaryOf(meta)
@@ -88,6 +92,9 @@ export class SessionHub {
     service.subscribe(e => {
       if (e.type === 'user') {
         this.used(id, e.text)
+      }
+      if (e.type === 'state' && e.state.model !== this.metaOf(id).model) {
+        this.update(this.metaOf(id), { model: e.state.model })
       }
       if (e.type === 'state' || e.type === 'user' || e.type === 'reply_end') {
         this.changed()
@@ -190,4 +197,10 @@ function isFolder(path: string): boolean {
   } catch {
     return false
   }
+}
+
+/** The model as 'provider/id', a bare id included; throws UnknownModelError when the catalog has no such model. */
+function specOf(model: string): string {
+  const { provider, id } = findModel(model)
+  return `${provider}/${id}`
 }

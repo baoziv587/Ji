@@ -68,6 +68,12 @@ type App struct {
 	theme      *ui.Theme
 	scheme     *components.Scheme
 	systemDark bool
+	// The providers, and the models of those a picker showed; whether the
+	// settings show those not detected.
+	catalog    catalog
+	othersOpen bool
+	// The picker of the default model, in the settings.
+	defaults modelPicker
 }
 
 // link is whether the service answers, and what is wrong while it does not.
