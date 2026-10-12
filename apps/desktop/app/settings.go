@@ -97,7 +97,14 @@ func (a *App) applyApprovals() {
 
 func (a *App) settings(c *ui.Context) {
 	if c.Shortcut(0, ui.KeyEscape) {
-		a.settingsOpen = false
+		switch {
+		case a.adding != nil:
+			a.adding = nil
+		case a.removing != "":
+			a.removing = ""
+		default:
+			a.settingsOpen = false
+		}
 	}
 
 	ui.Box(c).Grow(1).MinHeight(0).Children(func() {
@@ -352,8 +359,9 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 }
 
 // providers is the catalog's providers: those detected, with where their
-// key comes from, then the others, folded, each with a way to log in where
-// there is one.
+// key comes from and a way to change or forget what is kept of it, then
+// the others, folded, each with a way to add a key or log in. A provider
+// of one's own, an endpoint, is added from the heading.
 func (a *App) providers(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -367,18 +375,29 @@ func (a *App) providers(c *ui.Context) {
 		}
 	}
 
-	ui.Row(c).Gap(12).AlignItems(ui.Start).Children(func() {
+	ui.Row(c).Gap(8).AlignItems(ui.Start).Children(func() {
 		ui.Column(c).Grow(1).Shrink(1).Gap(4).Children(func() {
 			ui.Text(c, "Providers").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
-			ui.Text(c, "Detected from their API key variables and what /login kept. A session picks its model among theirs, in its title bar.").
+			ui.Text(c, "Detected from their API key variables and the keys kept in ~/.ji, by /login or here. A session picks its model among theirs, in its title bar.").
 				TextColor(p.MutedForeground)
 		})
 		if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.RefreshCw}).
 			Label("Check providers again").Tooltip("Check again").Clicked() {
 			a.loadProviders()
 		}
+		if components.Button(c, "Add provider", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.Plus, Disabled: !a.catalog.listed || a.adding != nil}).
+			Tooltip("A key for one of the catalog's, or a server of your own").Clicked() {
+			a.openProviderForm(&providerForm{})
+		}
 	})
 
+	if note := a.providerNote; note.text != "" {
+		icon, color := icons.Check, p.Success
+		if note.failed {
+			icon, color = icons.TriangleAlert, p.Destructive
+		}
+		notice(c, icon, color, note.text)
+	}
 	if a.catalog.problem != "" {
 		ui.Text(c, a.catalog.problem).TextColor(p.Destructive).Selectable()
 	}
@@ -388,18 +407,31 @@ func (a *App) providers(c *ui.Context) {
 		}
 		return
 	}
+	if a.adding != nil {
+		a.providerFormCard(c)
+	}
 
 	a.defaultModel(c)
 
 	if len(detected) == 0 {
 		ui.Row(c).Padding(12, 16).Radius(t.Radius+2).Border(1, p.Border).Children(func() {
-			ui.Text(c, "None has a key yet: set one's API key variable before starting Ji Agent, or log in to one below.").
+			ui.Text(c, "None has a key yet: add one with Add provider, set its variable before starting Ji Agent, or log in below.").
 				TextColor(p.MutedForeground).Shrink(1)
 		})
 	} else {
 		providerRows(c, detected, func(provider agent.Provider) {
+			if a.removing == provider.ID {
+				a.confirmRemoval(c, provider)
+				return
+			}
 			figures(c, modelCount(provider.Models), p.MutedForeground)
-			components.Tag(c, provider.Source, p.Success).Tooltip("Where its key comes from")
+			color := p.Success
+			if provider.Source == "no key" {
+				color = p.MutedForeground
+			}
+			components.Tag(c, provider.Source, color).Tooltip(sourceNote(provider))
+			// As wide in every row, so the tags line up over rows with none
+			ui.Row(c).Width(52).Shrink(0).Gap(4).Justify(ui.End).Children(func() { a.providerActions(c, provider) })
 		})
 	}
 
@@ -409,22 +441,71 @@ func (a *App) providers(c *ui.Context) {
 	_, _, inSession := a.current()
 	components.Disclosure(c, fmt.Sprintf("Not detected (%d)", len(others)), ui.Color{}, &a.othersOpen, func() {
 		providerRows(c, others, func(provider agent.Provider) {
-			if !provider.Login {
+			if !provider.APIKey && !provider.OAuth {
 				ui.Text(c, "Set up in the environment").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine()
 				return
 			}
-			login := components.Button(c, "Log in", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall, Disabled: !inSession}).
-				Label("Log in to " + provider.Name)
-			tip := "/login " + provider.ID + " in the session shown"
-			if !inSession {
-				tip = "Open a session first: /login asks its questions there"
+			if provider.OAuth {
+				login := components.Button(c, "Log in", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeExtraSmall, Disabled: !inSession}).
+					Label("Log in to " + provider.Name)
+				tip := "/login " + provider.ID + " in the session shown: it signs in in the browser"
+				if !inSession {
+					tip = "Open a session first: /login asks its questions there"
+				}
+				login.Tooltip(tip)
+				if login.Clicked() {
+					a.loginTo(provider.ID)
+				}
 			}
-			login.Tooltip(tip)
-			if login.Clicked() {
-				a.loginTo(provider.ID)
+			if provider.APIKey && components.Button(c, "Add key", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall}).
+				Label("Add a key for "+provider.Name).Clicked() {
+				a.keyForm(provider.ID)
 			}
 		})
 	})
+}
+
+// providerActions is what can be changed of a detected provider: an
+// endpoint itself, or the key or login kept for one of the catalog's. What
+// the environment gives is changed there, so has none.
+func (a *App) providerActions(c *ui.Context, provider agent.Provider) {
+	icon := func(svg *ui.SVG, label string) bool {
+		return components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconExtraSmall, Icon: svg}).
+			Label(label).Tooltip(label).Clicked()
+	}
+	switch {
+	case provider.Endpoint != nil:
+		if icon(icons.Pencil, "Change "+provider.Name) {
+			a.endpointForm(provider)
+		}
+		if icon(icons.Trash2, "Remove "+provider.Name) {
+			a.removing, a.providerNote = provider.ID, providerNote{}
+		}
+	case provider.Stored:
+		if provider.APIKey && provider.Source != "OAuth" && icon(icons.Pencil, "Replace "+provider.Name+"'s key") {
+			a.keyForm(provider.ID)
+		}
+		label := "Forget " + provider.Name + "'s key"
+		if provider.Source == "OAuth" {
+			label = "Log out of " + provider.Name
+		}
+		if icon(icons.Trash2, label) {
+			a.removing, a.providerNote = provider.ID, providerNote{}
+		}
+	}
+}
+
+// sourceNote says where a provider's key comes from, and where to change it.
+func sourceNote(provider agent.Provider) string {
+	switch {
+	case provider.Source == "no key":
+		return "Asked with no key: add one with the pencil if it wants one"
+	case provider.Source == "OAuth":
+		return "Signed in with /login, kept in ~/.ji"
+	case provider.Stored:
+		return "Kept in ~/.ji/auth.json, by /login or here"
+	}
+	return "Set in the environment: change it there, or add a key here to use in its place"
 }
 
 // defaultModel is the model new sessions start on, as the appearance's
@@ -487,7 +568,7 @@ func (a *App) provider(id string) (agent.Provider, bool) {
 }
 
 // providerRows is providers in one bordered list, a row each: its name and
-// id, then what trail adds.
+// id, or an endpoint's address, then what trail adds.
 func providerRows(c *ui.Context, providers []agent.Provider, trail func(agent.Provider)) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -497,10 +578,14 @@ func providerRows(c *ui.Context, providers []agent.Provider, trail func(agent.Pr
 			if i > 0 {
 				row.BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 			}
+			detail := provider.ID
+			if provider.Endpoint != nil {
+				detail = hostOf(provider.Endpoint.BaseURL)
+			}
 			row.Children(func() {
 				ui.Row(c).Grow(1).Shrink(1).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, provider.Name).FontWeight(500).SingleLine().Shrink(0)
-					ui.Text(c, provider.ID).Font("monospace").FontSize(components.TextCode(t)).TextColor(p.MutedForeground).SingleLine().Shrink(1)
+					ui.Text(c, detail).Font("monospace").FontSize(components.TextCode(t)).TextColor(p.MutedForeground).SingleLine().Shrink(1)
 				})
 				trail(provider)
 			})

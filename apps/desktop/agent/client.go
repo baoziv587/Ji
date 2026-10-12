@@ -104,11 +104,7 @@ func (c *Client) UseModel(ctx context.Context, id, model string) (State, error) 
 }
 
 func (c *Client) Providers(ctx context.Context) ([]Provider, error) {
-	var out struct {
-		Providers []Provider `json:"providers"`
-	}
-	err := c.do(ctx, http.MethodGet, "/api/providers", nil, &out)
-	return out.Providers, err
+	return c.providers(ctx, http.MethodGet, "/api/providers", nil)
 }
 
 func (c *Client) Models(ctx context.Context, provider string) ([]Model, error) {
@@ -117,6 +113,39 @@ func (c *Client) Models(ctx context.Context, provider string) ([]Model, error) {
 	}
 	err := c.do(ctx, http.MethodGet, "/api/providers/"+url.PathEscape(provider)+"/models", nil, &out)
 	return out.Models, err
+}
+
+func (c *Client) StoreKey(ctx context.Context, provider, key string) ([]Provider, error) {
+	return c.providers(ctx, http.MethodPut, "/api/providers/"+url.PathEscape(provider)+"/key", map[string]string{"key": key})
+}
+
+func (c *Client) ForgetKey(ctx context.Context, provider string) ([]Provider, error) {
+	return c.providers(ctx, http.MethodDelete, "/api/providers/"+url.PathEscape(provider)+"/key", nil)
+}
+
+func (c *Client) KeepEndpoint(ctx context.Context, e Endpoint) ([]Provider, error) {
+	return c.providers(ctx, http.MethodPost, "/api/endpoints", e)
+}
+
+func (c *Client) RemoveEndpoint(ctx context.Context, id string) ([]Provider, error) {
+	return c.providers(ctx, http.MethodDelete, "/api/endpoints/"+url.PathEscape(id), nil)
+}
+
+func (c *Client) ProbeEndpoint(ctx context.Context, baseURL, key, id string) ([]string, error) {
+	var out struct {
+		Models []string `json:"models"`
+	}
+	err := c.do(ctx, http.MethodPost, "/api/endpoints/probe", map[string]string{"baseUrl": baseURL, "key": key, "id": id}, &out)
+	return out.Models, err
+}
+
+// providers makes a change that answers with the providers after it.
+func (c *Client) providers(ctx context.Context, method, path string, body any) ([]Provider, error) {
+	var out struct {
+		Providers []Provider `json:"providers"`
+	}
+	err := c.do(ctx, method, path, body, &out)
+	return out.Providers, err
 }
 
 func (c *Client) Follow(ctx context.Context, id string, after int, fn func(Event)) {

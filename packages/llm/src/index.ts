@@ -85,6 +85,11 @@ export type { Stream } from '@ji.dev/kernel'
 
 // The model catalog lives in @ji.dev/models, below this package and @ji.dev/testing; an agent reaches it from here too
 export {
+  type Endpoint,
+  ENDPOINT_CONTEXT_WINDOW,
+  type EndpointModel,
+  endpointProvider,
+  fetchEndpointModels,
   findModel,
   listModels,
   listProviders,

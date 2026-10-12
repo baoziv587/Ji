@@ -5,22 +5,26 @@
 //   await auth.login('deepseek', 'api_key', interaction)   the key typed in, stored instead of the environment variable
 //   await auth.logout('openai')
 //
-//   The directory holds auth.json, one credential per provider, and installation-id, the UUID OpenAI identifies this
-//   installation by, made on the first login and kept. Creating the plugin makes the file the credential store of
-//   every model (useCredentialStore): the plugin has no hook of its own, it is in the list so that the one place
-//   that adds tool sets adds this too.
+//   The directory holds auth.json, one credential per provider, providers.json, the OpenAI-compatible endpoints the
+//   person added, and installation-id, the UUID OpenAI identifies this installation by, made on the first login and
+//   kept. Creating the plugin makes the file the credential store of every model (useCredentialStore) and registers
+//   the endpoints: the plugin has no hook of its own, it is in the list so that the one place that adds tool sets
+//   adds this too.
 //
-//   store    createFileCredentialStore(file): the store on its own, for a process that only reads the credentials
-//   login    authMethodsOf(provider), login and logout: pi-ai's flows, on whatever store is in use
+//   store      createFileCredentialStore(file): the store on its own, for a process that only reads the credentials
+//   endpoints  registerEndpoints(dir) at start, then saveEndpoint and removeEndpoint as the person changes them
+//   login      authMethodsOf(provider), login and logout: pi-ai's flows, on whatever store is in use
 
 import type { AuthInteraction, AuthType, Credential, Plugin } from '@ji.dev/llm'
 import { randomUUID } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { definePlugin, useCredentialStore } from '@ji.dev/llm'
+import { registerEndpoints } from './endpoints.ts'
 import { login, logout } from './login.ts'
 import { createFileCredentialStore } from './store.ts'
 
+export { listEndpoints, registerEndpoints, removeEndpoint, saveEndpoint } from './endpoints.ts'
 export { type AuthMethod, authMethodsOf, listLoginProviders, login, type LoginOptions, logout } from './login.ts'
 export { createFileCredentialStore } from './store.ts'
 
@@ -39,6 +43,7 @@ export interface AuthOptions {
 export function createAuthPlugin({ dir }: AuthOptions): AuthPlugin {
   const file = join(dir, 'auth.json')
   useCredentialStore(createFileCredentialStore(file))
+  registerEndpoints(dir)
 
   return {
     ...definePlugin({ name: 'auth' }),

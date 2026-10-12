@@ -23,7 +23,7 @@ import { join, resolve } from 'node:path'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { findModel, UnsupportedThinkingError, useCredentialStore } from '@ji.dev/llm'
-import { createFileCredentialStore } from '@ji.dev/plugin-auth'
+import { createFileCredentialStore, registerEndpoints } from '@ji.dev/plugin-auth'
 import { createAgentHttpServer } from './server/http.ts'
 import { SessionOpener } from './server/open.ts'
 import { SessionHub } from './server/sessions.ts'
@@ -42,14 +42,16 @@ const { values: ARGS } = parseArgs({
   },
 })
 
+const AUTH = join(homedir(), '.ji')
+useCredentialStore(createFileCredentialStore(join(AUTH, 'auth.json')))
+registerEndpoints(AUTH)
+
 const thinking = ARGS.thinking as ThinkingLevel
 // A typo in the model or the level stops the service before it listens, with the choices listed
 const info = findModel(ARGS.model)
 if (!info.thinkingLevels.includes(thinking)) {
   throw new UnsupportedThinkingError(info, thinking)
 }
-
-useCredentialStore(createFileCredentialStore(join(homedir(), '.ji', 'auth.json')))
 
 const store = new SessionStore(ARGS.sessions)
 const hub = new SessionHub({
@@ -59,12 +61,12 @@ const hub = new SessionHub({
     model: ARGS.model,
     thinking,
     skills: ARGS.skills,
-    auth: join(homedir(), '.ji'),
+    auth: AUTH,
   }),
   mode: ARGS.yolo ? 'yolo' : 'ask',
 })
 
-const server = createAgentHttpServer({ hub, defaultRoot: resolve(ARGS.root) })
+const server = createAgentHttpServer({ hub, defaultRoot: resolve(ARGS.root), auth: AUTH })
 server.listen(Number(ARGS.port), ARGS.host, () => {
   const address = server.address()
   const port = typeof address === 'object' && address !== null ? address.port : ARGS.port

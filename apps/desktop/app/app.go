@@ -74,6 +74,13 @@ type App struct {
 	othersOpen bool
 	// The picker of the default model, in the settings.
 	defaults modelPicker
+	// The form adding a provider while open; the provider whose removal
+	// waits for a second yes, and whether it is under way; what the last
+	// change of the providers did.
+	adding       *providerForm
+	removing     string
+	removingBusy bool
+	providerNote providerNote
 }
 
 // link is whether the service answers, and what is wrong while it does not.
