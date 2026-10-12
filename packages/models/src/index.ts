@@ -4,10 +4,18 @@
 //   findModel(spec)      'provider/id' to a model, with the thinking levels it accepts and whether it has a key
 //   listProviders()      every provider, with where its key comes from now: what a picker offers
 //   registerProvider     a provider of your own: a local server, or a scripted one for tests
+//   endpointProvider     an OpenAI-compatible server as a provider; fetchEndpointModels lists what it serves
 //   useCredentialStore   where logins are kept
 //
 // Below @ji.dev/llm, which runs the models, and @ji.dev/testing, which registers fakes: both reach the same catalog.
 
+export {
+  type Endpoint,
+  ENDPOINT_CONTEXT_WINDOW,
+  type EndpointModel,
+  endpointProvider,
+  fetchEndpointModels,
+} from './endpoints.ts'
 export {
   findModel,
   listModels,

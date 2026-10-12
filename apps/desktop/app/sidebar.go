@@ -83,7 +83,11 @@ func (a *App) sidebar(c *ui.Context) {
 				gear.Background(p.SidebarAccent)
 			}
 			if gear.Clicked() {
-				a.settingsOpen = !a.settingsOpen
+				if a.settingsOpen {
+					a.settingsOpen = false
+				} else {
+					a.OpenSettings()
+				}
 			}
 		})
 	})

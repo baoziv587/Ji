@@ -27,7 +27,7 @@ import { join } from 'node:path'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { definePlugin, findModel, UnsupportedThinkingError, useCredentialStore } from '@ji.dev/llm'
-import { createFileCredentialStore } from '@ji.dev/plugin-auth'
+import { createFileCredentialStore, registerEndpoints } from '@ji.dev/plugin-auth'
 import { jsonl } from '@ji.dev/plugin-jsonl'
 import { runTask } from './headless/task.ts'
 
@@ -49,6 +49,7 @@ const options = {
 } as const
 
 useCredentialStore(createFileCredentialStore(join(homedir(), '.ji', 'auth.json')))
+registerEndpoints(join(homedir(), '.ji'))
 
 main(process.argv.slice(2)).then(code => {
   process.exitCode = code
