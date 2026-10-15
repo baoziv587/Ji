@@ -329,15 +329,23 @@ func (a *App) current() (agent.Session, *sessionView, bool) {
 // call runs an action of the service, and shows its error if it fails.
 func (a *App) call(action func(ctx context.Context) error) {
 	a.failure = ""
-	a.async(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	a.request(func(ctx context.Context) {
 		err := action(ctx)
 		a.update(func() {
 			if err != nil {
 				a.failure = err.Error()
 			}
 		})
+	})
+}
+
+// request runs work off the main thread, given as long as the service is
+// waited for.
+func (a *App) request(work func(ctx context.Context)) {
+	a.async(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		work(ctx)
 	})
 }
 
