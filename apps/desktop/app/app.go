@@ -60,6 +60,8 @@ type App struct {
 	SaveSettings func(Settings)
 	saved        Settings
 	settingsOpen bool
+	// The page of the settings shown, kept while they are closed.
+	settingsPage string
 	// The transparency slider is held: what it sets is kept once let go,
 	// not on every frame of the drag.
 	sliding bool

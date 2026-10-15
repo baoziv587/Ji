@@ -31,41 +31,10 @@ func (a *App) sidebar(c *ui.Context) {
 		background = p.Sidebar.Alpha(veil.at(a.Settings.Transparency))
 	}
 	ui.Column(c).Fill().Background(background).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
-		// Clear of the window controls, whose room ends at the zoom button's
-		// edge; in full screen, lined up with the items' text
-		bar := c.TitleBar()
-		ui.Row(c).Height(TitleBarHeight).Shrink(0).Padding(0, 10, 0, max(bar.Left+16, 18)).Gap(8).AlignItems(ui.Center).DragWindow().Children(func() {
-			dot := p.Destructive
-			if a.link.up {
-				dot = p.Success
-			}
-			ui.Box(c).Size(6, 6).Radius(3).Background(dot).Label("Connection").Tooltip(a.link.tooltip())
-			ui.Text(c, "Sessions").FontWeight(600).Grow(1)
-			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Plus}).
-				Label("New Session").Tooltip("New Session (⌘N)").Clicked() {
-				a.NewSession("")
-			}
-		})
-
-		groups := a.groups()
-		// None is chosen while the settings show, so that choosing any shows it
-		chosen := a.selected
 		if a.settingsOpen {
-			chosen = ""
-		}
-		if ui.Sidebar(c, &chosen, func() {
-			for _, g := range groups.folders {
-				a.section(c, g)
-			}
-			if len(groups.archived) > 0 {
-				ui.SidebarSection(c, fmt.Sprintf("Archived (%d)", len(groups.archived)), &a.archivedOpen, func() {
-					for _, i := range groups.archived {
-						a.row(c, a.list.Sessions[i])
-					}
-				})
-			}
-		}).Background(ui.Transparent).Grow(1).Changed() {
-			a.Select(chosen)
+			a.settingsNav(c)
+		} else {
+			a.sessionsNav(c)
 		}
 
 		ui.Row(c).Gap(6).Padding(8, 10, 10).Justify(ui.End).Children(func() {
@@ -91,6 +60,61 @@ func (a *App) sidebar(c *ui.Context) {
 			}
 		})
 	})
+}
+
+// sessionsNav is the sidebar's title bar, how the service is reached and
+// a way to start a session, over the sessions by folder.
+func (a *App) sessionsNav(c *ui.Context) {
+	p := components.PaletteOf(c.Theme())
+	a.sidebarBar(c, func() {
+		dot := p.Destructive
+		if a.link.up {
+			dot = p.Success
+		}
+		ui.Box(c).Size(6, 6).Radius(3).Background(dot).Label("Connection").Tooltip(a.link.tooltip())
+		ui.Text(c, "Sessions").FontWeight(600).Grow(1)
+		if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Plus}).
+			Label("New Session").Tooltip("New Session (⌘N)").Clicked() {
+			a.NewSession("")
+		}
+	})
+
+	groups := a.groups()
+	chosen := a.selected
+	if ui.Sidebar(c, &chosen, func() {
+		for _, g := range groups.folders {
+			a.section(c, g)
+		}
+		if len(groups.archived) > 0 {
+			ui.SidebarSection(c, fmt.Sprintf("Archived (%d)", len(groups.archived)), &a.archivedOpen, func() {
+				for _, i := range groups.archived {
+					a.row(c, a.list.Sessions[i])
+				}
+			})
+		}
+	}).Background(ui.Transparent).Grow(1).Changed() {
+		a.Select(chosen)
+	}
+}
+
+// sidebarBar is the sidebar's part of the title bar, clear of the window
+// controls, whose room ends at the zoom button's edge; in full screen,
+// lined up with the items' text.
+func (a *App) sidebarBar(c *ui.Context, fn func()) {
+	bar := c.TitleBar()
+	ui.Row(c).Height(TitleBarHeight).Shrink(0).Padding(0, 10, 0, max(bar.Left+16, 18)).Gap(8).AlignItems(ui.Center).DragWindow().Children(fn)
+}
+
+// chosen marks the sidebar's active item, focused or not, on the
+// selection's color, which over the material lets a little of it through,
+// as much in hue.
+func (a *App) chosen(c *ui.Context, item ui.Element) {
+	p := components.PaletteOf(c.Theme())
+	tint := p.SidebarAccent
+	if a.seeThrough(c) {
+		tint = tint.Alpha(glasses.selection.at(a.Settings.Transparency))
+	}
+	item.Background(tint).TextColor(p.Foreground).FontWeight(500)
 }
 
 // grouping is the sessions as the sidebar shows them, by their index in
@@ -167,14 +191,8 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 	p := components.PaletteOf(t)
 	status := a.status(s)
 	item := ui.SidebarItem(c.Key(s.ID), s.ID, nil, titleOf(s)).Height(32).Padding(0, 8).Transition(components.ColorTransition)
-	if s.ID == a.selected && !a.settingsOpen {
-		// The active item, focused or not, on the selection's color, which
-		// over the material lets a little of it through, as much in hue
-		tint := p.SidebarAccent
-		if a.seeThrough(c) {
-			tint = tint.Alpha(glasses.selection.at(a.Settings.Transparency))
-		}
-		item.Background(tint).TextColor(p.Foreground).FontWeight(500)
+	if s.ID == a.selected {
+		a.chosen(c, item)
 	}
 	item.Children(func() {
 		switch status {
