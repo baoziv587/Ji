@@ -40,12 +40,19 @@ func (a *App) View(c *ui.Context) {
 
 	p := components.PaletteOf(a.theme)
 	ui.Split(c, &a.Layout.Sidebar, func() { a.sidebar(c) }, func() {
-		ui.Column(c).Fill().Background(p.Background).Children(func() {
+		s, view, ok := a.current()
+		// Of glass, a session's conversation and its inspector each lay
+		// their own color over the material, rather than over this one
+		cover := a.contentCover(c)
+		content := ui.Column(c).Fill()
+		if a.settingsOpen || !ok || cover >= 1 {
+			content.Background(p.Background.Alpha(cover))
+		}
+		content.Children(func() {
 			if a.settingsOpen {
 				a.settings(c)
 				return
 			}
-			s, view, ok := a.current()
 			if !ok {
 				ui.Box(c).Height(TitleBarHeight).Shrink(0).DragWindow()
 				a.noSession(c)
@@ -163,7 +170,8 @@ func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 // header, which frosts it, and under the input, of frosted glass, at its
 // end.
 func (a *App) conversation(c *ui.Context, s agent.Session, view *sessionView) ui.Element {
-	return ui.Box(c.Key("room:" + s.ID)).Grow(1).MinWidth(0).Children(func() {
+	p := components.PaletteOf(c.Theme())
+	return ui.Box(c.Key("room:" + s.ID)).Grow(1).MinWidth(0).Background(p.Background.Alpha(a.contentCover(c))).Children(func() {
 		conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t).Fill().
 			Padding(TitleBarHeight+24, 24, view.bottom+24).ScrollbarInsets(TitleBarHeight, 0, view.bottom)
 		a.header(c, s, view)

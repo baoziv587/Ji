@@ -20,7 +20,7 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 	dot := func() ui.Element { return ui.Text(c, "·").TextColor(p.MutedForeground).Shrink(0) }
 	// The window's title bar, as tall as the sidebar's top, so the two read as one bar
 	ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).
-		Material(a.bar()).DragWindow().Children(func() {
+		Material(a.bar(a.contentCover(c))).DragWindow().Children(func() {
 		ui.Text(c, titleOf(s)).FontWeight(600).SingleLine().Shrink(1)
 		if st.Model != "" {
 			dot()

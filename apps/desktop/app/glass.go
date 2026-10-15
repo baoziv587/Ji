@@ -1,9 +1,10 @@
 package app
 
 // The window's glass: the surfaces something shows through, the desktop
-// through the sidebar and the content scrolling under the title bars, and
-// how much, as the Transparency setting chooses. The composer's pane is
-// not among them: it stays as clear as it is, the draft on it legible.
+// through the sidebar and the content scrolling under the title bars, as
+// the Transparency setting chooses, and the desktop through the content's
+// background, as ContentTransparency does. The composer's pane is not
+// among them: it stays as clear as it is, the draft on it legible.
 
 import (
 	"github.com/egoist/mygo/plugins/glass"
@@ -40,12 +41,16 @@ var glasses = struct {
 	selection    ramp // of the selection's color under the chosen session
 	bar          ramp // of the background over the content under a title bar
 	barBlur      ramp // of the content under a title bar, in DIPs
+	content      ramp // of the background over the window's material behind the content, in the dark
+	contentLight ramp // and in the light, as thin as the sidebar's for its material washed as pale, a little more for the text on it
 }{
 	sidebar:      ramp{1, 0.6, 0.4},
 	sidebarLight: ramp{1, 0.35, 0.15},
 	selection:    ramp{1, 0.9, 0.8},
 	bar:          ramp{1, scrollEdgeCover, 0.55},
 	barBlur:      ramp{scrollEdgeBlur, scrollEdgeBlur, 10},
+	content:      ramp{1, 0.8, 0.6},
+	contentLight: ramp{1, 0.4, 0.15},
 }
 
 // How much of the background macOS's hard scroll edge lays over the
@@ -62,18 +67,43 @@ func (a *App) seeThrough(c *ui.Context) bool {
 	return a.vibrant(c) && a.Settings.Transparency > transparencySolid
 }
 
-func (a *App) bar() ui.Material { return barGlass(a.Settings.Transparency) }
+// contentCover is how much of the content's background covers the window's
+// material: all of it where there is none, or the transparency is solid.
+func (a *App) contentCover(c *ui.Context) float32 {
+	if !a.vibrant(c) {
+		return 1
+	}
+	if c.Theme().Dark {
+		return glasses.content.at(a.Settings.ContentTransparency)
+	}
+	return glasses.contentLight.at(a.Settings.ContentTransparency)
+}
+
+// bar is the material of a title bar over content whose background covers
+// as much as under does.
+func (a *App) bar(under float32) ui.Material {
+	return barGlass{transparency: a.Settings.Transparency, under: under}
+}
 
 // barGlass is a title bar's material at a transparency: macOS's hard
 // scroll edge where it is standard, more of the background laid over it
 // toward solid, and toward clear less of it, toned as the edge tones it,
-// over the content blurred more.
-type barGlass float64
+// over the content blurred more. Over content of glass it is blurred
+// whatever the transparency, its background no thicker than the
+// content's, so that the desktop shows through it too.
+type barGlass struct {
+	transparency float64
+	under        float32
+}
 
 func (b barGlass) PaintMaterial(p *ui.Painter, box ui.Rect, radii [4]float32) {
 	bg := p.Theme().Background
-	cover := glasses.bar.at(float64(b))
+	cover := glasses.bar.at(b.transparency)
 	switch {
+	case b.under < 1:
+		glass.Blur{Radius: glasses.barBlur.at(b.transparency)}.PaintMaterial(p, box, radii)
+		p.Fill(box, bg.Alpha(min(cover, b.under)), radii[0])
+		hairline(p, box)
 	case cover >= 1:
 		p.Fill(box, bg, radii[0])
 		hairline(p, box)
@@ -81,7 +111,7 @@ func (b barGlass) PaintMaterial(p *ui.Painter, box ui.Rect, radii [4]float32) {
 		glass.ScrollEdge{Hard: true}.PaintMaterial(p, box, radii)
 		p.Fill(box, bg.Alpha((cover-scrollEdgeCover)/(1-scrollEdgeCover)), radii[0])
 	default:
-		glass.Blur{Radius: glasses.barBlur.at(float64(b))}.PaintMaterial(p, box, radii)
+		glass.Blur{Radius: glasses.barBlur.at(b.transparency)}.PaintMaterial(p, box, radii)
 		p.Fill(box, edgeToned(bg).Alpha(cover), radii[0])
 		hairline(p, box)
 	}

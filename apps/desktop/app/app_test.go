@@ -591,7 +591,9 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 // with the menu of commands open on what is typed, APPROVALS=yolo with
 // that mode chosen in the settings, USAGE=1 with the history 3/4 full and
 // what was spent open, COMPACT=1 with a compaction done and one running,
-// MODELS=1 with the picker of models open, SCALE=2 drawn at twice the size. In the settings, PAGE=approvals
+// MODELS=1 with the picker of models open, SCALE=2 drawn at twice the size,
+// VIBRANCY=1 over the window's material, left transparent, as much as
+// CONTENT_TRANSPARENCY=<0 to 100> lets through. In the settings, PAGE=approvals
 // or models shows that page, which the following imply: ENDPOINT=1
 // adds an endpoint to the providers, REMOVING=<id> asks to remove one,
 // and ADDING=list, key or endpoint opens the form there, PROBLEM=<text>
@@ -658,6 +660,9 @@ func TestSnapshot(t *testing.T) {
 	if v, err := strconv.ParseFloat(os.Getenv("TRANSPARENCY"), 64); err == nil {
 		a.Settings.Transparency = v
 	}
+	if v, err := strconv.ParseFloat(os.Getenv("CONTENT_TRANSPARENCY"), 64); err == nil {
+		a.Settings.ContentTransparency = v
+	}
 	if os.Getenv("SETTINGS") == "1" {
 		a.settingsPage = os.Getenv("PAGE")
 		if os.Getenv("ADDING")+os.Getenv("ENDPOINT")+os.Getenv("REMOVING")+os.Getenv("OTHERS") != "" {
@@ -705,6 +710,7 @@ func TestSnapshot(t *testing.T) {
 	}
 	tt := ui.NewTester(a.View, 1180, height)
 	tt.SetDark(os.Getenv("DARK") == "1")
+	tt.SetVibrancy(os.Getenv("VIBRANCY") == "1")
 	if s, err := strconv.ParseFloat(os.Getenv("SCALE"), 32); err == nil {
 		tt.SetScale(float32(s))
 	}
@@ -781,7 +787,7 @@ func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 // was before it could be chosen, solid covers what is behind it, and in between it goes
 // straight from one detent to the next.
 func TestGlassesRampThroughTheDetents(t *testing.T) {
-	for name, r := range map[string]ramp{"sidebar": glasses.sidebar, "sidebar light": glasses.sidebarLight, "selection": glasses.selection, "bar": glasses.bar} {
+	for name, r := range map[string]ramp{"sidebar": glasses.sidebar, "sidebar light": glasses.sidebarLight, "selection": glasses.selection, "bar": glasses.bar, "content": glasses.content, "content light": glasses.contentLight} {
 		if r.clear > r.standard || r.standard > r.solid {
 			t.Errorf("%s: %v, a clearer glass covers more", name, r)
 		}
@@ -794,7 +800,8 @@ func TestGlassesRampThroughTheDetents(t *testing.T) {
 	if glasses.sidebarLight.at(transparencyStandard) >= glasses.sidebar.at(transparencyStandard) {
 		t.Error("the light sidebar covers as much as the dark")
 	}
-	if glasses.sidebar.at(transparencySolid) != 1 || glasses.sidebarLight.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 || glasses.selection.at(transparencySolid) != 1 {
+	if glasses.sidebar.at(transparencySolid) != 1 || glasses.sidebarLight.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 || glasses.selection.at(transparencySolid) != 1 ||
+		glasses.content.at(transparencySolid) != 1 || glasses.contentLight.at(transparencySolid) != 1 {
 		t.Error("solid lets something through")
 	}
 	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.5) > 1e-6 {
@@ -838,7 +845,7 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 	if a.Settings.Theme != "Lagoon" || components.PaletteOf(a.theme).Primary != components.SchemeNamed("Lagoon").Dark.Primary {
 		t.Errorf("theme %q: Lagoon draws the window", a.Settings.Theme)
 	}
-	if want := (Settings{Appearance: components.Dark, Theme: "Lagoon", Transparency: transparencyStandard}); len(saved) == 0 || saved[len(saved)-1] != want {
+	if want := (Settings{Appearance: components.Dark, Theme: "Lagoon", Transparency: transparencyStandard, ContentTransparency: transparencyStandard}); len(saved) == 0 || saved[len(saved)-1] != want {
 		t.Errorf("saved %v, want last %v", saved, want)
 	}
 
