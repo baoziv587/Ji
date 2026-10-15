@@ -44,7 +44,13 @@ func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, 
 		view.inspectedLast, view.inspectList = s, ui.ListState{}
 	}
 
-	pane := ui.Box(c.Key("inspector")).Shrink(0).Background(p.Card).BorderWidth(0, 0, 0, 1).BorderColor(p.Border).Transition(panelMotion)
+	// Of the content's glass beside the conversation; covering it, solid,
+	// so that the conversation does not show through
+	under := a.contentCover(c)
+	if covering {
+		under = 1
+	}
+	pane := ui.Box(c.Key("inspector")).Shrink(0).Background(p.Card.Alpha(under)).BorderWidth(0, 0, 0, 1).BorderColor(p.Border).Transition(panelMotion)
 	if covering {
 		pane.Absolute().Top(0).Bottom(0).Left(0).Right(0)
 	} else {
@@ -57,7 +63,7 @@ func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, 
 		}).Children(func() {
 			conversation.Inspect(c, &view.inspectList, &view.t, s).Fill().Padding(TitleBarHeight, 0, 24).ScrollbarInsets(TitleBarHeight, 0, 0)
 		})
-		a.inspectorBar(c, view, s, covering)
+		a.inspectorBar(c, view, s, covering, under)
 
 		if !covering {
 			edge := ui.Box(c).Absolute().Left(-3).Top(0).Width(6).FillHeight().Cursor(ui.CursorResizeEW)
@@ -78,12 +84,12 @@ func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, 
 	}
 }
 
-func (a *App) inspectorBar(c *ui.Context, view *sessionView, s *conversation.Item, covering bool) {
+func (a *App) inspectorBar(c *ui.Context, view *sessionView, s *conversation.Item, covering bool, under float32) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	steps := view.t.Steps
 	ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(8).Padding(0, 10, 0, 16).AlignItems(ui.Center).
-		Material(a.bar()).DragWindow().Children(func() {
+		Material(a.bar(under)).DragWindow().Children(func() {
 		if covering {
 			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.ChevronLeft}).
 				Label("Back to the Conversation").Tooltip("Back (Esc)").Margin(0, 0, 0, -6).Clicked() {
