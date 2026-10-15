@@ -15,6 +15,7 @@ func settingsTester(t *testing.T) (*App, *fakeAgent, *ui.Tester) {
 	t.Helper()
 	a, f := testApp()
 	tt := ui.NewTester(a.View, 1100, 1600)
+	a.settingsPage = pageModels
 	a.OpenSettings()
 	tt.Frame()
 	return a, f, tt
@@ -172,13 +173,18 @@ func TestOnlyAStoredKeyCanBeForgotten(t *testing.T) {
 	}
 }
 
-// The gear opens the settings with the providers read, as ⌘, does.
+// The gear opens the settings with the providers read, as ⌘, does, on
+// whichever page.
 func TestTheGearReadsTheProviders(t *testing.T) {
 	a, _ := testApp()
 	tt := ui.NewTester(a.View, 1100, 1600)
 	tt.Frame()
 
 	click(t, tt, "Settings")
+	if !a.catalog.listed {
+		t.Fatal("the providers are not read on the first page")
+	}
+	click(t, tt, "Models")
 
 	if !a.settingsOpen || !a.catalog.listed || !tt.HasText("DEEPSEEK_API_KEY") {
 		t.Errorf("open %v, listed %v, texts %q", a.settingsOpen, a.catalog.listed, tt.Texts())

@@ -75,6 +75,7 @@ func TestModelPickerIsOffWhileReplying(t *testing.T) {
 func TestSettingsListProvidersAndLogIn(t *testing.T) {
 	a, f := testApp()
 	tt := ui.NewTester(a.View, 1100, 1600)
+	a.settingsPage = pageModels
 	a.OpenSettings()
 	tt.Frame()
 
@@ -113,6 +114,7 @@ func TestDefaultModelIsWhatNewSessionsStartOn(t *testing.T) {
 	var saved []Settings
 	a.SaveSettings = func(s Settings) { saved = append(saved, s) }
 	tt := ui.NewTester(a.View, 1100, 1600)
+	a.settingsPage = pageModels
 	a.OpenSettings()
 	tt.Frame()
 
