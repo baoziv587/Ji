@@ -366,31 +366,7 @@ func (a *App) providers(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 
-	var detected, others []agent.Provider
-	for _, provider := range a.catalog.providers {
-		if provider.Detected {
-			detected = append(detected, provider)
-		} else {
-			others = append(others, provider)
-		}
-	}
-
-	ui.Row(c).Gap(8).AlignItems(ui.Start).Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).Gap(4).Children(func() {
-			ui.Text(c, "Providers").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
-			ui.Text(c, "Detected from their API key variables and the keys kept in ~/.ji, by /login or here. A session picks its model among theirs, in its title bar.").
-				TextColor(p.MutedForeground)
-		})
-		if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.RefreshCw}).
-			Label("Check providers again").Tooltip("Check again").Clicked() {
-			a.loadProviders()
-		}
-		if components.Button(c, "Add provider", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.Plus, Disabled: !a.catalog.listed || a.adding != nil}).
-			Tooltip("A key for one of the catalog's, or a server of your own").Clicked() {
-			a.openProviderForm(&providerForm{})
-		}
-	})
-
+	a.providersHeading(c)
 	if note := a.providerNote; note.text != "" {
 		icon, color := icons.Check, p.Success
 		if note.failed {
@@ -413,56 +389,97 @@ func (a *App) providers(c *ui.Context) {
 
 	a.defaultModel(c)
 
+	var detected, others []agent.Provider
+	for _, provider := range a.catalog.providers {
+		if provider.Detected {
+			detected = append(detected, provider)
+		} else {
+			others = append(others, provider)
+		}
+	}
 	if len(detected) == 0 {
 		ui.Row(c).Padding(12, 16).Radius(t.Radius+2).Border(1, p.Border).Children(func() {
 			ui.Text(c, "None has a key yet: add one with Add provider, set its variable before starting Ji Agent, or log in below.").
 				TextColor(p.MutedForeground).Shrink(1)
 		})
 	} else {
-		providerRows(c, detected, func(provider agent.Provider) {
-			if a.removing == provider.ID {
-				a.confirmRemoval(c, provider)
-				return
-			}
-			figures(c, modelCount(provider.Models), p.MutedForeground)
-			color := p.Success
-			if provider.Source == "no key" {
-				color = p.MutedForeground
-			}
-			components.Tag(c, provider.Source, color).Tooltip(sourceNote(provider))
-			// As wide in every row, so the tags line up over rows with none
-			ui.Row(c).Width(52).Shrink(0).Gap(4).Justify(ui.End).Children(func() { a.providerActions(c, provider) })
+		providerRows(c, detected, func(provider agent.Provider) { a.detectedTrail(c, provider) })
+	}
+	if len(others) > 0 {
+		components.Disclosure(c, fmt.Sprintf("Not detected (%d)", len(others)), ui.Color{}, &a.othersOpen, func() {
+			providerRows(c, others, func(provider agent.Provider) { a.undetectedTrail(c, provider) })
 		})
 	}
+}
 
-	if len(others) == 0 {
+// providersHeading is the section's title and what it lists, then the ways
+// to read them again and to add one.
+func (a *App) providersHeading(c *ui.Context) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	ui.Row(c).Gap(8).AlignItems(ui.Start).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(4).Children(func() {
+			ui.Text(c, "Providers").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
+			ui.Text(c, "Detected from their API key variables and the keys kept in ~/.ji, by /login or here. A session picks its model among theirs, in its title bar.").
+				TextColor(p.MutedForeground)
+		})
+		if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.RefreshCw}).
+			Label("Check providers again").Tooltip("Check again").Clicked() {
+			a.loadProviders()
+		}
+		if components.Button(c, "Add provider", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.Plus, Disabled: !a.catalog.listed || a.adding != nil}).
+			Tooltip("A key for one of the catalog's, or a server of your own").Clicked() {
+			a.openProviderForm(&providerForm{})
+		}
+	})
+}
+
+// detectedTrail is a detected provider's row after its name: how many
+// models it has, where its key comes from and what can be changed of it;
+// or, while its removal waits for a second yes, the question.
+func (a *App) detectedTrail(c *ui.Context, provider agent.Provider) {
+	if a.removing == provider.ID {
+		a.confirmRemoval(c, provider)
 		return
 	}
-	_, _, inSession := a.current()
-	components.Disclosure(c, fmt.Sprintf("Not detected (%d)", len(others)), ui.Color{}, &a.othersOpen, func() {
-		providerRows(c, others, func(provider agent.Provider) {
-			if !provider.APIKey && !provider.OAuth {
-				ui.Text(c, "Set up in the environment").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine()
-				return
-			}
-			if provider.OAuth {
-				login := components.Button(c, "Log in", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeExtraSmall, Disabled: !inSession}).
-					Label("Log in to " + provider.Name)
-				tip := "/login " + provider.ID + " in the session shown: it signs in in the browser"
-				if !inSession {
-					tip = "Open a session first: /login asks its questions there"
-				}
-				login.Tooltip(tip)
-				if login.Clicked() {
-					a.loginTo(provider.ID)
-				}
-			}
-			if provider.APIKey && components.Button(c, "Add key", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall}).
-				Label("Add a key for "+provider.Name).Clicked() {
-				a.keyForm(provider.ID)
-			}
-		})
-	})
+	p := components.PaletteOf(c.Theme())
+	figures(c, modelCount(provider.Models), p.MutedForeground)
+	color := p.Success
+	if provider.Keyless() {
+		color = p.MutedForeground
+	}
+	components.Tag(c, provider.Source, color).Tooltip(sourceNote(provider))
+	// As wide in every row, so the tags line up over rows with none
+	ui.Row(c).Width(52).Shrink(0).Gap(4).Justify(ui.End).Children(func() { a.providerActions(c, provider) })
+}
+
+// undetectedTrail is the way to give a provider not detected a key: a key
+// typed in, a login in the session shown, or neither when only the
+// environment sets it up.
+func (a *App) undetectedTrail(c *ui.Context, provider agent.Provider) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	if !provider.APIKey && !provider.OAuth {
+		ui.Text(c, "Set up in the environment").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine()
+		return
+	}
+	if provider.OAuth {
+		_, _, inSession := a.current()
+		login := components.Button(c, "Log in", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeExtraSmall, Disabled: !inSession}).
+			Label("Log in to " + provider.Name)
+		tip := "/login " + provider.ID + " in the session shown: it signs in in the browser"
+		if !inSession {
+			tip = "Open a session first: /login asks its questions there"
+		}
+		login.Tooltip(tip)
+		if login.Clicked() {
+			a.loginTo(provider.ID)
+		}
+	}
+	if provider.APIKey && components.Button(c, "Add key", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall}).
+		Label("Add a key for "+provider.Name).Clicked() {
+		a.keyForm(provider.ID)
+	}
 }
 
 // providerActions is what can be changed of a detected provider: an
@@ -478,29 +495,24 @@ func (a *App) providerActions(c *ui.Context, provider agent.Provider) {
 		if icon(icons.Pencil, "Change "+provider.Name) {
 			a.endpointForm(provider)
 		}
-		if icon(icons.Trash2, "Remove "+provider.Name) {
-			a.removing, a.providerNote = provider.ID, providerNote{}
-		}
-	case provider.Stored:
-		if provider.APIKey && provider.Source != "OAuth" && icon(icons.Pencil, "Replace "+provider.Name+"'s key") {
+	case !provider.Stored:
+		return
+	case provider.APIKey && !provider.SignedIn():
+		if icon(icons.Pencil, "Replace "+provider.Name+"'s key") {
 			a.keyForm(provider.ID)
 		}
-		label := "Forget " + provider.Name + "'s key"
-		if provider.Source == "OAuth" {
-			label = "Log out of " + provider.Name
-		}
-		if icon(icons.Trash2, label) {
-			a.removing, a.providerNote = provider.ID, providerNote{}
-		}
+	}
+	if icon(icons.Trash2, removalOf(provider).label) {
+		a.removing, a.providerNote = provider.ID, providerNote{}
 	}
 }
 
 // sourceNote says where a provider's key comes from, and where to change it.
 func sourceNote(provider agent.Provider) string {
 	switch {
-	case provider.Source == "no key":
+	case provider.Keyless():
 		return "Asked with no key: add one with the pencil if it wants one"
-	case provider.Source == "OAuth":
+	case provider.SignedIn():
 		return "Signed in with /login, kept in ~/.ji"
 	case provider.Stored:
 		return "Kept in ~/.ji/auth.json, by /login or here"

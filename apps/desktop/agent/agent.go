@@ -133,6 +133,12 @@ type Provider struct {
 	Endpoint *Endpoint `json:"endpoint,omitempty"`
 }
 
+// SignedIn is whether its key is an OAuth login, which /logout forgets.
+func (p Provider) SignedIn() bool { return p.Source == "OAuth" }
+
+// Keyless is whether it is asked with no key: an endpoint that has none.
+func (p Provider) Keyless() bool { return p.Source == "no key" }
+
 // Endpoint is a server that speaks OpenAI's chat completions, added as a
 // provider. Its ID is made of its name when it is added.
 type Endpoint struct {

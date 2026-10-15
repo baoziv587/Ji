@@ -675,7 +675,7 @@ func TestSnapshot(t *testing.T) {
 			a.keyForm("openai")
 		case "endpoint":
 			a.openProviderForm(&providerForm{chosen: true, listed: true, name: "Ollama", baseURL: "http://localhost:11434/v1",
-				models: []string{"deepseek-r1:14b", "llama3.1:8b", "qwen2.5-coder:14b"}, kept: []bool{true, false, true},
+				models:  []modelChoice{{"deepseek-r1:14b", true}, {"llama3.1:8b", false}, {"qwen2.5-coder:14b", true}},
 				problem: os.Getenv("PROBLEM")})
 		}
 	}

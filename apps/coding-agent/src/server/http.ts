@@ -107,49 +107,11 @@ async function route(
     hub.setMode(mode)
     return sendJson(res, 200, { mode })
   }
-  const providers = async (): Promise<void> => sendJson(res, 200, { providers: await providerViews(auth) })
   if (collection === 'providers') {
-    if (id === undefined && method === 'GET') {
-      return providers()
-    }
-    const provider = decodeURIComponent(id ?? '')
-    if (models.getProvider(provider) === undefined) {
-      throw new HttpError(404, `no provider ${provider}`)
-    }
-    if (action === 'models' && method === 'GET') {
-      return sendJson(res, 200, { models: modelViews(provider) })
-    }
-    if (action === 'key' && method === 'PUT') {
-      await storeKey(provider, (await RequestBody.read(req)).string('key'))
-      return providers()
-    }
-    if (action === 'key' && method === 'DELETE') {
-      await forgetKey(provider)
-      return providers()
-    }
-    throw noRoute()
+    return routeProviders({ method, id, action, noRoute }, auth, req, res)
   }
   if (collection === 'endpoints') {
-    if (auth === undefined) {
-      throw new HttpError(404, 'this service keeps no endpoints')
-    }
-    if (method === 'DELETE' && id !== undefined) {
-      await dropEndpoint(auth, decodeURIComponent(id))
-      return providers()
-    }
-    if (method !== 'POST') {
-      throw noRoute()
-    }
-    const body = await RequestBody.read(req)
-    if (id === 'probe') {
-      const found = await probeEndpoint(body.string('baseUrl'), body.optional('key'), body.optional('id'))
-      return sendJson(res, 200, { models: found })
-    }
-    if (id !== undefined) {
-      throw noRoute()
-    }
-    await keepEndpoint(auth, body.endpoint())
-    return providers()
+    return routeEndpoints({ method, id, action, noRoute }, auth, req, res)
   }
   if (collection !== 'sessions') {
     throw noRoute()
@@ -215,6 +177,78 @@ async function route(
     default:
       throw noRoute()
   }
+}
+
+/** A request's method, and its path's parts after /api/<collection>. */
+interface Target {
+  method: string
+  id?: string
+  action?: string
+  noRoute: () => HttpError
+}
+
+/** /api/providers: the list, a provider's models, and its key stored or forgotten. */
+async function routeProviders(
+  { method, id, action, noRoute }: Target,
+  auth: string | undefined,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (id === undefined && method === 'GET') {
+    return sendProviders(res, auth)
+  }
+
+  const provider = decodeURIComponent(id ?? '')
+  if (models.getProvider(provider) === undefined) {
+    throw new HttpError(404, `no provider ${provider}`)
+  }
+  if (action === 'models' && method === 'GET') {
+    return sendJson(res, 200, { models: modelViews(provider) })
+  }
+  if (action === 'key' && method === 'PUT') {
+    await storeKey(provider, (await RequestBody.read(req)).string('key'))
+    return sendProviders(res, auth)
+  }
+  if (action === 'key' && method === 'DELETE') {
+    await forgetKey(provider)
+    return sendProviders(res, auth)
+  }
+  throw noRoute()
+}
+
+/** /api/endpoints: one added, changed or removed, and the models a server lists. */
+async function routeEndpoints(
+  { method, id, noRoute }: Target,
+  auth: string | undefined,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  if (auth === undefined) {
+    throw new HttpError(404, 'this service keeps no endpoints')
+  }
+  if (method === 'DELETE' && id !== undefined) {
+    await dropEndpoint(auth, decodeURIComponent(id))
+    return sendProviders(res, auth)
+  }
+  if (method !== 'POST') {
+    throw noRoute()
+  }
+
+  const body = await RequestBody.read(req)
+  if (id === 'probe') {
+    const found = await probeEndpoint(body.string('baseUrl'), body.optional('key'), body.optional('id'))
+    return sendJson(res, 200, { models: found })
+  }
+  if (id !== undefined) {
+    throw noRoute()
+  }
+  await keepEndpoint(auth, body.endpoint())
+  return sendProviders(res, auth)
+}
+
+/** What a change of the providers answers with: all of them as it leaves them. */
+async function sendProviders(res: ServerResponse, auth: string | undefined): Promise<void> {
+  sendJson(res, 200, { providers: await providerViews(auth) })
 }
 
 /** The list, then the list again whenever it changes, until the client hangs up. */
