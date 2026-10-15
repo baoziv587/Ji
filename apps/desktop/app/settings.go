@@ -24,6 +24,9 @@ type Settings struct {
 	// Transparency is how much the window's glass lets through, from 0,
 	// solid, to 100: kept even at 0, which would otherwise read as unset.
 	Transparency float64 `json:"transparency"`
+	// ContentTransparency is as much of the glass behind the conversation
+	// and the settings, kept as Transparency is.
+	ContentTransparency float64 `json:"contentTransparency"`
 	// Approvals is every session's mode: ask, auto or yolo. Unset, each
 	// starts in the service's own.
 	Approvals string `json:"approvals,omitempty"`
@@ -33,7 +36,7 @@ type Settings struct {
 }
 
 // DefaultSettings are the settings of a first run, under those kept.
-var DefaultSettings = Settings{Transparency: transparencyStandard}
+var DefaultSettings = Settings{Transparency: transparencyStandard, ContentTransparency: transparencyStandard}
 
 var appearances = []struct {
 	value components.Appearance
@@ -152,7 +155,7 @@ func (a *App) settings(c *ui.Context) {
 		})
 
 		ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).
-			Material(a.bar()).DragWindow().Children(func() {
+			Material(a.bar(a.contentCover(c))).DragWindow().Children(func() {
 			ui.Text(c, page.title).FontWeight(600).Grow(1)
 			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.X}).
 				Label("Close Settings").Tooltip("Close (Esc)").Clicked() {
@@ -218,17 +221,14 @@ func (a *App) appearance(c *ui.Context) {
 		a.modes(c)
 	})
 
-	ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
-			ui.Text(c, "Transparency").FontWeight(500)
-			note := "What shows through the sidebar and the title bars: the desktop, and what scrolls under them."
-			if !c.Vibrancy() {
-				note = "What scrolls under the title bars shows through them; the sidebar has no desktop to show here."
-			}
-			ui.Text(c, note).TextColor(p.MutedForeground)
-		})
-		a.transparency(c)
-	})
+	bars := "What shows through the sidebar and the title bars: the desktop, and what scrolls under them."
+	content := "What shows through behind the conversation and the settings: the desktop, blurred."
+	if !c.Vibrancy() {
+		bars = "What scrolls under the title bars shows through them; the sidebar has no desktop to show here."
+		content = "There is no desktop to show here: the conversation and the settings stay solid."
+	}
+	a.transparency(c, "Sidebar transparency", bars, &a.Settings.Transparency)
+	a.transparency(c, "Content transparency", content, &a.Settings.ContentTransparency)
 
 	ui.Box(c).Height(1).Background(p.Border)
 
@@ -292,17 +292,25 @@ func (a *App) modes(c *ui.Context) {
 	}).Row().Shrink(0).Height(36).Padding(3).Gap(2).Radius(t.Radius).Background(p.Muted).Label("Mode")
 }
 
-// transparency is the slider of the window's glass, its ends named under it.
-func (a *App) transparency(c *ui.Context) {
+// transparency is a setting of the window's glass, named and said, with
+// its slider, the slider's ends named under it.
+func (a *App) transparency(c *ui.Context, name, note string, value *float64) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
-	ui.Column(c).Width(236).Shrink(0).Gap(2).Children(func() {
-		a.sliding = ui.StepSlider(c, &a.Settings.Transparency, transparencySolid, transparencyClear, transparencyStep).
-			Label("Transparency").Pressed()
-		ui.Row(c).Justify(ui.SpaceBetween).Children(func() {
-			for _, end := range []string{"Solid", "Clear"} {
-				ui.Text(c, end).FontSize(components.TextXS(t)).TextColor(p.MutedForeground)
+	ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, name).FontWeight(500)
+			ui.Text(c, note).TextColor(p.MutedForeground)
+		})
+		ui.Column(c).Width(236).Shrink(0).Gap(2).Children(func() {
+			if ui.StepSlider(c.Key(name), value, transparencySolid, transparencyClear, transparencyStep).Label(name).Pressed() {
+				a.sliding = true
 			}
+			ui.Row(c).Justify(ui.SpaceBetween).Children(func() {
+				for _, end := range []string{"Solid", "Clear"} {
+					ui.Text(c, end).FontSize(components.TextXS(t)).TextColor(p.MutedForeground)
+				}
+			})
 		})
 	})
 }
