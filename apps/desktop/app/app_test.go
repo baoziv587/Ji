@@ -591,7 +591,8 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 // with the menu of commands open on what is typed, APPROVALS=yolo with
 // that mode chosen in the settings, USAGE=1 with the history 3/4 full and
 // what was spent open, COMPACT=1 with a compaction done and one running,
-// MODELS=1 with the picker of models open. In the settings, ENDPOINT=1
+// MODELS=1 with the picker of models open, SCALE=2 drawn at twice the size. In the settings, PAGE=approvals
+// or models shows that page, which the following imply: ENDPOINT=1
 // adds an endpoint to the providers, REMOVING=<id> asks to remove one,
 // and ADDING=list, key or endpoint opens the form there, PROBLEM=<text>
 // saying what went wrong in the endpoint's.
@@ -658,6 +659,10 @@ func TestSnapshot(t *testing.T) {
 		a.Settings.Transparency = v
 	}
 	if os.Getenv("SETTINGS") == "1" {
+		a.settingsPage = os.Getenv("PAGE")
+		if os.Getenv("ADDING")+os.Getenv("ENDPOINT")+os.Getenv("REMOVING")+os.Getenv("OTHERS") != "" {
+			a.settingsPage = pageModels
+		}
 		a.OpenSettings()
 		a.othersOpen = os.Getenv("OTHERS") == "1"
 		if os.Getenv("ENDPOINT") == "1" {
@@ -700,6 +705,9 @@ func TestSnapshot(t *testing.T) {
 	}
 	tt := ui.NewTester(a.View, 1180, height)
 	tt.SetDark(os.Getenv("DARK") == "1")
+	if s, err := strconv.ParseFloat(os.Getenv("SCALE"), 32); err == nil {
+		tt.SetScale(float32(s))
+	}
 	// The traffic lights of a hidden-inset title bar, as on macOS
 	tt.SetTitleBar(ui.TitleBar{Height: TitleBarHeight, Left: 78})
 	tt.Frame()
@@ -797,8 +805,8 @@ func TestGlassesRampThroughTheDetents(t *testing.T) {
 	}
 }
 
-// The settings show in place of the session; a choice shows at once and is
-// kept, and choosing a session goes back to it.
+// The settings show in place of the session, a page at a time; a choice
+// shows at once and is kept, and the way back says how many sessions wait.
 func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 	a, _ := testApp()
 	var saved []Settings
@@ -842,18 +850,35 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 
 	a.OpenSettings()
 	tt.Frame()
-	if err := tt.Click("Fix the login form"); err != nil {
+	if err := tt.Click("Approvals"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.settingsOpen || a.selected != "a" {
-		t.Errorf("open %v, selected %q: choosing the session shown goes back to it", a.settingsOpen, a.selected)
+	if tt.HasText("Color theme") || !tt.HasText("Nothing waits for a yes.") {
+		t.Errorf("the Approvals page shows %q", tt.Texts())
+	}
+	if _, ok := tt.Find("1 waiting"); !ok || tt.HasText("Fix the login form") {
+		t.Errorf("the settings' sidebar shows %q: the way back, with the session that asks counted", tt.Texts())
+	}
+
+	if err := tt.Click("Back to the sessions"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.settingsOpen || a.selected != "a" || !tt.HasText("Fix the login form") {
+		t.Errorf("open %v, selected %q: the way back shows the session as it was", a.settingsOpen, a.selected)
+	}
+	a.OpenSettings()
+	tt.Frame()
+	if !tt.HasText("Nothing waits for a yes.") {
+		t.Errorf("the settings open again on %q, not the page shown last", tt.Texts())
 	}
 }
 
 func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
 	a, f := testApp()
 	tt := ui.NewTester(a.View, 1100, 1000)
+	a.settingsPage = pageApprovals
 	a.OpenSettings()
 	tt.Frame()
 

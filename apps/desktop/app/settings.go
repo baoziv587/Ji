@@ -1,7 +1,8 @@
 package app
 
-// The settings, in place of the session: how the window looks, light or
-// dark and in which colors, what waits for a yes in the sessions, and the
+// The settings, in place of the session and its sidebar, a page at a time:
+// how the window looks, light or dark and in which colors, what waits for
+// a yes in the sessions, and the model new sessions start on with the
 // providers whose models they can pick. A choice shows at once and is kept.
 
 import (
@@ -51,8 +52,43 @@ var approvals = []struct{ mode, note string }{
 	{"yolo", "Nothing waits for a yes."},
 }
 
+const (
+	pageAppearance = "appearance"
+	pageApprovals  = "approvals"
+	pageModels     = "models"
+)
+
+// settingsPage is a page of the settings, as the sidebar lists it, and
+// how it is drawn.
+type settingsPage struct {
+	id, title string
+	gap       float32
+	draw      func(a *App, c *ui.Context)
+}
+
+var settingsPages = []settingsPage{
+	{pageAppearance, "Appearance", 24, (*App).appearance},
+	{pageApprovals, "Approvals", 16, (*App).approvals},
+	{pageModels, "Models", 24, (*App).modelsPage},
+}
+
+// pageOf is the page of id; the first for one unknown.
+func pageOf(id string) settingsPage {
+	for _, page := range settingsPages {
+		if page.id == id {
+			return page
+		}
+	}
+	return settingsPages[0]
+}
+
+// OpenSettings shows the settings on the page shown last, the providers
+// read afresh whichever it is.
 func (a *App) OpenSettings() {
 	a.settingsOpen = true
+	if a.settingsPage == "" {
+		a.settingsPage = pageAppearance
+	}
 	a.loadProviders()
 }
 
@@ -107,20 +143,17 @@ func (a *App) settings(c *ui.Context) {
 		}
 	}
 
+	page := pageOf(a.settingsPage)
 	ui.Box(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Scroll(c).Fill().Padding(TitleBarHeight+32, 24, 48).ScrollbarInsets(TitleBarHeight, 0, 0).Children(func() {
+		ui.Scroll(c.Key(page.id)).Fill().Padding(TitleBarHeight+32, 24, 48).ScrollbarInsets(TitleBarHeight, 0, 0).Children(func() {
 			ui.Row(c).Justify(ui.Center).Children(func() {
-				ui.Column(c).Grow(1).MaxWidth(636).Gap(56).Children(func() {
-					ui.Column(c).Gap(24).Children(func() { a.appearance(c) })
-					ui.Column(c).Gap(16).Children(func() { a.approvals(c) })
-					ui.Column(c).Gap(16).Children(func() { a.providers(c) })
-				})
+				ui.Column(c).Grow(1).MaxWidth(636).Gap(page.gap).Children(func() { page.draw(a, c) })
 			})
 		})
 
 		ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).
 			Material(a.bar()).DragWindow().Children(func() {
-			ui.Text(c, "Settings").FontWeight(600).Grow(1)
+			ui.Text(c, page.title).FontWeight(600).Grow(1)
 			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.X}).
 				Label("Close Settings").Tooltip("Close (Esc)").Clicked() {
 				a.settingsOpen = false
@@ -129,11 +162,54 @@ func (a *App) settings(c *ui.Context) {
 	})
 }
 
-func (a *App) appearance(c *ui.Context) {
-	t := c.Theme()
-	p := components.PaletteOf(t)
-	ui.Text(c, "Appearance").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
+// settingsNav is the sidebar while the settings show: the way back to the
+// sessions, with how many wait for an answer so that none is missed, over
+// the pages.
+func (a *App) settingsNav(c *ui.Context) {
+	p := components.PaletteOf(c.Theme())
+	a.sidebarBar(c, func() {
+		back := components.Button(c, "Sessions", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeSmall, Icon: icons.ChevronLeft}).
+			Label("Back to the sessions").Tooltip("Back to the sessions (Esc)").Margin(0, 0, 0, -8)
+		if back.Clicked() {
+			a.settingsOpen = false
+		}
+		ui.Box(c).Grow(1)
+		// Beside the window controls there is room for the count alone
+		if n := a.waiting(); n > 0 {
+			components.Tag(c, fmt.Sprint(n), p.Waiting).Label(fmt.Sprintf("%d waiting", n)).Tooltip(fmt.Sprintf("%d waiting for an answer", n))
+		}
+	})
 
+	page := a.settingsPage
+	if ui.Sidebar(c, &page, func() {
+		ui.SidebarSection(c, "Settings", nil, func() {
+			for _, s := range settingsPages {
+				item := ui.SidebarItem(c.Key(s.id), s.id, nil, s.title).Height(32).Padding(0, 8).Transition(components.ColorTransition)
+				if s.id == a.settingsPage {
+					a.chosen(c, item)
+				}
+			}
+		})
+	}).Background(ui.Transparent).Grow(1).Changed() {
+		// A removal is asked of the page it shows on, and is not left to
+		// wait out of sight; a form being filled in is kept
+		a.settingsPage, a.removing = page, ""
+	}
+}
+
+// waiting is how many sessions wait for an answer: an approval or a question.
+func (a *App) waiting() int {
+	n := 0
+	for _, s := range a.list.Sessions {
+		if !s.Archived && a.status(s) == "asking" {
+			n++
+		}
+	}
+	return n
+}
+
+func (a *App) appearance(c *ui.Context) {
+	p := components.PaletteOf(c.Theme())
 	ui.Row(c).Gap(16).AlignItems(ui.Center).Children(func() {
 		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
 			ui.Text(c, "Mode").FontWeight(500)
@@ -292,17 +368,13 @@ func (a *App) schemeCard(c *ui.Context, s *components.Scheme) {
 }
 
 func (a *App) approvals(c *ui.Context) {
-	t := c.Theme()
-	p := components.PaletteOf(t)
+	p := components.PaletteOf(c.Theme())
 
-	ui.Column(c).Gap(4).Children(func() {
-		ui.Text(c, "Approvals").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
-		note := "What waits for a yes, in every session now and every new one. Each can still switch on its own with ⇧⇥."
-		if a.Settings.Approvals == "" {
-			note = "None chosen: each session starts as the service does, in ask unless it was started with --yolo."
-		}
-		ui.Text(c, note).TextColor(p.MutedForeground)
-	})
+	note := "What waits for a yes, in every session now and every new one. Each can still switch on its own with ⇧⇥."
+	if a.Settings.Approvals == "" {
+		note = "None chosen: each session starts as the service does, in ask unless it was started with --yolo."
+	}
+	ui.Text(c, note).TextColor(p.MutedForeground)
 
 	ui.RadioGroup(c, func() {
 		for _, m := range approvals {
@@ -358,6 +430,15 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 	})
 }
 
+// modelsPage is the model new sessions start on, then the providers whose
+// models it and the sessions pick among.
+func (a *App) modelsPage(c *ui.Context) {
+	p := components.PaletteOf(c.Theme())
+	a.defaultModel(c)
+	ui.Box(c).Height(1).Background(p.Border)
+	ui.Column(c).Gap(16).Children(func() { a.providers(c) })
+}
+
 // providers is the catalog's providers: those detected, with where their
 // key comes from and a way to change or forget what is kept of it, then
 // the others, folded, each with a way to add a key or log in. A provider
@@ -387,8 +468,6 @@ func (a *App) providers(c *ui.Context) {
 		a.providerFormCard(c)
 	}
 
-	a.defaultModel(c)
-
 	var detected, others []agent.Provider
 	for _, provider := range a.catalog.providers {
 		if provider.Detected {
@@ -415,11 +494,10 @@ func (a *App) providers(c *ui.Context) {
 // providersHeading is the section's title and what it lists, then the ways
 // to read them again and to add one.
 func (a *App) providersHeading(c *ui.Context) {
-	t := c.Theme()
-	p := components.PaletteOf(t)
+	p := components.PaletteOf(c.Theme())
 	ui.Row(c).Gap(8).AlignItems(ui.Start).Children(func() {
-		ui.Column(c).Grow(1).Shrink(1).Gap(4).Children(func() {
-			ui.Text(c, "Providers").FontSize(components.TextLG(t)).FontWeight(500).LetterSpacing(-0.4)
+		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
+			ui.Text(c, "Providers").FontWeight(500)
 			ui.Text(c, "Detected from their API key variables and the keys kept in ~/.ji, by /login or here. A session picks its model among theirs, in its title bar.").
 				TextColor(p.MutedForeground)
 		})
