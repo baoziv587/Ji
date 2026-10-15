@@ -32,6 +32,10 @@ func sessionPath(id, action string) string {
 	return "/api/sessions/" + url.PathEscape(id) + "/" + action
 }
 
+func providerPath(id, action string) string {
+	return "/api/providers/" + url.PathEscape(id) + "/" + action
+}
+
 func (c *Client) FollowSessions(ctx context.Context, fn func(Sessions), status func(error)) {
 	c.reconnect(ctx, "/api/events", nil, func(e json.RawMessage) {
 		var s Sessions
@@ -111,16 +115,16 @@ func (c *Client) Models(ctx context.Context, provider string) ([]Model, error) {
 	var out struct {
 		Models []Model `json:"models"`
 	}
-	err := c.do(ctx, http.MethodGet, "/api/providers/"+url.PathEscape(provider)+"/models", nil, &out)
+	err := c.do(ctx, http.MethodGet, providerPath(provider, "models"), nil, &out)
 	return out.Models, err
 }
 
 func (c *Client) StoreKey(ctx context.Context, provider, key string) ([]Provider, error) {
-	return c.providers(ctx, http.MethodPut, "/api/providers/"+url.PathEscape(provider)+"/key", map[string]string{"key": key})
+	return c.providers(ctx, http.MethodPut, providerPath(provider, "key"), map[string]string{"key": key})
 }
 
 func (c *Client) ForgetKey(ctx context.Context, provider string) ([]Provider, error) {
-	return c.providers(ctx, http.MethodDelete, "/api/providers/"+url.PathEscape(provider)+"/key", nil)
+	return c.providers(ctx, http.MethodDelete, providerPath(provider, "key"), nil)
 }
 
 func (c *Client) KeepEndpoint(ctx context.Context, e Endpoint) ([]Provider, error) {

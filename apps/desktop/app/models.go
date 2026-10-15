@@ -7,7 +7,6 @@ package app
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -47,9 +46,7 @@ type modelPicker struct {
 // loadProviders reads the providers again, keeping those read before
 // meanwhile.
 func (a *App) loadProviders() {
-	a.async(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	a.request(func(ctx context.Context) {
 		providers, err := a.agent.Providers(ctx)
 		a.update(func() {
 			a.catalog.problem = ""
@@ -72,9 +69,7 @@ func (a *App) loadModels(provider string) {
 		a.catalog.models = map[string][]agent.Model{}
 	}
 	a.catalog.reading[provider] = true
-	a.async(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	a.request(func(ctx context.Context) {
 		models, err := a.agent.Models(ctx, provider)
 		a.update(func() {
 			delete(a.catalog.reading, provider)
@@ -119,14 +114,28 @@ func (m *modelPicker) filtered(models []agent.Model) []agent.Model {
 	}
 	m.shownFor, m.shownOf = key, models
 	m.shown = m.shown[:0]
-	query := strings.ToLower(strings.TrimSpace(m.query))
 	for _, model := range models {
-		if query == "" || strings.Contains(strings.ToLower(model.ID), query) || strings.Contains(strings.ToLower(model.Name), query) {
+		if matches(m.query, model.ID, model.Name) {
 			m.shown = append(m.shown, model)
 		}
 	}
 	m.at = min(m.at, max(len(m.shown)-1, 0))
 	return m.shown
+}
+
+// matches is whether any of the texts has what is typed in it, in any case;
+// all do when nothing is typed.
+func matches(query string, texts ...string) bool {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return true
+	}
+	for _, text := range texts {
+		if strings.Contains(strings.ToLower(text), query) {
+			return true
+		}
+	}
+	return false
 }
 
 // modelSelect is the session's model in its title bar, which opens the
@@ -174,10 +183,16 @@ func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 func (a *App) toggleModels(picker *modelPicker, current string) {
 	picker.open = !picker.open
 	if picker.open {
-		picker.provider, picker.query, picker.at = providerOf(current), "", 0
 		a.loadProviders()
-		a.loadModels(picker.provider)
+		a.showProvider(picker, providerOf(current))
 	}
+}
+
+// showProvider lists a provider's models in the picker, from the top and
+// unfiltered.
+func (a *App) showProvider(picker *modelPicker, provider string) {
+	picker.provider, picker.query, picker.at = provider, "", 0
+	a.loadModels(provider)
 }
 
 // modelMenu is the picker under anchor while it is open: the providers
@@ -210,8 +225,7 @@ func (a *App) pickerProviders(c *ui.Context, picker *modelPicker, current string
 				providers := a.pickable(providerOf(current))
 				// A picker opened with no model, the default before one is chosen, starts on the first provider
 				if picker.provider == "" && len(providers) > 0 {
-					picker.provider = providers[0].ID
-					a.loadModels(picker.provider)
+					a.showProvider(picker, providers[0].ID)
 				}
 				if len(providers) == 0 {
 					note := "Reading…"
@@ -239,8 +253,7 @@ func (a *App) pickerProviders(c *ui.Context, picker *modelPicker, current string
 						row.Tooltip("No key now: set its API key variable, or /login " + provider.ID)
 					}
 					if row.Clicked() && !chosen {
-						picker.provider, picker.query, picker.at = provider.ID, "", 0
-						a.loadModels(provider.ID)
+						a.showProvider(picker, provider.ID)
 					}
 				}
 			})

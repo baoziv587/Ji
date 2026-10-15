@@ -108,7 +108,7 @@ export async function keepEndpoint(dir: string, input: EndpointInput): Promise<E
     if (models.getProvider(id) !== undefined) {
       throw new Error(`"${name}" is taken: there is a provider ${id} already`)
     }
-  } else if (!listEndpoints(dir).some(e => e.id === id)) {
+  } else if (!hasEndpoint(dir, id)) {
     throw new Error(`no endpoint ${id}`)
   }
 
@@ -122,7 +122,7 @@ export async function keepEndpoint(dir: string, input: EndpointInput): Promise<E
 }
 
 export function dropEndpoint(dir: string, id: string): Promise<void> {
-  if (!listEndpoints(dir).some(e => e.id === id)) {
+  if (!hasEndpoint(dir, id)) {
     throw new Error(`no endpoint ${id}`)
   }
   return removeEndpoint(dir, id)
@@ -135,6 +135,10 @@ export async function probeEndpoint(baseUrl: string, key?: string, id?: string):
     bearer = (await models.getAuth(id))?.auth.apiKey
   }
   return fetchEndpointModels(baseUrlOf(baseUrl), bearer)
+}
+
+function hasEndpoint(dir: string, id: string): boolean {
+  return listEndpoints(dir).some(e => e.id === id)
 }
 
 function baseUrlOf(value: string): string {

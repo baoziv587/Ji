@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -39,8 +38,7 @@ type providerForm struct {
 	baseURL string
 	key     string
 	// The ids the server listed and those typed in, each kept or not.
-	models   []string
-	kept     []bool
+	models   []modelChoice
 	typed    string
 	advanced bool
 	window   string
@@ -49,6 +47,11 @@ type providerForm struct {
 	probing bool
 	saving  bool
 	problem string
+}
+
+type modelChoice struct {
+	id   string
+	kept bool
 }
 
 // providerNote is what the last change of the providers did, said under
@@ -72,7 +75,7 @@ func (a *App) endpointForm(p agent.Provider) {
 	e := p.Endpoint
 	f := &providerForm{chosen: true, editing: p.ID, stored: p.Stored, name: p.Name, baseURL: e.BaseURL}
 	for _, m := range e.Models {
-		f.models, f.kept = append(f.models, m.ID), append(f.kept, true)
+		f.models = append(f.models, modelChoice{m.ID, true})
 		if m.ContextWindow > 0 {
 			f.window = strconv.Itoa(m.ContextWindow)
 		}
@@ -87,21 +90,12 @@ func (a *App) providerFormCard(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	ui.Column(c).Gap(16).Padding(16).Radius(t.Radius+2).Border(1, p.Border).Background(p.Card).Children(func() {
-		title := "Add a provider"
-		switch {
-		case f.chosen && f.provider != "":
-			title = a.providerName(f.provider) + " API key"
-		case f.editing != "":
-			title = "Change " + f.name
-		case f.chosen:
-			title = "OpenAI-compatible endpoint"
-		}
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 			if f.chosen && f.listed && components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconExtraSmall, Icon: icons.ChevronLeft}).
 				Label("Choose another provider").Tooltip("Choose another").Clicked() {
 				*f = providerForm{listed: true, query: f.query}
 			}
-			ui.Text(c, title).FontWeight(500).Grow(1).Shrink(1).SingleLine()
+			ui.Text(c, f.title(a.providerName(f.provider))).FontWeight(500).Grow(1).Shrink(1).SingleLine()
 			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconExtraSmall, Icon: icons.X}).
 				Label("Cancel").Tooltip("Cancel (Esc)").Clicked() {
 				a.adding = nil
@@ -126,16 +120,7 @@ func (a *App) providerFormCard(c *ui.Context) {
 			if components.Button(c, "Cancel", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeSmall}).Clicked() {
 				a.adding = nil
 			}
-			label := "Save key"
-			switch {
-			case f.saving:
-				label = "Saving…"
-			case f.provider == "" && f.editing != "":
-				label = "Save changes"
-			case f.provider == "":
-				label = "Add endpoint"
-			}
-			if components.Button(c, label, components.ButtonStyle{Size: components.SizeSmall, Disabled: !f.ready()}).Clicked() {
+			if components.Button(c, f.saveLabel(), components.ButtonStyle{Size: components.SizeSmall, Disabled: !f.ready()}).Clicked() {
 				a.saveProviderForm()
 			}
 		})
@@ -149,14 +134,13 @@ func (a *App) providerChoices(c *ui.Context, f *providerForm) {
 	p := components.PaletteOf(t)
 	components.TextInput(c, &f.query).Placeholder("Search providers").Label("Search providers").AutoFocus()
 
-	query := strings.ToLower(strings.TrimSpace(f.query))
 	ui.Column(c).Radius(t.Radius).Border(1, p.Border).Clip().Children(func() {
 		ui.Scroll(c).MaxHeight(264).Children(func() {
 			for _, provider := range a.catalog.providers {
 				if !provider.APIKey || provider.Endpoint != nil {
 					continue
 				}
-				if query != "" && !strings.Contains(strings.ToLower(provider.Name), query) && !strings.Contains(provider.ID, query) {
+				if !matches(f.query, provider.Name, provider.ID) {
 					continue
 				}
 				if choice(c.Key(provider.ID), nil, provider.Name, provider.ID, provider.Source).Clicked() {
@@ -246,8 +230,9 @@ func (a *App) endpointFields(c *ui.Context, f *providerForm) {
 		if len(f.models) > 0 {
 			ui.Column(c).Radius(t.Radius).Border(1, p.Border).Clip().Children(func() {
 				ui.Scroll(c).MaxHeight(200).Children(func() {
-					for i, id := range f.models {
-						modelCheck(c.Key(id), &f.kept[i], id)
+					for i := range f.models {
+						m := &f.models[i]
+						modelCheck(c.Key(m.id), &m.kept, m.id)
 					}
 				})
 			})
@@ -327,27 +312,53 @@ func modelCheck(c *ui.Context, checked *bool, label string) ui.Element {
 	return row
 }
 
+// title is the form's heading; providerName names the provider whose key
+// it takes.
+func (f *providerForm) title(providerName string) string {
+	switch {
+	case !f.chosen:
+		return "Add a provider"
+	case f.provider != "":
+		return providerName + " API key"
+	case f.editing != "":
+		return "Change " + f.name
+	}
+	return "OpenAI-compatible endpoint"
+}
+
+func (f *providerForm) saveLabel() string {
+	switch {
+	case f.saving:
+		return "Saving…"
+	case f.provider != "":
+		return "Save key"
+	case f.editing != "":
+		return "Save changes"
+	}
+	return "Add endpoint"
+}
+
 func (f *providerForm) addModel() {
 	id := strings.TrimSpace(f.typed)
 	if id == "" {
 		return
 	}
 	f.typed = ""
-	for i, m := range f.models {
-		if m == id {
-			f.kept[i] = true
+	for i := range f.models {
+		if f.models[i].id == id {
+			f.models[i].kept = true
 			return
 		}
 	}
-	f.models, f.kept = append(f.models, id), append(f.kept, true)
+	f.models = append(f.models, modelChoice{id, true})
 }
 
 // keptModels is the models chosen, each with the window and thinking set.
 func (f *providerForm) keptModels(window int) []agent.EndpointModel {
 	var out []agent.EndpointModel
-	for i, id := range f.models {
-		if f.kept[i] {
-			out = append(out, agent.EndpointModel{ID: id, ContextWindow: window, Reasoning: f.thinks})
+	for _, m := range f.models {
+		if m.kept {
+			out = append(out, agent.EndpointModel{ID: m.id, ContextWindow: window, Reasoning: f.thinks})
 		}
 	}
 	return out
@@ -362,8 +373,8 @@ func (f *providerForm) modelsNote() string {
 
 func (f *providerForm) keptCount() int {
 	n := 0
-	for _, k := range f.kept {
-		if k {
+	for _, m := range f.models {
+		if m.kept {
 			n++
 		}
 	}
@@ -386,9 +397,7 @@ func (a *App) probeEndpoint() {
 	f := a.adding
 	f.probing, f.problem = true, ""
 	baseURL, key, id := strings.TrimSpace(f.baseURL), strings.TrimSpace(f.key), f.editing
-	a.async(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	a.request(func(ctx context.Context) {
 		ids, err := a.agent.ProbeEndpoint(ctx, baseURL, key, id)
 		a.update(func() {
 			f.probing = false
@@ -398,12 +407,12 @@ func (a *App) probeEndpoint() {
 			}
 			known := map[string]bool{}
 			for _, m := range f.models {
-				known[m] = true
+				known[m.id] = true
 			}
 			keep := len(ids) <= fetchedKept
 			for _, id := range ids {
 				if !known[id] {
-					f.models, f.kept = append(f.models, id), append(f.kept, keep)
+					f.models = append(f.models, modelChoice{id, keep})
 				}
 			}
 		})
@@ -467,16 +476,28 @@ func windowOf(typed string) (int, bool) {
 // removeProvider forgets a provider's key or login, or removes an
 // endpoint, once the person has said so a second time.
 func (a *App) removeProvider(p agent.Provider) {
+	change := func(ctx context.Context) ([]agent.Provider, error) { return a.agent.ForgetKey(ctx, p.ID) }
 	if p.Endpoint != nil {
-		a.changeProviders(nil, func(ctx context.Context) ([]agent.Provider, error) { return a.agent.RemoveEndpoint(ctx, p.ID) },
-			p.Name+" is removed.")
-		return
+		change = func(ctx context.Context) ([]agent.Provider, error) { return a.agent.RemoveEndpoint(ctx, p.ID) }
 	}
-	note := p.Name + "'s key is forgotten."
-	if p.Source == "OAuth" {
-		note = "Logged out of " + p.Name + "."
+	a.changeProviders(nil, change, removalOf(p).done)
+}
+
+// removal is how taking a provider away is worded: what its button is
+// called, the question its row then asks and the answer that does it, and
+// what is said once it is done.
+type removal struct {
+	label, question, answer, done string
+}
+
+func removalOf(p agent.Provider) removal {
+	switch {
+	case p.Endpoint != nil:
+		return removal{"Remove " + p.Name, "Remove it and its key?", "Remove", p.Name + " is removed."}
+	case p.SignedIn():
+		return removal{"Log out of " + p.Name, "Log out of it?", "Log out", "Logged out of " + p.Name + "."}
 	}
-	a.changeProviders(nil, func(ctx context.Context) ([]agent.Provider, error) { return a.agent.ForgetKey(ctx, p.ID) }, note)
+	return removal{"Forget " + p.Name + "'s key", "Forget the key kept for it?", "Forget key", p.Name + "'s key is forgotten."}
 }
 
 // changeProviders makes a change of the providers and shows them as it
@@ -488,9 +509,7 @@ func (a *App) changeProviders(f *providerForm, change func(context.Context) ([]a
 	} else {
 		a.removingBusy = true
 	}
-	a.async(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
+	a.request(func(ctx context.Context) {
 		providers, err := change(ctx)
 		a.update(func() {
 			a.removingBusy = false
@@ -523,20 +542,14 @@ func (a *App) changeProviders(f *providerForm, change func(context.Context) ([]a
 func (a *App) confirmRemoval(c *ui.Context, p agent.Provider) {
 	t := c.Theme()
 	pal := components.PaletteOf(t)
-	question, answer := "Forget the key kept for it?", "Forget key"
-	switch {
-	case p.Endpoint != nil:
-		question, answer = "Remove it and its key?", "Remove"
-	case p.Source == "OAuth":
-		question, answer = "Log out of it?", "Log out"
-	}
-	ui.Text(c, question).FontSize(components.TextXS(t)).TextColor(pal.MutedForeground).SingleLine().Shrink(1)
+	r := removalOf(p)
+	ui.Text(c, r.question).FontSize(components.TextXS(t)).TextColor(pal.MutedForeground).SingleLine().Shrink(1)
 	if components.Button(c, "Cancel", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeExtraSmall}).
 		Label("Keep " + p.Name).Clicked() {
 		a.removing = ""
 	}
-	if components.Button(c, answer, components.ButtonStyle{Variant: components.Destructive, Size: components.SizeExtraSmall, Disabled: a.removingBusy}).
-		Label(answer + ": " + p.Name).Clicked() {
+	if components.Button(c, r.answer, components.ButtonStyle{Variant: components.Destructive, Size: components.SizeExtraSmall, Disabled: a.removingBusy}).
+		Label(r.answer + ": " + p.Name).Clicked() {
 		a.removeProvider(p)
 	}
 }
