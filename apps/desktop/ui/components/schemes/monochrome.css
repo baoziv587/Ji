@@ -1,11 +1,11 @@
-/* Monochrome: black, white and the greys between; only a state has a hue.
-   The conversation sits on the extremes, a grey a breath off white or off
-   black, and everything else steps toward the middle from it: the sidebar
-   a step, a bubble two, a seam three, a field's edge four. A raised panel
-   steps the other way, whiter in the light, and a well for code sinks, so
-   depth reads by lightness alone. Code is a ramp of ink: keywords the
-   darkest (lightest in the dark), then types, the text, numbers, strings,
-   and comments in quiet ink. */
+/* Monochrome: black, white and the greys between; only a state and code
+   have a hue. The conversation sits on the extremes, a grey a breath off
+   white or off black, and everything else steps toward the middle from it:
+   the sidebar a step, a bubble two, a seam three, a field's edge four. A
+   raised panel steps the other way, whiter in the light, and a well for
+   code sinks, so depth reads by lightness alone. Code keeps Graphite's
+   quiet hues, as a ramp of greys alone did not tell a keyword from a
+   string. */
 
 :root {
   --background: #fafafa;
@@ -33,10 +33,10 @@
   --thinking: #666666;
   --warning: #8f6402;
   --emphasis: #1f1f1f;
-  --code-keyword: #111111;
-  --code-string: #4b4b4b;
-  --code-number: #3d3d3d;
-  --code-type: #202020;
+  --code-keyword: #2d4c91;
+  --code-string: #205a11;
+  --code-number: #863606;
+  --code-type: #005858;
 }
 
 .dark {
@@ -65,8 +65,8 @@
   --thinking: #afafaf;
   --warning: #e9ac4c;
   --emphasis: #f0f0f0;
-  --code-keyword: #f0f0f0;
-  --code-string: #b8b8b8;
-  --code-number: #c6c6c6;
-  --code-type: #e2e2e2;
+  --code-keyword: #8eb0f7;
+  --code-string: #8bc281;
+  --code-number: #ed9c79;
+  --code-type: #4bc6c7;
 }
