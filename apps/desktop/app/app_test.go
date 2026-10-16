@@ -393,6 +393,8 @@ func TestInspectorShowsAStepAndStepsThroughThem(t *testing.T) {
 	if err := tt.Click(`Searched for "onSubmit", ran pnpm test`); err != nil {
 		t.Fatal(err)
 	}
+	// The steps unfold before they take a click
+	tt.Advance(time.Second)
 	if err := tt.Click("Show grep"); err != nil {
 		t.Fatal(err)
 	}
