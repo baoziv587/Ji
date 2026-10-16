@@ -372,5 +372,5 @@ Things come to rest slowly: ease-out-expo (`1 - 2^(-10t)`), never a bounce, and 
 - **Don't** use `waiting` orange for anything but what blocks on the user.
 - **Don't** put shadows on controls, panels or rows; only popovers, menus and toasts lift.
 - **Don't** follow the macOS accent colour; the brand blue is fixed.
-- **Don't** use a near-black or grey primary; primary actions are brand blue.
+- **Don't** use a near-black or grey primary; primary actions are brand blue. The one exception is the Monochrome scheme, grey by design: there a link is underlined at rest, as its hue cannot set it off.
 - **Don't** use violet anywhere, or cyan for anything but queued steers.

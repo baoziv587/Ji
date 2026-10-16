@@ -69,6 +69,14 @@ func (p *Palette) Stressed() ui.Color { return p.Foreground.Mix(p.Primary, 0.05)
 // hue alone, at body size.
 func (p *Palette) Link() ui.Color { return p.Primary.Mix(p.Foreground, 0.3) }
 
+// Grey is whether the brand is a grey, as a monochrome scheme's: then its
+// hue sets nothing apart, and a link is underlined even away from the
+// pointer.
+func (p *Palette) Grey() bool {
+	c := p.Primary
+	return max(c.R, c.G, c.B)-min(c.R, c.G, c.B) <= 4
+}
+
 // Quoted is the text of a quote: a step below the text, not as far down
 // as quiet ink, as a quote is read through.
 func (p *Palette) Quoted() ui.Color { return p.Foreground.Mix(p.MutedForeground, 0.4) }
