@@ -34,8 +34,14 @@ type Palette struct {
 }
 
 // CodeSpan is what code in a sentence is on: the brand, let through, so
-// that it takes on whatever it is on, a message or a card.
-func (p *Palette) CodeSpan() ui.Color { return p.Primary.Alpha(0.14) }
+// that it takes on whatever it is on, a message or a card. A grey brand,
+// near black or white, is let through half as much, or it reads heavy.
+func (p *Palette) CodeSpan() ui.Color {
+	if p.Grey() {
+		return p.Primary.Alpha(0.07)
+	}
+	return p.Primary.Alpha(0.14)
+}
 
 // CodeKind is what code in a sentence names.
 type CodeKind int
