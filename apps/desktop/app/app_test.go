@@ -729,8 +729,9 @@ func TestSnapshot(t *testing.T) {
 		}
 		tt.Frame()
 	}
-	// Colors fade and toasts slide in on the clock: drawn once they are done
-	time.Sleep(400 * time.Millisecond)
+	// Colors fade and toasts slide in on the Tester's clock: drawn once they
+	// are done
+	tt.Advance(400 * time.Millisecond)
 	tt.Frame()
 
 	f, err := os.Create(out)

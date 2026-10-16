@@ -95,7 +95,7 @@ func TestSchemesAreNamedAfterTheirFiles(t *testing.T) {
 	for _, s := range Schemes {
 		names = append(names, s.Name)
 	}
-	if got := strings.Join(names, ", "); got != "Forest, Graphite, Lagoon, Slate, Supabase" {
+	if got := strings.Join(names, ", "); got != "Forest, Graphite, Lagoon, Monochrome, Slate, Supabase" {
 		t.Errorf("schemes %s", got)
 	}
 	if got := schemeName("ocean-mist.css"); got != "Ocean Mist" {

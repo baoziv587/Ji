@@ -1,0 +1,72 @@
+/* Monochrome: black, white and the greys between; only a state has a hue.
+   The conversation sits on the extremes, a grey a breath off white or off
+   black, and everything else steps toward the middle from it: the sidebar
+   a step, a bubble two, a seam three, a field's edge four. A raised panel
+   steps the other way, whiter in the light, and a well for code sinks, so
+   depth reads by lightness alone. Code is a ramp of ink: keywords the
+   darkest (lightest in the dark), then types, the text, numbers, strings,
+   and comments in quiet ink. */
+
+:root {
+  --background: #fafafa;
+  --foreground: #2e2e2e;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --primary: #1f1f1f;
+  --primary-foreground: #fafafa;
+  --secondary: #ececec;
+  --muted: #efefef;
+  --accent: #e5e5e599;
+  --muted-foreground: #5c5c5c;
+  --destructive: #b44d34;
+  --border: #dbdbdb;
+  --input: #cdcdcd;
+  --ring: #8f8f8f;
+  --sidebar: #f3f3f3;
+  --sidebar-accent: #e2e2e2;
+  --sidebar-border: #e0e0e0;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #4a4a4a;
+  --waiting: #b05824;
+  --success: #2a7f3a;
+  --thinking: #666666;
+  --warning: #8f6402;
+  --emphasis: #1f1f1f;
+  --code-keyword: #111111;
+  --code-string: #4b4b4b;
+  --code-number: #3d3d3d;
+  --code-type: #202020;
+}
+
+.dark {
+  --background: #0e0e0e;
+  --foreground: #d4d4d4;
+  --card: #1c1c1c;
+  --popover: #232323;
+  --primary: #e8e8e8;
+  --primary-foreground: #141414;
+  --secondary: #252525;
+  --muted: #090909;
+  --accent: #262626;
+  --muted-foreground: #a9a9a9;
+  --destructive: #e6857e;
+  --border: #303030;
+  --input: #393939;
+  --ring: #7a7a7a;
+  --sidebar: #161616;
+  --sidebar-accent: #282828;
+  --sidebar-border: #242424;
+
+  /* Ji's own: what a session is doing, code in a sentence, and code */
+  --info: #bcbcbc;
+  --waiting: #fd9f67;
+  --success: #9fce6f;
+  --thinking: #afafaf;
+  --warning: #e9ac4c;
+  --emphasis: #f0f0f0;
+  --code-keyword: #f0f0f0;
+  --code-string: #b8b8b8;
+  --code-number: #c6c6c6;
+  --code-type: #e2e2e2;
+}

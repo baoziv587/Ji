@@ -132,7 +132,13 @@ func inline(c *ui.Context, runs []mdRun, spans []ui.Span, ink ui.Color) ui.Eleme
 	return ui.RichText(c).TextColor(ink).Children(func() {
 		for i := 0; i < len(runs); {
 			if r := runs[i : i+1]; r[0].style&styleLink != 0 {
-				ui.Link(c, "", r[0].url).TextColor(p.Link()).Tooltip(r[0].url).Children(func() {
+				link := ui.Link(c, "", r[0].url).TextColor(p.Link()).Tooltip(r[0].url)
+				// A grey link is set off by a faint line, which the pointer
+				// darkens
+				if p.Grey() && !link.Hovered() {
+					link.Underline().DecorationColor(p.MutedForeground.Alpha(0.5))
+				}
+				link.Children(func() {
 					ui.RichText(c, spans[i:i+1]...)
 				})
 				i++

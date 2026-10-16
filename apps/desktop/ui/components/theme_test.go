@@ -153,7 +153,7 @@ func TestCodeColorsRead(t *testing.T) {
 }
 
 // Code in a sentence reads on its tint over every surface a reply is on,
-// at 4.5:1 at least, a word in the brand's hue.
+// at 4.5:1 at least, a word in the brand's hue, or grey as a grey brand.
 func TestInlineCodeReads(t *testing.T) {
 	for _, s := range Schemes {
 		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
@@ -166,9 +166,15 @@ func TestInlineCodeReads(t *testing.T) {
 				}
 			}
 			_, c, hue := oklch(p.Emphasis)
-			_, _, brand := oklch(p.Primary)
-			if c < 0.04 || math.Abs(hue-brand) > 10 {
+			_, brandChroma, brand := oklch(p.Primary)
+			switch {
+			case p.Grey() && c >= 0.02:
+				t.Errorf("%s %s Emphasis: chroma %.3f, grey as the brand", s.Name, mode, c)
+			case !p.Grey() && (c < 0.04 || math.Abs(hue-brand) > 10):
 				t.Errorf("%s %s Emphasis: chroma %.3f at %.0f°, at least 0.04 at the brand's %.0f°", s.Name, mode, c, hue, brand)
+			}
+			if p.Grey() != (brandChroma < 0.02) {
+				t.Errorf("%s %s: brand chroma %.3f, grey %v", s.Name, mode, brandChroma, p.Grey())
 			}
 		}
 	}
