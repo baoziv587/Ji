@@ -222,7 +222,7 @@ func isMember(s string) bool {
 	}
 	for _, part := range parts {
 		for i, r := range part {
-			if !(r == '_' || r == '$' || unicode.IsLetter(r) || i > 0 && unicode.IsDigit(r)) {
+			if r != '_' && r != '$' && !unicode.IsLetter(r) && (i == 0 || !unicode.IsDigit(r)) {
 				return false
 			}
 		}

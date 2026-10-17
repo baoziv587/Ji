@@ -121,7 +121,7 @@ func TestSchemesAreReadAgainAsTheyAreSaved(t *testing.T) {
 		err     error
 	}
 	reads := make(chan read, 8)
-	go WatchSchemes(ctx, dir, func(schemes []*Scheme, err error) { reads <- read{schemes, err} })
+	go func() { _ = WatchSchemes(ctx, dir, func(schemes []*Scheme, err error) { reads <- read{schemes, err} }) }()
 
 	// save writes the file again until a read of it is as wanted: the watch
 	// starts on its own, and a save before it may still be read
