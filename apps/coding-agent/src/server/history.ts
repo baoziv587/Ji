@@ -22,30 +22,25 @@ export interface History {
 }
 
 export function historyOf(records: readonly LogRecord[]): History {
-  const turns = new Map<string, Turn[]>()
-  const done = new Set<string>()
   const events: Unnumbered[] = []
   const meter = new UsageMeter()
-  let outcome: Outcome | undefined
+  const outcome = replay(records, meter, event => events.push(event))
+  return { state: stateOf(records), events, outcome, meter }
+}
 
+/** The history to go on from: the steps of the runs that ended done. */
+export function stateOf(records: readonly LogRecord[]): AgentState {
+  const turns = new Map<string, Turn[]>()
+  const done = new Set<string>()
   for (const record of records) {
-    meter.take(record, false)
-
     if (!turns.has(record.run)) {
       turns.set(record.run, [])
     }
     if (record.type === 'step_end') {
       turns.get(record.run)!.push(record.turn)
     }
-    if (record.type === 'run_end') {
-      outcome = outcomeOf(record).outcome
-      if (outcome === 'done') {
-        done.add(record.run)
-      }
-    }
-    const event = clientEventOf(record)
-    if (event !== undefined) {
-      events.push(event)
+    if (record.type === 'run_end' && outcomeOf(record).outcome === 'done') {
+      done.add(record.run)
     }
   }
 
@@ -55,7 +50,30 @@ export function historyOf(records: readonly LogRecord[]): History {
       state = steps.reduce(applyTurn, state)
     }
   }
-  return { state, events, outcome, meter }
+  return state
+}
+
+/**
+ * Lines of the log as a client is shown them: their events go to `push`, what they spent to `meter`. Returns how the
+ * last run among them ended; none when none did.
+ */
+export function replay(
+  records: readonly LogRecord[],
+  meter: UsageMeter,
+  push: (event: Unnumbered) => void,
+): Outcome | undefined {
+  let outcome: Outcome | undefined
+  for (const record of records) {
+    meter.take(record, false)
+    if (record.type === 'run_end') {
+      outcome = outcomeOf(record).outcome
+    }
+    const event = clientEventOf(record)
+    if (event !== undefined) {
+      push(event)
+    }
+  }
+  return outcome
 }
 
 /** What a client shows of a line of the log: a run's end is the reply's, with what it spent. */

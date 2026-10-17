@@ -10,7 +10,7 @@ import type { SessionStore } from '../server/store.ts'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { log } from '@clack/prompts'
 import { dimText } from '@ji.dev/tui'
-import { clientEventOf, historyOf } from '../server/history.ts'
+import { clientEventOf, stateOf } from '../server/history.ts'
 
 /** How often the lock is looked at while the desktop app replies. */
 const POLL_MS = 500
@@ -68,7 +68,7 @@ export class SharedSession implements ReplyLock {
       return undefined
     }
     showWritten(unread)
-    return historyOf(store.records(id())).state
+    return stateOf(store.records(id()))
   }
 }
 

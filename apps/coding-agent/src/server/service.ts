@@ -29,8 +29,8 @@ import { contextLimitOf, startAgent, startOn, toolNamesOf } from '../agent/agent
 import { createCommands, runCommand } from '../agent/commands.ts'
 import { Conversation } from '../agent/conversation.ts'
 import { UsageMeter } from '../agent/meter.ts'
-import { EventLog, eventOf, outcomeOf, spentOf, viewOf } from './events.ts'
-import { clientEventOf } from './history.ts'
+import { EventLog, eventOf, spentOf, viewOf } from './events.ts'
+import { replay } from './history.ts'
 import { loginInteraction } from './login.ts'
 import { PendingQuestions } from './questions.ts'
 
@@ -169,16 +169,7 @@ export class AgentService {
     }
 
     this.behind = true
-    for (const record of records) {
-      this.meter.take(record, false)
-      if (record.type === 'run_end') {
-        this.outcome = outcomeOf(record).outcome
-      }
-      const event = clientEventOf(record)
-      if (event !== undefined) {
-        this.log.push(event)
-      }
-    }
+    this.outcome = replay(records, this.meter, event => this.log.push(event)) ?? this.outcome
     this.emitState()
   }
 

@@ -271,7 +271,7 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 			if m.Item("Unarchive").Chosen() {
 				a.unarchive(s.ID)
 			}
-		} else if m.Item("Archive").Disabled(status != "idle" && status != "failed").Chosen() {
+		} else if m.Item("Archive").Disabled(isBusy(status)).Chosen() {
 			a.archive(s.ID, true)
 		}
 	})
