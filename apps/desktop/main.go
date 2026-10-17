@@ -4,13 +4,19 @@
 // draws the sessions with MyGo's native UI (package app).
 //
 //	pnpm desktop                             # from the repository: works on the directory it is run from
+//	pnpm desktop:build                       # the .app and .dmg, with the service bundled in
 //	go tool mygo dev                         # with live reload, working on this directory
 //	go run . -root ~/code/project            # works on another project
 //	go run . -server http://127.0.0.1:4317   # connects to a running service (pnpm agent-server)
+//	go run . -onboarding                     # installs Node.js as if there were none (pnpm desktop:onboarding)
+//
+// The service runs on Node.js: Ji Agent's own once installed, else the
+// system's when new enough. With neither, the window offers to install Ji
+// Agent's own (package nodejs) before it starts the service.
 //
 // Each flag can also come from the environment, for `mygo dev`, which passes
 // none: JI_AGENT_SERVER, JI_AGENT_ROOT, JI_AGENT_SESSIONS, JI_AGENT_MODEL,
-// JI_AGENT_THINKING, JI_AGENT_SCRIPT and JI_AGENT_YOLO=1.
+// JI_AGENT_THINKING, JI_AGENT_SCRIPT, JI_AGENT_YOLO=1 and JI_AGENT_ONBOARDING=1.
 package main
 
 import (
@@ -20,12 +26,14 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"desktop/agent"
 	"desktop/app"
+	"desktop/nodejs"
 	"desktop/server"
 	"desktop/ui/components"
 )
@@ -44,58 +52,121 @@ func main() {
 	thinking := flag.String("thinking", os.Getenv("JI_AGENT_THINKING"), "the thinking level (default: the service's)")
 	script := flag.String("agent", os.Getenv("JI_AGENT_SCRIPT"), "path of apps/coding-agent/src/server.ts (default: found above this directory)")
 	yolo := flag.Bool("yolo", os.Getenv("JI_AGENT_YOLO") == "1", "nothing waits for a yes")
+
+	// Shows the onboarding as if the computer had no Node.js, installing into a
+	// directory of its own that is removed on quit
+	onboarding := flag.Bool("onboarding", os.Getenv("JI_AGENT_ONBOARDING") == "1", "go through the onboarding as if there were no Node.js")
 	flag.Parse()
 
-	url := *address
-	var started *server.Server
-	if url == "" {
-		s, err := server.Start(server.Options{Script: *script, Root: *root, Sessions: *sessions, Model: *model, Thinking: *thinking, Yolo: *yolo})
+	own := nodejs.Runtime{Dir: configPath("runtime"), Release: nodejs.Pinned}
+	find := func() string {
+		node, _ := nodejs.Find(own)
+		return node
+	}
+	if *onboarding {
+		dir, err := os.MkdirTemp("", "ji-agent-onboarding-")
 		if err != nil {
 			log.Fatal(err)
 		}
-		started, url = s, s.URL
+		defer os.RemoveAll(dir)
+		own.Dir, find = dir, func() string { return "" }
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	settings := loadSettings()
 	var a *app.App
+	var started *server.Server
+
 	mygo.App.WhenReady(func() {
 		var win *mygo.Window
-		a = app.New(agent.NewClient(url), func(fn func()) { win.Update(fn) })
-		a.Layout = loadLayout()
-		a.Settings = loadSettings()
-		mygo.Theme.SetSource(themeSource(a.Settings.Appearance))
-		appearance := a.Settings.Appearance
-		a.SaveSettings = func(s app.Settings) {
-			// The window's material is light or dark as the app is, not as macOS
-			// is; set off the frame being built, which a change of theme redraws,
-			// and only when the appearance changes, not with every setting
-			if s.Appearance != appearance {
-				appearance = s.Appearance
-				go mygo.Theme.SetSource(themeSource(s.Appearance))
+		update := func(fn func()) { win.Update(fn) }
+		mygo.Theme.SetSource(themeSource(settings.Appearance))
+
+		open := func(url string) {
+			a = app.New(agent.NewClient(url), update)
+			a.Layout = loadLayout()
+			a.Settings = settings
+
+			appearance := a.Settings.Appearance
+			a.SaveSettings = func(s app.Settings) {
+				// The window's material is light or dark as the app is, not as macOS
+				// is; set off the frame being built, which a change of theme redraws,
+				// and only when the appearance changes, not with every setting
+				if s.Appearance != appearance {
+					appearance = s.Appearance
+					go mygo.Theme.SetSource(themeSource(s.Appearance))
+				}
+				saveSettings(s)
 			}
-			saveSettings(s)
+
+			a.Quit = mygo.App.Quit
+			a.ChooseFolder = func() (string, error) {
+				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+					Parent:            win,
+					Title:             "Choose a Project Folder",
+					ButtonLabel:       "Start Session",
+					Directory:         true,
+					CreateDirectories: true,
+				})
+				if err != nil || len(paths) == 0 {
+					return "", err
+				}
+				return paths[0], nil
+			}
+
+			go a.Follow(ctx)
+			// Run from the source, a scheme's stylesheet shows as it is saved
+			if dir := components.SchemesSource(); dir != "" {
+				go func() {
+					err := components.WatchSchemes(ctx, dir, func(schemes []*components.Scheme, err error) {
+						win.Update(func() { a.SchemesChanged(schemes, err) })
+					})
+					if err != nil {
+						log.Print(err)
+					}
+				}()
+			}
 		}
-		a.Quit = mygo.App.Quit
-		a.ChooseFolder = func() (string, error) {
-			paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-				Parent:            win,
-				Title:             "Choose a Project Folder",
-				ButtonLabel:       "Start Session",
-				Directory:         true,
-				CreateDirectories: true,
+
+		ob := app.NewOnboarding(update)
+		ob.Settings = settings
+		ob.Version, ob.Where = own.Release.Version, home(own.Dir)
+		ob.Find, ob.Install = find, own.Install
+		ob.Start = func(node string) (string, error) {
+			s, err := server.Start(server.Options{
+				Script:   *script,
+				Bundled:  bundledAgent(),
+				Node:     node,
+				Root:     *root,
+				Sessions: *sessions,
+				Model:    *model,
+				Thinking: *thinking,
+				Yolo:     *yolo,
 			})
-			if err != nil || len(paths) == 0 {
+			if err != nil {
 				return "", err
 			}
-			return paths[0], nil
+			// Quitting stops it, which happens on the main thread, as Ready does
+			update(func() { started = s })
+			return s.URL, nil
+		}
+		ob.Ready = open
+
+		// Each item does nothing until the service runs
+		whenOpen := func(fn func(*app.App)) func(*mygo.MenuItem, *mygo.Window) {
+			return func(*mygo.MenuItem, *mygo.Window) {
+				win.Update(func() {
+					if a != nil {
+						fn(a)
+					}
+				})
+			}
 		}
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 			{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
 				{Role: mygo.RoleAbout},
 				mygo.Separator(),
-				{Label: "Settings…", Accelerator: "CmdOrCtrl+,", Click: func(*mygo.MenuItem, *mygo.Window) {
-					win.Update(a.OpenSettings)
-				}},
+				{Label: "Settings…", Accelerator: "CmdOrCtrl+,", Click: whenOpen((*app.App).OpenSettings)},
 				mygo.Separator(),
 				{Role: mygo.RoleServices},
 				mygo.Separator(),
@@ -106,12 +177,8 @@ func main() {
 				{Role: mygo.RoleQuit},
 			}},
 			{Label: "File", Submenu: []*mygo.MenuItem{
-				{Label: "New Session", Accelerator: "CmdOrCtrl+N", Click: func(*mygo.MenuItem, *mygo.Window) {
-					win.Update(func() { a.NewSession("") })
-				}},
-				{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: func(*mygo.MenuItem, *mygo.Window) {
-					win.Update(a.NewSessionInFolder)
-				}},
+				{Label: "New Session", Accelerator: "CmdOrCtrl+N", Click: whenOpen(func(a *app.App) { a.NewSession("") })},
+				{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: whenOpen((*app.App).NewSessionInFolder)},
 				mygo.Separator(),
 				{Role: mygo.RoleClose},
 			}},
@@ -119,6 +186,7 @@ func main() {
 			{Role: mygo.RoleViewMenu},
 			{Role: mygo.RoleWindowMenu},
 		}))
+
 		win = mygo.NewWindow(mygo.WindowOptions{
 			Title:     "Ji Agent",
 			Width:     1180,
@@ -131,20 +199,20 @@ func main() {
 			TitleBarStyle:  mygo.TitleBarHiddenInset,
 			TitleBarHeight: app.TitleBarHeight,
 			Vibrancy:       mygo.VibrancySidebar,
-			Content:        ui.View(a.View),
-		})
-		go a.Follow(ctx)
-		// Run from the source, a scheme's stylesheet shows as it is saved
-		if dir := components.SchemesSource(); dir != "" {
-			go func() {
-				err := components.WatchSchemes(ctx, dir, func(schemes []*components.Scheme, err error) {
-					win.Update(func() { a.SchemesChanged(schemes, err) })
-				})
-				if err != nil {
-					log.Print(err)
+			Content: ui.View(func(c *ui.Context) {
+				if a == nil {
+					ob.View(c)
+					return
 				}
-			}()
+				a.View(c)
+			}),
+		})
+
+		if *address != "" {
+			open(*address)
+			return
 		}
+		ob.Begin()
 	})
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		cancel()
@@ -159,6 +227,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// home is path with the home directory as ~.
+func home(path string) string {
+	if dir, err := os.UserHomeDir(); err == nil {
+		if rest, ok := strings.CutPrefix(path, dir); ok {
+			return "~" + rest
+		}
+	}
+	return path
 }
 
 func configPath(name string) string {
@@ -215,6 +293,15 @@ func loadLayout() app.Layout {
 		_ = json.Unmarshal(b, &l)
 	}
 	return l.Fit()
+}
+
+// bundledAgent is where `pnpm desktop:build` puts the service in the app.
+func bundledAgent() string {
+	dir, err := mygo.App.Path(mygo.PathResources)
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "agent-server", "server.js")
 }
 
 func envOr(name, fallback string) string {

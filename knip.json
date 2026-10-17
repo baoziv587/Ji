@@ -5,6 +5,6 @@
       "entry": [".agents/skills/*/scripts/*.{js,mjs,ts}"]
     }
   },
-  "ignore": ["eval/**"],
+  "ignore": ["eval/**", "apps/desktop/{build,.mygo,resources/agent-server}/**"],
   "ignoreBinaries": ["uv", "go"]
 }
