@@ -38,8 +38,7 @@ func (r ramp) at(transparency float64) float32 {
 // and how much that blurs. A clearer bar blurs more, so that what scrolls
 // under it never reads as its title.
 var glasses = struct {
-	// of the scheme's sidebar color over the window's material, in the dark;
-	// clear shows the material alone
+	// of the scheme's sidebar color over the window's material, in the dark
 	sidebar ramp
 	// and in the light, whose material is already washed pale, so it lets as
 	// much through
