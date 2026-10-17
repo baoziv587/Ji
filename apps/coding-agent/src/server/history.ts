@@ -21,6 +21,8 @@ export interface History {
   meter: UsageMeter
 }
 
+const EMPTY_STATE: AgentState = { messages: [], plugins: {} }
+
 export function historyOf(records: readonly LogRecord[]): History {
   const events: Unnumbered[] = []
   const meter = new UsageMeter()
@@ -28,8 +30,11 @@ export function historyOf(records: readonly LogRecord[]): History {
   return { state: stateOf(records), events, outcome, meter }
 }
 
-/** The history to go on from: the steps of the runs that ended done. */
-export function stateOf(records: readonly LogRecord[]): AgentState {
+/**
+ * The history to go on from: `state`, the history up to the first of `records`, with the steps of the runs among them
+ * that ended done.
+ */
+export function stateOf(records: readonly LogRecord[], state: AgentState = EMPTY_STATE): AgentState {
   const turns = new Map<string, Turn[]>()
   const done = new Set<string>()
   for (const record of records) {
@@ -44,7 +49,6 @@ export function stateOf(records: readonly LogRecord[]): AgentState {
     }
   }
 
-  let state: AgentState = { messages: [], plugins: {} }
   for (const [run, steps] of turns) {
     if (done.has(run)) {
       state = steps.reduce(applyTurn, state)

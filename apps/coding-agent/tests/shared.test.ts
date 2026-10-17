@@ -3,8 +3,18 @@
 import type { AddressInfo } from 'node:net'
 import type { ServiceEvent } from '../src/server/events.ts'
 import type { SessionSummary } from '../src/server/sessions.ts'
-import { spawnSync } from 'node:child_process'
-import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
+import { once } from 'node:events'
+import {
+  appendFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
@@ -29,11 +39,20 @@ describe('session lock', () => {
     const store = new SessionStore(dir)
     holdAs(dir, 'live', process.ppid)
     holdAs(dir, 'stale', spawnSync('true').pid!)
+    mkdirSync(join(dir, 'broken.lock'))
+    writeFileSync(join(dir, 'broken.lock', 'owner.json'), '{"by":"term')
+    // Made by a process about to name itself in it, and by one that crashed before it could
+    mkdirSync(join(dir, 'taking.lock'))
+    mkdirSync(join(dir, 'crashed.lock'))
+    utimesSync(join(dir, 'crashed.lock'), new Date(0), new Date(0))
 
     // Act
     const live = errorOf(() => store.lock('live'))
     const stale = errorOf(() => store.lock('stale'))
     const again = errorOf(() => store.lock('stale'))
+    const broken = errorOf(() => store.lock('broken'))
+    const taking = errorOf(() => store.lock('taking'))
+    const crashed = errorOf(() => store.lock('crashed'))
 
     // Assert
     expect(live).toBeInstanceOf(SessionBusyError)
@@ -42,6 +61,40 @@ describe('session lock', () => {
     expect(stale).toBeUndefined()
     expect(again).toBeUndefined()
     expect(store.holder('stale')).toBeUndefined()
+    expect(broken).toBeUndefined()
+    expect(taking).toBeInstanceOf(SessionBusyError)
+    expect(crashed).toBeUndefined()
+    expect(readdirSync(dir).sort()).toEqual(['broken.lock', 'crashed.lock', 'live.lock', 'stale.lock', 'taking.lock'])
+    expect(store.holder('crashed')).toBeUndefined()
+    store.unlock('crashed')
+    expect(readdirSync(dir)).not.toContain('crashed.lock')
+  })
+
+  it('should hand the session over as soon as the lock is given back, or within a second of its process being gone', async () => {
+    // Arrange
+    const dir = scratch()
+    const store = new SessionStore(dir)
+    const child = spawn('sleep', ['10'])
+    onTestFinished(() => {
+      child.kill()
+    })
+    holdAs(dir, 'given', process.ppid)
+    holdAs(dir, 'gone', child.pid!)
+    const given = store.whenFree('given')
+    const gone = store.whenFree('gone')
+
+    // Act
+    const started = Date.now()
+    rmSync(join(dir, 'given.lock'), { recursive: true })
+    await given
+    const givenAfter = Date.now() - started
+    child.kill()
+    await once(child, 'exit')
+    await gone
+
+    // Assert
+    expect(givenAfter).toBeLessThan(500)
+    expect(readFileSync(join(dir, 'gone.lock', 'owner.json'), 'utf8')).toContain(String(child.pid))
   })
 
   it('should read only the whole lines another process appended since', () => {
@@ -68,26 +121,8 @@ describe('session lock', () => {
 
   it("should call back once for writes close together, a reply's lines as they stream", async () => {
     // Arrange
-    const dir = scratch()
-    const store = new SessionStore(dir)
-    let calls = 0
-    const unwatch = store.watch(
-      () => calls++,
-      error => {
-        throw error
-      },
-    )
-    onTestFinished(unwatch)
-    // The watcher reads the folder before it reports a write: until then, a write may go unseen
-    await vi.waitFor(
-      () => {
-        store.append('s', '{}')
-        expect(calls).toBeGreaterThan(0)
-      },
-      { timeout: 2000, interval: 50 },
-    )
-    await sleep(300)
-    calls = 0
+    const store = new SessionStore(scratch())
+    const watching = await watched(store)
 
     // Act
     for (let i = 0; i < 50; i++) {
@@ -96,8 +131,26 @@ describe('session lock', () => {
     await sleep(300)
 
     // Assert
-    expect(calls).toBeGreaterThan(0)
-    expect(calls).toBeLessThanOrEqual(2)
+    expect(watching.calls).toBeGreaterThan(0)
+    expect(watching.calls).toBeLessThanOrEqual(2)
+  })
+
+  it('should not call back for the lines of a reply this process writes', async () => {
+    // Arrange
+    const store = new SessionStore(scratch())
+    const watching = await watched(store)
+    store.lock('s')
+    await sleep(300)
+    watching.calls = 0
+
+    // Act
+    for (let i = 0; i < 20; i++) {
+      store.append('s', '{}')
+    }
+    await sleep(300)
+
+    // Assert
+    expect(watching.calls).toBe(0)
   })
 })
 
@@ -115,7 +168,7 @@ describe('shared conversation', () => {
 
     // Act
     const refused = errorOf(() => terminal.conversation.send('too soon'))
-    rmSync(join(dir, `${terminal.conversation.id}.lock`))
+    rmSync(join(dir, `${terminal.conversation.id}.lock`), { recursive: true })
     const meta = desktop.meta(terminal.conversation.id)
 
     // Assert
@@ -152,7 +205,7 @@ describe('shared conversation', () => {
     const refused = await fetch(`${url}/api/sessions/${id}/messages`, { method: 'POST', body: '{"text":"hi"}' })
 
     // Act: the terminal's next reply, read by the service, then one of the service's own
-    rmSync(join(dir, `${id}.lock`))
+    rmSync(join(dir, `${id}.lock`), { recursive: true })
     await say(terminal, 'second')
     await sessions(url)
     await events.until(e => e.type === 'user' && e.text === 'second')
@@ -170,25 +223,39 @@ describe('shared conversation', () => {
     expect(seen).toEqual([5])
   })
 
-  it('should wait in the terminal until the other process is done, then hand over what it wrote', async () => {
+  it('should wait in the terminal until the other process is done, then go on from what it wrote', async () => {
     // Arrange
     const dir = scratch()
-    const fake = createFakeModel([assistantMessage('one')])
+    const seen: number[] = []
+    const fake = createFakeModel([
+      assistantMessage('one'),
+      assistantMessage('two'),
+      request => {
+        seen.push(request.messages.length)
+        return assistantMessage('three')
+      },
+    ])
     onTestFinished(() => fake.dispose())
     const terminal = terminalConversation(dir, fake.model)
     const { id } = terminal.conversation
     await say(terminal, 'first')
+    // The lines of the desktop app's reply, as it writes them
+    const elsewhere = scratch()
+    const desktop = terminalConversation(elsewhere, fake.model)
+    await say(desktop, 'second')
     holdAs(dir, id, process.ppid)
 
-    // Act: the desktop app writes a reply, then gives the session back
+    // Act: the desktop app writes its reply, then gives the session back
     const free = terminal.shared.whenFree()
-    const line = { session: id, run: 'desktop-run', t: 0 }
-    appendFileSync(join(dir, `${id}.jsonl`), `${JSON.stringify({ ...line, type: 'text', delta: 'hi there' })}\n`)
-    rmSync(join(dir, `${id}.lock`))
-    const state = await free
+    appendFileSync(join(dir, `${id}.jsonl`), readFileSync(join(elsewhere, `${desktop.conversation.id}.jsonl`)))
+    rmSync(join(dir, `${id}.lock`), { recursive: true })
+    const wrote = await free
+    await say(terminal, 'third')
 
     // Assert
-    expect(state).toBeDefined()
+    expect(wrote).toBe(true)
+    // first, one, second, two, third
+    expect(seen).toEqual([5])
   })
 })
 
@@ -224,6 +291,28 @@ async function say({ conversation, shared }: Terminal, message: string): Promise
   await conversation.follow(run, readAll)
 }
 
+/** The store's watch, once it reports writes: until then, a write may go unseen. */
+async function watched(store: SessionStore): Promise<{ calls: number }> {
+  const watching = { calls: 0 }
+  const unwatch = store.watch(
+    () => watching.calls++,
+    error => {
+      throw error
+    },
+  )
+  onTestFinished(unwatch)
+  await vi.waitFor(
+    () => {
+      store.append('warm', '{}')
+      expect(watching.calls).toBeGreaterThan(0)
+    },
+    { timeout: 2000, interval: 50 },
+  )
+  await sleep(300)
+  watching.calls = 0
+  return watching
+}
+
 function errorOf(fn: () => unknown): unknown {
   try {
     fn()
@@ -235,7 +324,8 @@ function errorOf(fn: () => unknown): unknown {
 
 /** A lock as another process leaves it: the terminal's, with `pid`. */
 function holdAs(dir: string, id: string, pid: number): void {
-  writeFileSync(join(dir, `${id}.lock`), JSON.stringify({ by: 'terminal', pid, started: Date.now() }))
+  mkdirSync(join(dir, `${id}.lock`), { recursive: true })
+  writeFileSync(join(dir, `${id}.lock`, 'owner.json'), JSON.stringify({ by: 'terminal', pid, started: Date.now() }))
 }
 
 async function readAll(run: AsyncIterable<unknown> & { result: Promise<unknown> }): Promise<void> {

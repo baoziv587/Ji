@@ -24,10 +24,10 @@ const STOPPED = new Error(STOPPED_MESSAGE)
 /** A conversation kept where another process can write to it too: one reply at a time, from either. */
 export interface ReplyLock {
   /**
-   * Takes the conversation for a reply: the history to go on from when the other process wrote to it since, none when
-   * this one has it all. Throws SessionBusyError while the other writes a reply.
+   * Takes the conversation for a reply: the history to go on from, `state` with what the other process wrote since;
+   * none when it wrote nothing. Throws SessionBusyError while the other writes a reply.
    */
-  claim: () => AgentState | undefined
+  claim: (state: AgentState) => AgentState | undefined
   release: () => void
 }
 
@@ -102,9 +102,9 @@ export class Conversation {
     let before: AgentState
     let run: Run
     try {
-      const newer = starting ? this.lock?.claim() : undefined
+      const newer = starting ? this.lock?.claim(this.session.state) : undefined
       if (newer !== undefined) {
-        this.resume(newer)
+        this.session = createSession(this.current, { id: this.session.id, state: newer })
       }
       before = this.session.state
       run = this.session.send(message, { when: 'step' })
@@ -151,14 +151,6 @@ export class Conversation {
     this.fastMode &&= supportsFastMode(agent.model)
     this.current = this.fastMode ? agent.with({ onPayload: requestFastTier }) : agent
     this.session.use(this.current)
-  }
-
-  /** Same conversation, the history another process took it on to. Throws while a reply is in progress. */
-  resume(state: AgentState): void {
-    if (this.reply !== undefined) {
-      throw new Error('Stop the reply before taking up another history.')
-    }
-    this.session = createSession(this.current, { id: this.session.id, state })
   }
 
   stop(): void {

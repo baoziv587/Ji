@@ -1,19 +1,15 @@
 // The terminal's conversation kept where the service keeps its sessions (~/.ji/sessions), so the desktop app lists it
 // and can go on with it. Its line is written with the first message; each reply takes the session's lock, and while
-// the desktop app writes one, a message waits in the input until it ends, then the terminal shows what it wrote and
-// goes on from it.
+// the desktop app writes one, a message waits in the input until it ends, then the terminal shows what it wrote, and
+// the next reply goes on from it.
 
 import type { AgentState } from '@ji.dev/llm'
 import type { ReplyLock } from '../agent/conversation.ts'
 import type { LogRecord } from '../server/history.ts'
 import type { SessionStore } from '../server/store.ts'
-import { setTimeout as sleep } from 'node:timers/promises'
 import { log } from '@clack/prompts'
 import { dimText } from '@ji.dev/tui'
 import { clientEventOf, stateOf } from '../server/history.ts'
-
-/** How often the lock is looked at while the desktop app replies. */
-const POLL_MS = 500
 
 export interface SharedSessionOptions {
   store: SessionStore
@@ -26,12 +22,14 @@ export interface SharedSessionOptions {
 
 export class SharedSession implements ReplyLock {
   private readonly options: SharedSessionOptions
+  /** What the desktop app wrote that the conversation has not gone on from yet. */
+  private unsynced: LogRecord[] = []
 
   constructor(options: SharedSessionOptions) {
     this.options = options
   }
 
-  readonly claim = (): AgentState | undefined => {
+  readonly claim = (state: AgentState): AgentState | undefined => {
     const { store, root, model } = this.options
     const id = this.options.id()
     store.lock(id)
@@ -39,7 +37,13 @@ export class SharedSession implements ReplyLock {
       store.create(root, model(), id)
       return undefined
     }
-    return this.catchUp()
+    this.catchUp()
+    if (this.unsynced.length === 0) {
+      return undefined
+    }
+    const next = stateOf(this.unsynced, state)
+    this.unsynced = []
+    return next
   }
 
   readonly release = (): void => {
@@ -51,24 +55,23 @@ export class SharedSession implements ReplyLock {
     this.options.store.used(this.options.id(), text, this.options.model())
   }
 
-  /** Resolves once the desktop app's reply has ended, with the history it left; none when it wrote nothing. */
-  async whenFree(): Promise<AgentState | undefined> {
+  /** Resolves once the desktop app's reply has ended, with whether it wrote anything: shown, and gone on from next. */
+  async whenFree(): Promise<boolean> {
     const { store, id } = this.options
-    while (store.holder(id()) !== undefined) {
-      await sleep(POLL_MS)
-    }
+    await store.whenFree(id())
     return this.catchUp()
   }
 
-  /** What the desktop app wrote since, shown, and the history it left; none when it wrote nothing. */
-  private catchUp(): AgentState | undefined {
+  /** Shows what the desktop app wrote since, for the next reply to go on from; false when it wrote nothing. */
+  private catchUp(): boolean {
     const { store, id } = this.options
     const unread = store.unread(id())
     if (unread.length === 0) {
-      return undefined
+      return false
     }
     showWritten(unread)
-    return stateOf(store.records(id()))
+    this.unsynced = this.unsynced.concat(unread)
+    return true
   }
 }
 
