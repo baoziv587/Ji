@@ -51,33 +51,45 @@ func main() {
 		os.Getenv("JI_AGENT_SERVER"),
 		"address of a running agent service; started here when empty",
 	)
+	// What the service is started with, when it is started here
+	var service server.Options
 	// pnpm runs a script in the package's directory, and says in INIT_CWD where it was run from
-	root := flag.String(
+	flag.StringVar(
+		&service.Root,
 		"root",
 		envOr("JI_AGENT_ROOT", envOr("INIT_CWD", wd)),
 		"where a new session works when no folder is chosen",
 	)
-	sessions := flag.String(
+	flag.StringVar(
+		&service.Sessions,
 		"sessions",
 		os.Getenv("JI_AGENT_SESSIONS"),
 		"where the service keeps the sessions (default: ~/.ji/sessions)",
 	)
-	model := flag.String(
+	flag.StringVar(
+		&service.Model,
 		"model",
 		os.Getenv("JI_AGENT_MODEL"),
 		"the model, provider/id (default: the service's)",
 	)
-	thinking := flag.String(
+	flag.StringVar(
+		&service.Thinking,
 		"thinking",
 		os.Getenv("JI_AGENT_THINKING"),
 		"the thinking level (default: the service's)",
 	)
-	script := flag.String(
+	flag.StringVar(
+		&service.Script,
 		"agent",
 		os.Getenv("JI_AGENT_SCRIPT"),
 		"path of apps/coding-agent/src/server.ts (default: found above this directory)",
 	)
-	yolo := flag.Bool("yolo", os.Getenv("JI_AGENT_YOLO") == "1", "nothing waits for a yes")
+	flag.BoolVar(
+		&service.Yolo,
+		"yolo",
+		os.Getenv("JI_AGENT_YOLO") == "1",
+		"nothing waits for a yes",
+	)
 
 	// Shows the onboarding as if the computer had no Node.js, installing into a
 	// directory of its own that is removed on quit
@@ -174,16 +186,9 @@ func main() {
 		ob.Version, ob.Where = own.Release.Version, home(own.Dir)
 		ob.Find, ob.Install = find, own.Install
 		ob.Start = func(node string) (string, error) {
-			s, err := server.Start(server.Options{
-				Script:   *script,
-				Bundled:  bundledAgent(),
-				Node:     node,
-				Root:     *root,
-				Sessions: *sessions,
-				Model:    *model,
-				Thinking: *thinking,
-				Yolo:     *yolo,
-			})
+			o := service
+			o.Node, o.Bundled = node, bundledAgent()
+			s, err := server.Start(o)
 			if err != nil {
 				return "", err
 			}
@@ -275,7 +280,7 @@ func main() {
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		cancel()
 		if a != nil {
-			writeConfig("layout.json", a.Layout)
+			saveLayout(a.Layout)
 		}
 		started.Stop()
 	})
@@ -305,6 +310,14 @@ func configPath(name string) string {
 	return filepath.Join(dir, "Ji Agent", name)
 }
 
+// readConfig reads the config file of that name into v, leaving v as it is
+// where the file is missing or unreadable.
+func readConfig(name string, v any) {
+	if b, err := os.ReadFile(configPath(name)); err == nil {
+		_ = json.Unmarshal(b, v)
+	}
+}
+
 // writeConfig writes v as JSON to the config file of that name, or nothing
 // when it cannot.
 func writeConfig(name string, v any) {
@@ -327,9 +340,7 @@ func writeConfig(name string, v any) {
 // missing or unreadable.
 func loadSettings() app.Settings {
 	s := app.DefaultSettings
-	if b, err := os.ReadFile(configPath("settings.json")); err == nil {
-		_ = json.Unmarshal(b, &s)
-	}
+	readConfig("settings.json", &s)
 	return s
 }
 
@@ -347,11 +358,11 @@ func themeSource(a components.Appearance) mygo.ThemeSource {
 
 func loadLayout() app.Layout {
 	l := app.DefaultLayout
-	if b, err := os.ReadFile(configPath("layout.json")); err == nil {
-		_ = json.Unmarshal(b, &l)
-	}
+	readConfig("layout.json", &l)
 	return l.Fit()
 }
+
+func saveLayout(l app.Layout) { writeConfig("layout.json", l) }
 
 // bundledAgent is where `pnpm desktop:build` puts the service in the app.
 func bundledAgent() string {
