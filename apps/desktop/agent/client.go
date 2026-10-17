@@ -70,6 +70,11 @@ func (c *Client) FollowSessions(ctx context.Context, fn func(Sessions), status f
 	}, status)
 }
 
+func (c *Client) Sessions(ctx context.Context) (Sessions, error) {
+	var s Sessions
+	return s, c.do(ctx, http.MethodGet, "/api/sessions", nil, &s)
+}
+
 func (c *Client) CreateSession(ctx context.Context, root, model string) (Session, error) {
 	var s Session
 	return s, c.do(

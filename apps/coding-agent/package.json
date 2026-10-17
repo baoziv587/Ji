@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "private": true,
   "description": "A full-screen coding agent on @ji.dev/llm: DeepSeek, file, shell and search tools with approval, and steering while a reply runs",
+  "bin": {
+    "ji": "./src/cli.ts"
+  },
   "scripts": {
     "start": "node src/main.ts",
     "headless": "node src/headless.ts",
@@ -23,7 +26,8 @@
     "@ji.dev/plugin-skills": "workspace:*",
     "@ji.dev/plugin-truncate-tool-results": "workspace:*",
     "@ji.dev/tui": "workspace:*",
-    "@ji.dev/utils": "workspace:*"
+    "@ji.dev/utils": "workspace:*",
+    "chokidar": "^5.0.0"
   },
   "devDependencies": {
     "@ji.dev/testing": "workspace:*"

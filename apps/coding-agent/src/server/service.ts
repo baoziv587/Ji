@@ -14,22 +14,23 @@
 // Every event has a sequence number; the log keeps them all, those read back from the session's history first, so a
 // client that connects late or comes back after a drop reads what it missed.
 
-import type { Agent, AuthInteraction, Plugin, Run } from '@ji.dev/llm'
+import type { Agent, AgentState, AuthInteraction, Plugin, Run } from '@ji.dev/llm'
 import type { Questions, Reply } from '@ji.dev/plugin-choices'
 import type { StartOptions } from '../agent/agent.ts'
 import type { Command, Say } from '../agent/commands.ts'
-import type { Unfinished } from '../agent/conversation.ts'
+import type { ReplyLock, Unfinished, Writer } from '../agent/conversation.ts'
 import type { Feature } from '../features/feature.ts'
 import type { Mode, Permissions } from '../features/permissions.ts'
 import type { CommandView, Outcome, ServiceEvent, ServiceState, Unnumbered, Usage } from './events.ts'
-import type { History } from './history.ts'
+import type { History, LogRecord } from './history.ts'
 import { choices } from '@ji.dev/plugin-choices'
 import { errorMessage } from '@ji.dev/utils'
 import { contextLimitOf, startAgent, startOn, toolNamesOf } from '../agent/agent.ts'
 import { createCommands, runCommand } from '../agent/commands.ts'
 import { Conversation } from '../agent/conversation.ts'
 import { UsageMeter } from '../agent/meter.ts'
-import { EventLog, eventOf, spentOf, viewOf } from './events.ts'
+import { EventLog, eventOf, outcomeOf, spentOf, viewOf } from './events.ts'
+import { clientEventOf } from './history.ts'
 import { loginInteraction } from './login.ts'
 import { PendingQuestions } from './questions.ts'
 
@@ -46,6 +47,19 @@ export interface AgentServiceOptions {
   start: (asking: Plugin, features: Feature[]) => StartOptions
   /** What the session said before, read back from its log: the conversation goes on from it. */
   history?: History
+  /** The session's lock and log, as the terminal shares them: each reply takes the lock, and goes on from its log. */
+  shared?: SharedLog
+}
+
+/** A session's lock and log, shared with the terminal. */
+export interface SharedLog {
+  /** Throws SessionBusyError while the terminal replies in the session. */
+  lock: () => void
+  unlock: () => void
+  /** What the terminal appended to the log since it was last read. */
+  unread: () => LogRecord[]
+  /** The history, the whole log read again. */
+  history: () => AgentState
 }
 
 /** Where a feature's commands talk to the client: what they say, what a login asks, and that the commands changed. */
@@ -73,6 +87,9 @@ export class AgentService {
   private readonly commands: () => Command[]
   /** How the last reply ended; none before the first. */
   private outcome: Outcome | undefined
+  private heldBy: Writer | undefined
+  /** The terminal wrote to the log since the conversation was read from it: the next reply reads it again. */
+  private behind = false
   private replying: Promise<void> = Promise.resolve()
 
   constructor(options: AgentServiceOptions) {
@@ -101,7 +118,8 @@ export class AgentService {
       approve: this.features.flatMap(f => f.approve ?? []),
     })
     this.started = start(asking, this.features)
-    this.conversation = new Conversation(startAgent(this.started), { id, state: history?.state })
+    const lock = options.shared === undefined ? undefined : this.lockOf(options.shared)
+    this.conversation = new Conversation(startAgent(this.started), { id, state: history?.state }, lock)
     this.tools = toolNamesOf(this.features, asking)
 
     this.commands = createCommands({
@@ -140,6 +158,35 @@ export class AgentService {
       outcome: this.outcome,
       commands: this.commands().map(viewOfCommand),
       usage: this.meter.reading(contextLimitOf(model)),
+      heldBy: this.heldBy,
+    }
+  }
+
+  /** What another process appended to the session's log, shown as if this one wrote it. */
+  written(records: readonly LogRecord[]): void {
+    if (records.length === 0) {
+      return
+    }
+
+    this.behind = true
+    for (const record of records) {
+      this.meter.take(record, false)
+      if (record.type === 'run_end') {
+        this.outcome = outcomeOf(record).outcome
+      }
+      const event = clientEventOf(record)
+      if (event !== undefined) {
+        this.log.push(event)
+      }
+    }
+    this.emitState()
+  }
+
+  /** Who else writes a reply to the session now; none once it has ended. */
+  setHeldBy(by: Writer | undefined): void {
+    if (by !== this.heldBy) {
+      this.heldBy = by
+      this.emitState()
     }
   }
 
@@ -269,6 +316,22 @@ export class AgentService {
         // What it spent, or the history's new size
         this.emitState()
       }
+    }
+  }
+
+  /** Each reply takes the lock, after what the terminal wrote since: the history goes on from it. */
+  private lockOf(shared: SharedLog): ReplyLock {
+    return {
+      claim: () => {
+        shared.lock()
+        this.written(shared.unread())
+        if (!this.behind) {
+          return undefined
+        }
+        this.behind = false
+        return shared.history()
+      },
+      release: shared.unlock,
     }
   }
 

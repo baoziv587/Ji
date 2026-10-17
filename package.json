@@ -7,6 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "postinstall": "node apps/coding-agent/scripts/link.ts",
     "demo": "pnpm --filter @ji.dev/demo start",
     "coding-agent": "pnpm --filter @ji.dev/coding-agent start",
     "agent-server": "pnpm --filter @ji.dev/coding-agent serve",

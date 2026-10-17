@@ -1,7 +1,8 @@
 // The coding agent as an HTTP service, for a client with a window of its own (apps/desktop): any number of sessions,
 // each in a folder of its own, with the same tools, approvals and steering as the terminal, put to whoever connects
 // (server/http.ts lists the routes). Each session's run events go to a JSONL log, which it is read back from when the
-// service starts again.
+// service starts again. The terminal keeps its sessions in the same folder: the service watches it for what the
+// terminal changes there, and a session the terminal replies in waits for it.
 //
 //   node src/server.ts [options]
 //
@@ -24,6 +25,7 @@ import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { findModel, UnsupportedThinkingError, useCredentialStore } from '@ji.dev/llm'
 import { createFileCredentialStore, registerEndpoints } from '@ji.dev/plugin-auth'
+import { errorMessage } from '@ji.dev/utils'
 import { createAgentHttpServer } from './server/http.ts'
 import { SessionOpener } from './server/open.ts'
 import { SessionHub } from './server/sessions.ts'
@@ -66,6 +68,13 @@ const hub = new SessionHub({
   mode: ARGS.yolo ? 'yolo' : 'ask',
 })
 
+// The locks the terminal holds now, then what it changes from here on
+hub.refresh()
+const unwatch = store.watch(
+  () => hub.refresh(),
+  error => process.stderr.write(`watching ${ARGS.sessions}: ${errorMessage(error)}\n`),
+)
+
 const server = createAgentHttpServer({ hub, defaultRoot: resolve(ARGS.root), auth: AUTH })
 server.listen(Number(ARGS.port), ARGS.host, () => {
   const address = server.address()
@@ -76,7 +85,7 @@ server.listen(Number(ARGS.port), ARGS.host, () => {
 const shutdown = (): void => {
   server.closeAllConnections()
   server.close()
-  hub.close().finally(() => process.exit(0))
+  Promise.all([unwatch(), hub.close()]).finally(() => process.exit(0))
 }
 process.once('SIGINT', shutdown)
 process.once('SIGTERM', shutdown)

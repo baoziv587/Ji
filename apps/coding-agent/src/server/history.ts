@@ -38,15 +38,12 @@ export function historyOf(records: readonly LogRecord[]): History {
       turns.get(record.run)!.push(record.turn)
     }
     if (record.type === 'run_end') {
-      const ended = outcomeOf(record)
-      outcome = ended.outcome
-      if (ended.outcome === 'done') {
+      outcome = outcomeOf(record).outcome
+      if (outcome === 'done') {
         done.add(record.run)
       }
-      events.push({ type: 'reply_end', ...ended, usage: spentOf(record) })
-      continue
     }
-    const event = eventOf(record)
+    const event = clientEventOf(record)
     if (event !== undefined) {
       events.push(event)
     }
@@ -59,4 +56,12 @@ export function historyOf(records: readonly LogRecord[]): History {
     }
   }
   return { state, events, outcome, meter }
+}
+
+/** What a client shows of a line of the log: a run's end is the reply's, with what it spent. */
+export function clientEventOf(record: LogRecord): Unnumbered | undefined {
+  if (record.type === 'run_end') {
+    return { type: 'reply_end', ...outcomeOf(record), usage: spentOf(record) }
+  }
+  return eventOf(record)
 }

@@ -50,6 +50,9 @@ type App struct {
 	// archived section is closed until opened.
 	opened       map[string]*bool
 	archivedOpen bool
+	// The folder `ji app` opened last, whose section the sidebar shows
+	// first.
+	pinned string
 	// A toast to show in the next frame, which only the view can.
 	toast *toast
 	// Settings are the person's choices; SaveSettings keeps them once
@@ -223,7 +226,7 @@ func (a *App) keep(id string) {
 func (a *App) busy(id string) bool {
 	s, _ := a.session(id)
 	status := a.status(s)
-	return status == "running" || status == "asking"
+	return status == "running" || status == "asking" || status == "terminal"
 }
 
 // open follows a session's events until it is closed.

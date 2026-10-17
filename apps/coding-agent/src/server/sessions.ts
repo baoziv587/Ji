@@ -6,11 +6,13 @@
 //   session   one session's service, opened if need be
 //   archive   out of the list's way, or back in it: nothing is deleted
 //   setMode   what waits for a yes in every session, those opened later included
+//   refresh   what the terminal changed in the folder: sessions it made, and the replies it writes
 
+import type { Writer } from '../agent/conversation.ts'
 import type { Mode } from '../features/permissions.ts'
 import type { ServiceState } from './events.ts'
 import type { AgentService } from './service.ts'
-import type { SessionMeta, SessionStore } from './store.ts'
+import type { SessionLock, SessionMeta, SessionStore } from './store.ts'
 import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { findModel } from '@ji.dev/llm'
@@ -20,6 +22,8 @@ type SessionStatus = 'idle' | 'running' | 'asking' | 'failed'
 
 export interface SessionSummary extends SessionMeta {
   status: SessionStatus
+  /** Another process writes a reply to it now: the terminal. */
+  heldBy?: Writer
 }
 
 /** Opens a session's service: its tools working in its root, its log written to the store. */
@@ -41,15 +45,14 @@ export class SessionNotFoundError extends Error {
   }
 }
 
-/** A title is the first line of the first message, this long at most. */
-const TITLE_LENGTH = 80
-
 export class SessionHub {
   private readonly store: SessionStore
   private readonly opener: Opener
   private mode: Mode
   private readonly metas: Map<string, SessionMeta>
   private readonly opened = new Map<string, AgentService>()
+  /** The sessions another process writes a reply to, as of the last refresh. */
+  private held = new Map<string, SessionLock>()
   private readonly listeners = new Set<(sessions: SessionSummary[]) => void>()
 
   constructor({ store, opener, mode = 'ask' }: SessionHubOptions) {
@@ -89,8 +92,10 @@ export class SessionHub {
 
     const service = this.opener.open(this.metaOf(id), this.mode)
     this.opened.set(id, service)
+    service.setHeldBy(this.held.get(id)?.by)
     service.subscribe(e => {
-      if (e.type === 'user') {
+      // The terminal's messages it titled itself
+      if (e.type === 'user' && service.state().replying) {
         this.used(id, e.text)
       }
       if (e.type === 'state' && e.state.model !== this.metaOf(id).model) {
@@ -122,6 +127,52 @@ export class SessionHub {
     }
   }
 
+  /**
+   * Reads what another process changed in the folder since: the sessions it made, the lines of those it writes to, and
+   * what it appended to the logs of those open here. Cheap when nothing changed: one read of the folder, and one of
+   * each open log's size.
+   */
+  refresh(): void {
+    const { sessions, locked } = this.store.listing()
+    let changed = false
+    for (const id of sessions) {
+      if (!this.metas.has(id)) {
+        const meta = this.store.meta(id)
+        if (meta !== undefined) {
+          this.metas.set(id, meta)
+          changed = true
+        }
+      }
+    }
+
+    const held = new Map<string, SessionLock>()
+    for (const id of locked) {
+      const lock = this.store.holder(id)
+      if (lock !== undefined) {
+        held.set(id, lock)
+      }
+    }
+    // Written to elsewhere now, or until now: its line again, a title or a time changed
+    for (const id of new Set([...held.keys(), ...this.held.keys()])) {
+      const meta = this.store.meta(id)
+      const was = this.metas.get(id)
+      if (meta !== undefined && (meta.title !== was?.title || meta.updated !== was.updated)) {
+        this.metas.set(id, meta)
+        changed = true
+      }
+      changed ||= held.get(id)?.pid !== this.held.get(id)?.pid
+    }
+    this.held = held
+
+    for (const [id, service] of this.opened) {
+      service.written(this.store.unread(id))
+      service.setHeldBy(held.get(id)?.by)
+    }
+    if (changed) {
+      this.changed()
+    }
+  }
+
   /** Called with the list whenever a session is added, archived, or starts or stops doing something. */
   subscribe(listener: (sessions: SessionSummary[]) => void): () => void {
     this.listeners.add(listener)
@@ -139,7 +190,7 @@ export class SessionHub {
   }
 
   private summaryOf(meta: SessionMeta): SessionSummary {
-    return { ...meta, status: statusOf(this.opened.get(meta.id)?.state()) }
+    return { ...meta, status: statusOf(this.opened.get(meta.id)?.state()), heldBy: this.held.get(meta.id)?.by }
   }
 
   private changed(): void {
@@ -159,9 +210,10 @@ export class SessionHub {
 
   /** A message was sent: the session moves to the top, titled by it if it was the first. */
   private used(id: string, text: string): void {
-    const meta = this.metaOf(id)
-    const title = meta.title === '' ? titleOf(text) : meta.title
-    this.update(meta, { title, updated: Date.now() })
+    const meta = this.store.used(id, text)
+    if (meta !== undefined) {
+      this.metas.set(id, meta)
+    }
   }
 
   private update(meta: SessionMeta, patch: Partial<SessionMeta>): SessionMeta {
@@ -184,11 +236,6 @@ function statusOf(state: ServiceState | undefined): SessionStatus {
     return 'running'
   }
   return state.outcome === 'failed' ? 'failed' : 'idle'
-}
-
-function titleOf(text: string): string {
-  const line = text.trim().split('\n')[0] ?? ''
-  return line.length > TITLE_LENGTH ? `${line.slice(0, TITLE_LENGTH - 1)}…` : line
 }
 
 function isFolder(path: string): boolean {

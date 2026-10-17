@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -47,9 +48,14 @@ type fakeAgent struct {
 	endpoints []agent.Endpoint
 	removed   []string
 	probed    []string
+	// The list Sessions answers with.
+	sessions []agent.Session
 }
 
 func (f *fakeAgent) FollowSessions(context.Context, func(agent.Sessions), func(error)) {}
+func (f *fakeAgent) Sessions(context.Context) (agent.Sessions, error) {
+	return agent.Sessions{Sessions: f.sessions}, nil
+}
 func (f *fakeAgent) CreateSession(_ context.Context, root, model string) (agent.Session, error) {
 	f.created = append(f.created, root)
 	f.createdOn = append(f.createdOn, model)
@@ -633,6 +639,71 @@ func TestArchiveMovesOnAndCanBeUndone(t *testing.T) {
 
 	if !reflect.DeepEqual(f.archived, []string{"a:on", "a:off"}) || a.selected != "a" {
 		t.Errorf("archived %v, selected %q", f.archived, a.selected)
+	}
+}
+
+func TestOpenFolderShowsItsSessionsFirst(t *testing.T) {
+	a, f := testApp()
+	f.sessions = append(slices.Clone(a.list.Sessions), agent.Session{
+		ID:      "e",
+		Root:    "/code/api",
+		Title:   "Made in the terminal",
+		Updated: time.Now().UnixMilli() - 60_000,
+	})
+	tt := ui.NewTester(a.View, 1100, 700)
+
+	a.OpenFolder("/code/api")
+	tt.Frame()
+
+	if a.selected != "e" {
+		t.Errorf(
+			"selected %q: the folder's most recent session, the terminal's included, is chosen",
+			a.selected,
+		)
+	}
+	if first := a.groups().folders[0].root; first != "/code/api" {
+		t.Errorf("first section %q: the folder opened comes first", first)
+	}
+	if len(f.created) != 0 {
+		t.Errorf("created %v in a folder that has sessions", f.created)
+	}
+}
+
+func TestOpenFolderStartsASessionInAnEmptyOne(t *testing.T) {
+	a, f := testApp()
+	f.sessions = a.list.Sessions
+
+	a.OpenFolder("/code/new")
+
+	if !reflect.DeepEqual(f.created, []string{"/code/new"}) || a.selected != "new" {
+		t.Errorf("created %v, selected %q", f.created, a.selected)
+	}
+}
+
+func TestSessionTheTerminalRepliesInWaits(t *testing.T) {
+	a, f := testApp()
+	tt := ui.NewTester(a.View, 1100, 700)
+	f.live["a"](agent.Event{Type: "state", State: &agent.State{
+		ID: "a", Root: "/code/web", Mode: "ask", HeldBy: "terminal", Commands: testCommands,
+	}})
+	f.live["a"](agent.Event{Type: "user", Text: "from the terminal"})
+	tt.Frame()
+
+	if err := tt.Click("Message"); err == nil {
+		tt.Type("explain")
+		tt.Key(0, ui.KeyEnter)
+	}
+
+	if len(f.sent["a"]) != 0 {
+		t.Errorf("sent %q while the terminal replies", f.sent["a"])
+	}
+	for _, text := range []string{"Replying in the terminal", "from the terminal"} {
+		if !tt.HasText(text) {
+			t.Errorf("no %q in %q", text, tt.Texts())
+		}
+	}
+	if s, _ := a.session("a"); a.status(s) != "terminal" {
+		t.Errorf("status %q", a.status(s))
 	}
 }
 

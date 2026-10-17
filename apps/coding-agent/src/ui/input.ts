@@ -2,7 +2,7 @@
 // the reply, clears the line or quits, and the rest edit it. A reply is followed to its end from here, so one that
 // does not finish can put what it was sent back in the line.
 
-import type { Run } from '@ji.dev/llm'
+import type { AgentState, Run } from '@ji.dev/llm'
 import type { Editing, Keypress, Screen } from '@ji.dev/tui'
 import type { Conversation } from '../agent/conversation.ts'
 import type { Answering } from './answering.ts'
@@ -11,6 +11,7 @@ import type { CommandMenu } from './menu.ts'
 import type { Stage } from './reply/render.ts'
 import { log } from '@clack/prompts'
 import { applyKey, editingText, EMPTY_EDITING, formatKeypress } from '@ji.dev/tui'
+import { SessionBusyError } from '../agent/conversation.ts'
 import { render } from './reply/render.ts'
 
 export interface InputContext {
@@ -21,6 +22,11 @@ export interface InputContext {
   /** Where a reply shows. */
   stage: Stage
   quit: () => void
+  /** The session as the desktop app shares it: what a message sent tells it, and when its reply ends. */
+  shared?: {
+    used: (text: string) => void
+    whenFree: () => Promise<AgentState | undefined>
+  }
 }
 
 /** The provider has no key in the environment and nothing stored. */
@@ -33,6 +39,8 @@ export class Input {
   private state: Editing = EMPTY_EDITING
   /** The reply in progress, settled once it has written its last line. */
   private replying: Promise<void> = Promise.resolve()
+  /** Waiting for the desktop app's reply to end. */
+  private waiting = false
 
   constructor(context: InputContext) {
     this.context = context
@@ -132,10 +140,45 @@ export class Input {
 
   /** Sends a message, and shows the reply it starts; a steer shows once it reaches the model, as queued until then. */
   send(message: string): void {
-    const run = this.context.conversation.send(message)
+    let run: Run | undefined
+    try {
+      run = this.context.conversation.send(message)
+    } catch (error) {
+      if (!(error instanceof SessionBusyError)) {
+        throw error
+      }
+      this.putBack([message])
+      log.warn(`${error.message} Your message is back in the input: send it once the reply ends.`)
+      void this.waitForTurn()
+      return
+    }
+
+    this.context.shared?.used(message)
     if (run !== undefined) {
       this.replying = this.converse(run)
     }
+  }
+
+  /** Once the desktop app's reply ends, the conversation goes on from it. */
+  private async waitForTurn(): Promise<void> {
+    const { shared, conversation, screen } = this.context
+    if (shared === undefined || this.waiting) {
+      return
+    }
+
+    this.waiting = true
+    const state = await shared.whenFree()
+    this.waiting = false
+    if (state !== undefined && !conversation.replying) {
+      conversation.resume(state)
+      log.success('Synced the desktop app’s new messages.')
+    }
+    screen.draw()
+  }
+
+  /** What was sent goes back in the input, ahead of what is typed. */
+  private putBack(sent: string[]): void {
+    this.state = { ...EMPTY_EDITING, before: [...sent, editingText(this.state)].filter(t => t !== '').join(' ') }
   }
 
   /** Shows a reply to its end. One that does not finish puts what it was sent back in the input, ahead of what is typed. */
@@ -146,7 +189,7 @@ export class Input {
 
     if (unfinished !== undefined) {
       const { sent, stopped, error } = unfinished
-      this.state = { ...EMPTY_EDITING, before: [...sent, editingText(this.state)].filter(t => t !== '').join(' ') }
+      this.putBack(sent)
 
       const back = sent.length === 1 ? 'Your message is back in the input.' : 'Your messages are back in the input.'
       // The history goes back, the files do not: a resend should not take them for untouched

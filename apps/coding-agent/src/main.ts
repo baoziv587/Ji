@@ -10,6 +10,7 @@ import { cancel, log, outro } from '@clack/prompts'
 import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
 import { choices } from '@ji.dev/plugin-choices'
 import { localWorkspace } from '@ji.dev/plugin-files'
+import { jsonl } from '@ji.dev/plugin-jsonl'
 import { createLocalExecutor } from '@ji.dev/plugin-shell'
 import { abbreviateHomePath, dimText, formatKeyHint, Screen, Status } from '@ji.dev/tui'
 import { contextLimitOf, createPlugins, startAgent, startOn, toolNamesOf } from './agent/agent.ts'
@@ -17,11 +18,13 @@ import { Conversation } from './agent/conversation.ts'
 import { createAuthFeature } from './features/auth.ts'
 import { Permissions } from './features/permissions.ts'
 import { createSkillsFeature } from './features/skills.ts'
+import { SessionStore } from './server/store.ts'
 import { Answering } from './ui/answering.ts'
 import { viewOf } from './ui/bars.ts'
 import { createCommandMenu } from './ui/commands.ts'
 import { Input, missingKey } from './ui/input.ts'
 import { createLoginInteraction } from './ui/login.ts'
+import { SharedSession } from './ui/shared.ts'
 import { Meter } from './ui/usage.ts'
 
 // The parts
@@ -37,6 +40,9 @@ const SKILLS = join(homedir(), '.agents', 'skills')
 
 /** Where the credentials /login keeps are, and the installation id; headless reads the same file. */
 const AUTH = join(homedir(), '.ji')
+
+/** Where the service keeps its sessions: the desktop app lists the terminal's too, and can go on with them. */
+const SESSIONS = join(AUTH, 'sessions')
 
 /**
  * `--model provider/id` picks any model of pi-ai's catalog; without it, DeepSeek. `--yolo`: nothing waits for a yes,
@@ -73,6 +79,18 @@ const skills = createSkillsFeature(SKILLS)
 /** /login and /logout; its questions go on the screen like any other. */
 const auth = createAuthFeature(AUTH, createLoginInteraction(answering))
 
+const store = new SessionStore(SESSIONS, 'terminal')
+
+/** The session's line in the desktop app's list, and the lock each reply takes. */
+const shared = new SharedSession({
+  store,
+  root: ROOT,
+  // eslint-disable-next-line ts/no-use-before-define -- read as a message is sent, once the conversation exists
+  id: () => conversation.id,
+  // eslint-disable-next-line ts/no-use-before-define -- as above
+  model: () => `${conversation.agent.model.provider}/${conversation.agent.model.id}`,
+})
+
 /**
  * What the agent runs with: each plugin, and what the terminal asks before its calls. The shell's before the files
  * plugin: a command runs after the edits the model wrote before it. grep is read-only, so never asked about. The
@@ -84,6 +102,8 @@ const features: Feature[] = [
   { plugin: plugins.files, approve: permissions.fileCalls },
   skills,
   auth,
+  // eslint-disable-next-line ts/no-use-before-define -- written to as a reply runs, once the conversation exists
+  { plugin: jsonl(line => store.append(conversation.id, line)) },
 ]
 
 /**
@@ -104,7 +124,7 @@ const started: StartOptions = {
   asking,
 }
 
-const conversation = new Conversation(startAgentOrQuit())
+const conversation = new Conversation(startAgentOrQuit(), {}, shared)
 
 const TOOLS = toolNamesOf(features, asking)
 
@@ -126,6 +146,7 @@ const input = new Input({
   answering,
   commands,
   quit,
+  shared,
   stage: {
     screen,
     status,
@@ -213,6 +234,7 @@ if (!(await conversation.agent.model.hasKey())) {
 await quitting
 conversation.stop()
 await input.settled()
+store.close()
 
 await screen.settled()
 screen.stop()

@@ -16,7 +16,7 @@
 //   POST /api/endpoints/probe         {baseUrl, key?, id?}  {models}: the ids the server lists, asked with the key,
 //                                                   or else the stored key of endpoint id
 //
-//   GET  /api/sessions                              {sessions, defaultRoot}
+//   GET  /api/sessions                              {sessions, defaultRoot}, those the terminal made since included
 //   POST /api/sessions                {root?, model?}  a new session, working in root (default: defaultRoot), on
 //                                                   model, 'provider/id' (default: the service's --model)
 //   POST /api/sessions/:id/archive    {archived}    out of the list's way, or back
@@ -35,7 +35,7 @@
 //   POST /api/sessions/:id/model      {model}       'provider/id': the model of the next reply, and of the session
 //                                                   when it opens again; not while it replies
 //
-// An error is {error: message} with a 4xx status.
+// An error is {error: message} with a 4xx status: 409 for a message sent while the terminal replies in the session.
 
 import type { Reply } from '@ji.dev/plugin-choices'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
@@ -48,6 +48,7 @@ import { createServer } from 'node:http'
 import { models } from '@ji.dev/llm'
 import { DISMISSED } from '@ji.dev/plugin-choices'
 import { errorMessage } from '@ji.dev/utils'
+import { SessionBusyError } from '../agent/conversation.ts'
 import { MODES } from '../features/permissions.ts'
 import {
   dropEndpoint,
@@ -119,6 +120,7 @@ async function route(
 
   if (id === undefined) {
     if (method === 'GET') {
+      hub.refresh()
       return sendJson(res, 200, { sessions: hub.list(), defaultRoot })
     }
     const body = await RequestBody.read(req)
@@ -285,6 +287,9 @@ function statusOf(error: unknown): number {
   }
   if (error instanceof SessionNotFoundError) {
     return 404
+  }
+  if (error instanceof SessionBusyError) {
+    return 409
   }
   return 400
 }
