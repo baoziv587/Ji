@@ -110,22 +110,21 @@ func (a *App) vibrant(c *ui.Context) bool {
 	return c.Vibrancy() && a.theme.Dark == a.systemDark
 }
 
-// noSession fills the right side while no session is chosen: connecting,
-// none yet, or every one archived.
+// noSession fills the right side while no session is chosen: before the
+// service lists them, none yet, or every one archived.
 func (a *App) noSession(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	ui.Column(c).Fill().Center().Gap(24).Padding(48).Children(func() {
+		// Nothing for the moment the service takes to start and list them,
+		// rather than an empty state a session then replaces
 		if !a.listed {
-			ui.Column(c).MaxWidth(384).Gap(8).AlignItems(ui.Center).Children(func() {
-				if a.link.problem != "" {
+			if a.link.problem != "" {
+				ui.Column(c).MaxWidth(384).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, a.link.problem).TextColor(p.Destructive).TextAlign(ui.Center)
 					ui.Text(c, "Trying again…").TextColor(p.MutedForeground)
-					return
-				}
-				components.Spinner(c, "Connecting", 16, ui.Color{})
-				ui.Text(c, "Connecting to the agent…").TextColor(p.MutedForeground)
-			})
+				})
+			}
 			return
 		}
 

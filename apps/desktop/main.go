@@ -112,8 +112,15 @@ func main() {
 		update := func(fn func()) { win.Update(fn) }
 		mygo.Theme.SetSource(themeSource(settings.Appearance))
 
-		open := func(url string) {
-			a = app.New(agent.NewClient(url), update)
+		// The App of the service client asks, which may not listen yet, until
+		// stopApp
+		var client *agent.Client
+		var stopApp context.CancelFunc
+		open := func(c *agent.Client) {
+			ctx, stop := context.WithCancel(ctx)
+			stopApp = stop
+			client = c
+			a = app.New(c, update)
 			a.Layout = loadLayout()
 			a.Settings = settings
 
@@ -184,7 +191,12 @@ func main() {
 			update(func() { started = s })
 			return s.URL, nil
 		}
-		ob.Ready = open
+		ob.Open = func() { open(agent.NewPendingClient()) }
+		ob.Close = func() {
+			stopApp()
+			a = nil
+		}
+		ob.Ready = func(url string) { client.Connect(url) }
 
 		// Each item does nothing until the service runs
 		whenOpen := func(fn func(*app.App)) func(*mygo.MenuItem, *mygo.Window) {
@@ -255,7 +267,7 @@ func main() {
 		})
 
 		if *address != "" {
-			open(*address)
+			open(agent.NewClient(*address))
 			return
 		}
 		ob.Begin()

@@ -17,8 +17,8 @@ import (
 	"desktop/ui/icons"
 )
 
-// Onboarding is the window before the service runs; main gives it the steps
-// and swaps in the App once Ready.
+// Onboarding is the window until there is a Node.js to run the service on;
+// main gives it the steps, and swaps in the App on Open.
 type Onboarding struct {
 	// Find returns the Node.js to run the service on, "" when there is none
 	// new enough.
@@ -28,8 +28,11 @@ type Onboarding struct {
 	Install func(ctx context.Context, progress func(done, total int64)) (string, error)
 	// Start starts the service on node and returns its address.
 	Start func(node string) (string, error)
-	// Ready runs once the service listens, with its address.
-	Ready func(url string)
+	// Open shows the App as the service starts, rather than wait for it to
+	// listen; Ready then gives it the service's address. Close takes it away
+	// should the service not start, for the onboarding to say why.
+	Open, Close func()
+	Ready       func(url string)
 	// Version is the Node.js that Install installs, and Where where to.
 	Version, Where string
 	// Settings choose the theme, as the App's do.
@@ -116,10 +119,12 @@ func (o *Onboarding) install() {
 
 func (o *Onboarding) start(node string) {
 	o.node, o.step = node, starting
+	o.Open()
 	o.async(func() {
 		url, err := o.Start(node)
 		o.update(func() {
 			if err != nil {
+				o.Close()
 				o.fail("The agent did not start: " + err.Error())
 				return
 			}
@@ -148,11 +153,8 @@ func (o *Onboarding) View(c *ui.Context) {
 	ui.Column(c).Fill().Children(func() {
 		ui.Box(c).Height(TitleBarHeight).Shrink(0).DragWindow()
 		ui.Column(c).Grow(1).Center().Gap(24).Padding(0, 48, 48+TitleBarHeight).Children(func() {
+			// Nothing for the moment it looks for Node.js, nor once the App shows
 			switch o.step {
-			case finding:
-				waiting(c, "Looking for Node.js…")
-			case starting:
-				waiting(c, "Starting the agent…")
 			case missing:
 				o.missing(c, p)
 			case downloading:
@@ -161,14 +163,6 @@ func (o *Onboarding) View(c *ui.Context) {
 				o.failed(c)
 			}
 		})
-	})
-}
-
-func waiting(c *ui.Context, label string) {
-	p := components.PaletteOf(c.Theme())
-	ui.Column(c).Gap(8).AlignItems(ui.Center).Children(func() {
-		components.Spinner(c, label, 16, ui.Color{})
-		ui.Text(c, label).TextColor(p.MutedForeground)
 	})
 }
 

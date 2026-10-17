@@ -30,6 +30,8 @@ func testOnboarding(node string) (*Onboarding, *[]string) {
 		did = append(did, "started on "+node)
 		return "http://127.0.0.1:1", nil
 	}
+	o.Open = func() { did = append(did, "opened") }
+	o.Close = func() { did = append(did, "closed") }
 	o.Ready = func(url string) { did = append(did, "ready at "+url) }
 	return o, &did
 }
@@ -38,6 +40,7 @@ func TestOnboardingStartsOnTheNodeFound(t *testing.T) {
 	o, did := testOnboarding("/opt/homebrew/bin/node")
 	o.Begin()
 	if want := []string{
+		"opened",
 		"started on /opt/homebrew/bin/node",
 		"ready at http://127.0.0.1:1",
 	}; !slices.Equal(
@@ -61,6 +64,7 @@ func TestOnboardingInstallsNodeWhenThereIsNone(t *testing.T) {
 	}
 	if want := []string{
 		"installed",
+		"opened",
 		"started on /runtime/bin/node",
 		"ready at http://127.0.0.1:1",
 	}; !slices.Equal(
@@ -140,6 +144,9 @@ func TestOnboardingTriesAgainWhatFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 	if want := []string{
+		"opened",
+		"closed",
+		"opened",
 		"started on /usr/local/bin/node",
 		"ready at http://127.0.0.1:1",
 	}; !slices.Equal(
