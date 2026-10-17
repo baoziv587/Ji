@@ -1,5 +1,7 @@
 #!/usr/bin/env node
-// ji: the coding agent from any folder, linked onto the PATH by `pnpm install` (scripts/link.ts).
+// ji: the coding agent from any folder, once linked onto the PATH:
+//
+//   ln -s "$PWD/apps/coding-agent/src/cli.ts" ~/.local/bin/ji
 //
 //   ji [--model provider/id] [--yolo]   the terminal, working in the current folder
 //   ji app [folder]                     the folder's sessions in the desktop app, the terminal's among them
