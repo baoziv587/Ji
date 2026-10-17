@@ -20,12 +20,37 @@ import (
 
 // Client is an Agent over HTTP.
 type Client struct {
-	base string
-	http *http.Client
+	base  string
+	ready chan struct{}
+	http  *http.Client
 }
 
 func NewClient(base string) *Client {
-	return &Client{base: strings.TrimRight(base, "/"), http: &http.Client{}}
+	c := NewPendingClient()
+	c.Connect(base)
+	return c
+}
+
+// NewPendingClient is a Client of a service that does not listen yet: what
+// is asked of it waits until Connect says where it does.
+func NewPendingClient() *Client {
+	return &Client{ready: make(chan struct{}), http: &http.Client{}}
+}
+
+// Connect says where the service listens, once.
+func (c *Client) Connect(base string) {
+	c.base = strings.TrimRight(base, "/")
+	close(c.ready)
+}
+
+// url is where path is, once the service listens.
+func (c *Client) url(ctx context.Context, path string) (string, error) {
+	select {
+	case <-c.ready:
+		return c.base + path, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
 }
 
 func sessionPath(id, action string) string {
@@ -253,7 +278,11 @@ func (c *Client) stream(
 	fn func(json.RawMessage),
 	status func(error),
 ) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	u, err := c.url(ctx, path)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return err
 	}
@@ -315,7 +344,11 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 		}
 		reader = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base+path, reader)
+	u, err := c.url(ctx, path)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, u, reader)
 	if err != nil {
 		return err
 	}

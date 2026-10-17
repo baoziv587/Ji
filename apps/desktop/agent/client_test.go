@@ -1,10 +1,15 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReadEventsParsesTheStream(t *testing.T) {
@@ -39,5 +44,24 @@ func TestHelpReadsRowsAndLines(t *testing.T) {
 	}
 	if !reflect.DeepEqual(e.Sections, want) {
 		t.Errorf("sections %+v", e.Sections)
+	}
+}
+
+func TestAPendingClientWaitsForTheService(t *testing.T) {
+	service := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"id":"s1"}`))
+	}))
+	defer service.Close()
+
+	c := NewPendingClient()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := c.CreateSession(ctx, "", ""); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("asked before the service listens: %v, want it to wait", err)
+	}
+
+	go c.Connect(service.URL)
+	if s, err := c.CreateSession(context.Background(), "", ""); err != nil || s.ID != "s1" {
+		t.Errorf("asked once it listens: %+v, %v", s, err)
 	}
 }
