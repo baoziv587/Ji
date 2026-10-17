@@ -1,11 +1,12 @@
 package app
 
-// The sidebar: the sessions by folder, the folder used last first, what
-// each is doing, and the archived ones apart.
+// The sidebar: the sessions by folder, the folder used last first (or the
+// one `ji app` opened), what each is doing, and the archived ones apart.
 
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -170,7 +171,7 @@ type group struct {
 // groups is the grouping of the list, made again only once it changes.
 func (a *App) groups() *grouping {
 	if a.grouped == nil {
-		a.grouped = groupSessions(a.list.Sessions)
+		a.grouped = groupSessions(a.list.Sessions, a.pinned)
 	}
 	return a.grouped
 }
@@ -178,9 +179,15 @@ func (a *App) groups() *grouping {
 // regroup is to be called whenever the list changes.
 func (a *App) regroup() { a.grouped = nil }
 
-func groupSessions(sessions []agent.Session) *grouping {
+func groupSessions(sessions []agent.Session, pinned string) *grouping {
 	g := &grouping{}
 	at := map[string]int{}
+	if slices.ContainsFunc(sessions, func(s agent.Session) bool {
+		return s.Root == pinned && !s.Archived
+	}) {
+		at[pinned] = 0
+		g.folders = append(g.folders, group{root: pinned, title: filepath.Base(pinned)})
+	}
 	for i, s := range sessions {
 		if s.Archived {
 			g.archived = append(g.archived, i)
@@ -239,6 +246,12 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 			components.Tag(c, "Approval", p.Waiting)
 		case "running":
 			components.Spinner(c, "Running", 16, p.Primary)
+		case "terminal":
+			ui.Icon(c, icons.SquareTerminal).
+				FontSize(14).
+				TextColor(p.Primary).
+				Label("Replying in the terminal").
+				Tooltip("Replying in the terminal")
 		case "failed":
 			components.Tag(c, "Failed", p.Destructive)
 		default:
@@ -258,21 +271,27 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 			if m.Item("Unarchive").Chosen() {
 				a.unarchive(s.ID)
 			}
-		} else if m.Item("Archive").Disabled(status == "running" || status == "asking").Chosen() {
+		} else if m.Item("Archive").Disabled(status != "idle" && status != "failed").Chosen() {
 			a.archive(s.ID, true)
 		}
 	})
 }
 
 // status is what a session is doing: the live state of one the window
-// follows, the list's otherwise.
+// follows, the list's otherwise; "terminal" while the terminal replies in
+// it.
 func (a *App) status(s agent.Session) string {
 	view := a.views[s.ID]
 	if view == nil || view.t.State.ID == "" {
+		if s.HeldBy != "" {
+			return "terminal"
+		}
 		return s.Status
 	}
 	st := view.t.State
 	switch {
+	case st.HeldBy != "":
+		return "terminal"
 	case len(st.Asking) > 0 || view.t.Asking != nil:
 		return "asking"
 	case st.Replying:

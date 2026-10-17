@@ -51,6 +51,39 @@ func (a *App) NewSessionInFolder() {
 	})
 }
 
+// OpenFolder shows a folder's sessions, as `ji app` asks: its section
+// first and open, its most recent session chosen, or a new one in it when
+// it has none. The list is read again first, for the sessions the
+// terminal made since.
+func (a *App) OpenFolder(root string) {
+	a.settingsOpen = false
+	a.request(func(ctx context.Context) {
+		list, err := a.agent.Sessions(ctx)
+		a.update(func() {
+			if err != nil {
+				a.failure = err.Error()
+				return
+			}
+			a.pinned = root
+			a.setList(list)
+			if open := a.opened[root]; open != nil {
+				*open = true
+			}
+			var recent *agent.Session
+			for i, s := range a.list.Sessions {
+				if s.Root == root && !s.Archived && (recent == nil || s.Updated > recent.Updated) {
+					recent = &a.list.Sessions[i]
+				}
+			}
+			if recent == nil {
+				a.NewSession(root)
+				return
+			}
+			a.Select(recent.ID)
+		})
+	})
+}
+
 // archive takes a session out of the list's way, or puts it back. One
 // archived while chosen gives way to the next, and a toast can take it back.
 func (a *App) archive(id string, archived bool) {
@@ -122,7 +155,7 @@ func (a *App) neighbour(id string) string {
 // send sends what is typed: a message, or the command it names.
 func (a *App) send(view *sessionView) {
 	text := strings.TrimSpace(view.draft)
-	if text == "" {
+	if text == "" || view.t.State.HeldBy != "" {
 		return
 	}
 	if strings.HasPrefix(text, "/") {

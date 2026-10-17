@@ -33,6 +33,17 @@ func (a *App) statusLine(
 		case a.failure != "":
 			parts = append(parts, func() { small(a.failure, p.Destructive).Selectable().Shrink(1) })
 		}
+		if st.HeldBy != "" {
+			parts = append(parts, func() {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(1).Children(func() {
+					components.Spinner(c, "Replying in the terminal", 12, p.Primary)
+					small("Replying in the terminal", p.Foreground).Shrink(1)
+					if label := view.t.Activity; label != "" {
+						small(label, p.MutedForeground).Shrink(1)
+					}
+				})
+			})
+		}
 		if label := view.t.Activity; label != "" && (st.Replying || view.t.Asking != nil) {
 			parts = append(parts, func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(1).Children(func() {

@@ -8,6 +8,9 @@
 //	pnpm desktop:build                       # the .app and .dmg, with the service bundled in
 //	go tool mygo dev                         # with live reload, working on this directory
 //	go run . -root ~/code/project            # works on another project
+//	go run . ~/code/project                  # shows that folder's sessions, as
+//	                                         # `ji app` does; a second launch hands
+//	                                         # its folder to the one running
 //	go run . -server http://127.0.0.1:4317   # connects to a running service (pnpm agent-server)
 //	go run . -onboarding                     # installs Node.js as if there were none
 //	                                         # (pnpm desktop:onboarding)
@@ -25,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -41,7 +45,8 @@ import (
 )
 
 func main() {
-	wd, _ := os.Getwd()
+	cwd, _ := os.Getwd()
+	wd := cwd
 	// An app opened from the Finder starts in /, which is no project to work on
 	if home, err := os.UserHomeDir(); err == nil && wd == "/" {
 		wd = home
@@ -99,6 +104,16 @@ func main() {
 		"go through the onboarding as if there were no Node.js",
 	)
 	flag.Parse()
+
+	// The folder after the flags, whose sessions the window shows; with one
+	// running already, it goes to that one, which shows them instead
+	folder := folderOf(flag.CommandLine, os.Args[1:], cwd)
+	if folder != "" {
+		service.Root = folder
+	}
+	if !mygo.App.RequestSingleInstanceLock() {
+		return
+	}
 
 	own := nodejs.Runtime{Dir: configPath("runtime"), Release: nodejs.Pinned}
 	find := func() string {
@@ -164,6 +179,9 @@ func main() {
 			}
 
 			go a.Follow(ctx)
+			if folder != "" {
+				a.OpenFolder(folder)
+			}
 			// Run from the source, a scheme's stylesheet shows as it is saved
 			if dir := components.SchemesSource(); dir != "" {
 				go func() {
@@ -271,6 +289,21 @@ func main() {
 			}),
 		})
 
+		mygo.App.OnSecondInstance(func(args []string, wd string) {
+			mygo.App.Focus()
+			next := folderOf(flag.CommandLine, args, wd)
+			if next == "" {
+				return
+			}
+			win.Update(func() {
+				// Before the service runs, it is the folder shown once it does
+				folder = next
+				if a != nil {
+					a.OpenFolder(next)
+				}
+			})
+		})
+
 		if *address != "" {
 			open(agent.NewClient(*address))
 			return
@@ -372,6 +405,42 @@ func bundledAgent() string {
 	}
 	return filepath.Join(dir, "agent-server", "server.js")
 }
+
+// folderOf is the folder a command line names after the flags of flags,
+// made absolute against wd with its links resolved, as the terminal names
+// the folder it works in: "" with none, or one that is not a folder.
+func folderOf(flags *flag.FlagSet, args []string, wd string) string {
+	fs := flag.NewFlagSet("", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	flags.VisitAll(func(f *flag.Flag) {
+		b, ok := f.Value.(interface{ IsBoolFlag() bool })
+		fs.Var(ignored{ok && b.IsBoolFlag()}, f.Name, "")
+	})
+	if fs.Parse(args) != nil || fs.NArg() == 0 {
+		return ""
+	}
+
+	path := fs.Arg(0)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(wd, path)
+	}
+	path, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return ""
+	}
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		return ""
+	}
+	return path
+}
+
+// ignored is a flag's value that is not kept: folderOf only skips the
+// flags, and a bool one takes no value after it.
+type ignored struct{ boolean bool }
+
+func (ignored) String() string     { return "" }
+func (ignored) Set(string) error   { return nil }
+func (v ignored) IsBoolFlag() bool { return v.boolean }
 
 func envOr(name, fallback string) string {
 	if v := os.Getenv(name); v != "" {

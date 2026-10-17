@@ -54,6 +54,12 @@ export class SessionOpener implements Opener {
       features: client => this.featuresOf(id, plugins, permissions, client),
       start: (asking, features) => ({ root, features, asking, ...this.modelOf(meta) }),
       history: historyOf(store.records(id)),
+      shared: {
+        lock: () => store.lock(id),
+        unlock: () => store.unlock(id),
+        unread: () => store.unread(id),
+        history: () => historyOf(store.records(id)).state,
+      },
     })
   }
 

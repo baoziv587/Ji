@@ -4,6 +4,7 @@
 import type { RunEvent, ThinkingLevel, ToolResultMessage } from '@ji.dev/llm'
 import type { Questions } from '@ji.dev/plugin-choices'
 import type { HelpSection } from '../agent/commands.ts'
+import type { Writer } from '../agent/conversation.ts'
 import type { UsageReading } from '../agent/meter.ts'
 import type { Mode } from '../features/permissions.ts'
 import { STOPPED_MESSAGE } from '../agent/conversation.ts'
@@ -65,6 +66,8 @@ export interface ServiceState {
   commands: CommandView[]
   /** What the session has spent so far, and how much the history holds. */
   usage: UsageReading
+  /** Another process writes a reply to the session now: the terminal, say. Nothing can be sent until it ends. */
+  heldBy?: Writer
 }
 
 /** What a client reads, in order of `seq`. */
