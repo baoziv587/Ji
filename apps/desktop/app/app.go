@@ -225,7 +225,12 @@ func (a *App) keep(id string) {
 
 func (a *App) busy(id string) bool {
 	s, _ := a.session(id)
-	status := a.status(s)
+	return isBusy(a.status(s))
+}
+
+// isBusy is whether a session with this status is in the middle of a
+// reply, here or in the terminal.
+func isBusy(status string) bool {
 	return status == "running" || status == "asking" || status == "terminal"
 }
 
