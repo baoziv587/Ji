@@ -135,7 +135,7 @@ func major(node string) int {
 func (rt Runtime) Install(ctx context.Context, progress func(done, total int64)) (string, error) {
 	sum, ok := rt.Release.Sums[platform()]
 	if !ok {
-		return "", fmt.Errorf("Ji Agent has no Node.js to install on %s", platform())
+		return "", fmt.Errorf("there is no Node.js for Ji Agent to install on %s", platform())
 	}
 
 	if err := os.MkdirAll(rt.Dir, 0o755); err != nil {

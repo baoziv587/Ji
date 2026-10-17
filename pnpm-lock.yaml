@@ -252,15 +252,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/testing
 
-  apps/demo:
-    dependencies:
-      '@ji.dev/llm':
-        specifier: workspace:*
-        version: link:../../packages/llm
-      '@ji.dev/testing':
-        specifier: workspace:*
-        version: link:../../packages/testing
-
   apps/examples:
     dependencies:
       '@ji.dev/llm':

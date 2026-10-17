@@ -50,7 +50,9 @@ func TestOnboardingInstallsNodeWhenThereIsNone(t *testing.T) {
 		t.Fatalf("shows %q, did %q: no Node.js asks before it installs one", tt.Texts(), *did)
 	}
 
-	tt.Click("Install Node.js")
+	if err := tt.Click("Install Node.js"); err != nil {
+		t.Fatal(err)
+	}
 	if want := []string{"installed", "started on /runtime/bin/node", "ready at http://127.0.0.1:1"}; !slices.Equal(*did, want) {
 		t.Errorf("did %q, want %q", *did, want)
 	}
@@ -98,7 +100,9 @@ func TestOnboardingCancelledGoesBack(t *testing.T) {
 	}
 	o.Begin()
 	tt := ui.NewTester(o.View, 1100, 700)
-	tt.Click("Install Node.js")
+	if err := tt.Click("Install Node.js"); err != nil {
+		t.Fatal(err)
+	}
 	if !tt.HasText("Ji Agent needs Node.js") || tt.HasText("Ji Agent could not start") || len(*did) > 0 {
 		t.Errorf("shows %q, did %q: a cancelled install offers to install again", tt.Texts(), *did)
 	}
@@ -117,7 +121,9 @@ func TestOnboardingTriesAgainWhatFailed(t *testing.T) {
 		t.Fatalf("shows %q", tt.Texts())
 	}
 
-	tt.Click("Try Again")
+	if err := tt.Click("Try Again"); err != nil {
+		t.Fatal(err)
+	}
 	if want := []string{"started on /usr/local/bin/node", "ready at http://127.0.0.1:1"}; !slices.Equal(*did, want) {
 		t.Errorf("did %q, want %q: trying again starts the service on the Node.js found", *did, want)
 	}

@@ -1,0 +1,25 @@
+version: '2'
+linters:
+  default: standard
+  settings:
+    staticcheck:
+      # staticcheck's defaults, and o.look.apply kept as it reads: the theme's
+      # look, not a method of its own
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1008
+  exclusions:
+    # defer f.Close() and the like
+    presets:
+      - std-error-handling
+formatters:
+  # Not gofumpt: the module is named desktop, without a dot, and it would
+  # group desktop/... with the standard library
+  enable:
+    - gofmt
