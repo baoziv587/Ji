@@ -11,6 +11,9 @@
     "coding-agent": "pnpm --filter @ji.dev/coding-agent start",
     "agent-server": "pnpm --filter @ji.dev/coding-agent serve",
     "desktop": "cd apps/desktop && go run .",
+    "desktop:onboarding": "cd apps/desktop && go run . -onboarding",
+    "desktop:bundle-agent": "rolldown apps/coding-agent/src/server.ts --platform node --format esm --cleanDir --dir apps/desktop/resources/agent-server",
+    "desktop:build": "pnpm desktop:bundle-agent && cd apps/desktop && go tool mygo build",
     "replay": "node apps/replay/src/cli.ts",
     "replay:shell": "node apps/replay/src/cli.ts shell",
     "test": "vitest run",
@@ -35,6 +38,7 @@
     "knip": "^6.38.0",
     "lefthook": "^2.1.14",
     "oxfmt": "^0.70.0",
+    "rolldown": "^1.2.9",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^5.0.1"
   }

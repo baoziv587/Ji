@@ -196,6 +196,9 @@ importers:
       oxfmt:
         specifier: ^0.70.0
         version: 0.70.0
+      rolldown:
+        specifier: ^1.2.9
+        version: 1.2.9
       typescript:
         specifier: npm:@typescript/typescript6@^6.0.2
         version: '@typescript/typescript6@6.0.2'

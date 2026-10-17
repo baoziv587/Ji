@@ -23,7 +23,7 @@ const TitleBarHeight = 52
 
 // View builds the window from the app's state.
 func (a *App) View(c *ui.Context) {
-	a.applyTheme(c)
+	a.look.apply(c, &a.Settings)
 	a.sliding = false
 	defer a.saveSettings()
 
@@ -63,25 +63,33 @@ func (a *App) View(c *ui.Context) {
 	}).Fill()
 }
 
-// applyTheme sets the theme the settings choose, made again only when the
-// mode, the scheme or the system's size of text changes.
-func (a *App) applyTheme(c *ui.Context) {
+// look is the theme made from the settings and the system's, until either
+// changes; the system's is dark or not.
+type look struct {
+	theme      *ui.Theme
+	scheme     *components.Scheme
+	systemDark bool
+}
+
+// apply sets the theme the settings choose, made again only when the mode,
+// the scheme or the system's size of text changes.
+func (l *look) apply(c *ui.Context, s *Settings) {
 	system := c.Theme()
-	a.systemDark = system.Dark
+	l.systemDark = system.Dark
 
-	if a.Settings.Appearance == "" {
-		a.Settings.Appearance = components.System
+	if s.Appearance == "" {
+		s.Appearance = components.System
 	}
-	scheme := components.SchemeNamed(a.Settings.Theme)
-	a.Settings.Theme = scheme.Name
+	scheme := components.SchemeNamed(s.Theme)
+	s.Theme = scheme.Name
 
-	dark := a.Settings.Appearance.IsDark(system.Dark)
-	if a.theme == nil || a.theme.Dark != dark || a.theme.FontSize != system.FontSize || a.scheme != scheme {
-		a.theme, a.scheme = components.Theme(system, scheme, dark), scheme
+	dark := s.Appearance.IsDark(system.Dark)
+	if l.theme == nil || l.theme.Dark != dark || l.theme.FontSize != system.FontSize || l.scheme != scheme {
+		l.theme, l.scheme = components.Theme(system, scheme, dark), scheme
 	}
 
 	components.Use(scheme)
-	c.SetTheme(a.theme)
+	c.SetTheme(l.theme)
 }
 
 // SchemesChanged shows the schemes as their stylesheets were read again,
@@ -171,16 +179,26 @@ func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 // end.
 func (a *App) conversation(c *ui.Context, s agent.Session, view *sessionView) ui.Element {
 	p := components.PaletteOf(c.Theme())
-	return ui.Box(c.Key("room:" + s.ID)).Grow(1).MinWidth(0).Background(p.Background.Alpha(a.contentCover(c))).Children(func() {
-		conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t).Fill().
-			Padding(TitleBarHeight+24, 24, view.bottom+24).ScrollbarInsets(TitleBarHeight, 0, view.bottom)
+	room := ui.Box(c.Key("room:" + s.ID)).
+		Grow(1).
+		MinWidth(0).
+		Background(p.Background.Alpha(a.contentCover(c)))
+	return room.Children(func() {
+		conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t).
+			Fill().
+			Padding(TitleBarHeight+24, 24, view.bottom+24).
+			ScrollbarInsets(TitleBarHeight, 0, view.bottom)
 		a.header(c, s, view)
-		bottom := ui.Column(c).Absolute().Bottom(0).Left(0).Right(0).PassThrough().Children(func() {
-			if view.t.Asking != nil && !s.Archived {
-				a.questions(c.Key("questions:"+s.ID), view)
-			}
-			a.composer(c.Key("composer:"+s.ID), s, view)
-		})
+		bottom := ui.Column(c).
+			Absolute().
+			Bottom(0).Left(0).Right(0).
+			PassThrough().
+			Children(func() {
+				if view.t.Asking != nil && !s.Archived {
+					a.questions(c.Key("questions:"+s.ID), view)
+				}
+				a.composer(c.Key("composer:"+s.ID), s, view)
+			})
 		// Known only once laid out: the conversation makes room for it a
 		// frame later
 		if h := bottom.Bounds().H; h != view.bottom {

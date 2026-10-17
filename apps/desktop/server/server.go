@@ -1,6 +1,7 @@
 // Package server starts the coding agent's HTTP service, when no address
-// of a running one is given: node runs apps/coding-agent/src/server.ts on a
-// free port, and the line it prints once it listens says where.
+// of a running one is given: node runs apps/coding-agent/src/server.ts, or the
+// bundle of it an installed app carries, on a free port, and the line it
+// prints once it listens says where.
 package server
 
 import (
@@ -21,8 +22,13 @@ const serverScript = "apps/coding-agent/src/server.ts"
 // Options is what the service is started with.
 type Options struct {
 	// Script is server.ts; found from the working directory or the
-	// executable when empty.
+	// executable when empty, else Bundled.
 	Script string
+	// Bundled is the service bundled into the app (`pnpm desktop:bundle-agent`),
+	// for an app installed away from the repository.
+	Bundled string
+	// Node runs it; the node in PATH when empty.
+	Node string
 	// Root is where a new session works when no folder is chosen.
 	Root string
 	// Sessions is where the service keeps them; ~/.ji/sessions when empty.
@@ -41,15 +47,15 @@ type Server struct {
 func Start(o Options) (*Server, error) {
 	script := o.Script
 	if script == "" {
-		found, err := findScript()
+		found, err := findScript(o.Bundled)
 		if err != nil {
 			return nil, err
 		}
 		script = found
 	}
-	node, err := findNode()
-	if err != nil {
-		return nil, err
+	node := o.Node
+	if node == "" {
+		node = "node"
 	}
 
 	args := []string{script, "--port", "0", "--root", o.Root}
@@ -122,8 +128,8 @@ func (s *Server) Stop() {
 
 // findScript looks for server.ts above the working directory and the
 // executable: from apps/desktop in development, or from a build next to the
-// repository.
-func findScript() (string, error) {
+// repository. Away from it, the app runs the bundle it carries.
+func findScript(bundled string) (string, error) {
 	var starts []string
 	if wd, err := os.Getwd(); err == nil {
 		starts = append(starts, wd)
@@ -133,8 +139,7 @@ func findScript() (string, error) {
 	}
 	for _, dir := range starts {
 		for {
-			candidate := filepath.Join(dir, serverScript)
-			if _, err := os.Stat(candidate); err == nil {
+			if candidate := filepath.Join(dir, serverScript); exists(candidate) {
 				return candidate, nil
 			}
 			parent := filepath.Dir(dir)
@@ -144,24 +149,13 @@ func findScript() (string, error) {
 			dir = parent
 		}
 	}
-	return "", fmt.Errorf("cannot find %s: pass -agent with its path, or -server with the address of a running one", serverScript)
+	if exists(bundled) {
+		return bundled, nil
+	}
+	return "", fmt.Errorf("cannot find %s, and the app carries no bundle of it (pnpm desktop:build): pass -agent with its path, or -server with the address of a running one", serverScript)
 }
 
-// findNode looks in PATH, then where installers put node: an app opened from
-// the Finder gets no shell's PATH.
-func findNode() (string, error) {
-	if path, err := exec.LookPath("node"); err == nil {
-		return path, nil
-	}
-	home, _ := os.UserHomeDir()
-	candidates := []string{"/opt/homebrew/bin/node", "/usr/local/bin/node", filepath.Join(home, ".volta/bin/node")}
-	if matches, _ := filepath.Glob(filepath.Join(home, ".nvm/versions/node/*/bin/node")); len(matches) > 0 {
-		candidates = append(candidates, matches[len(matches)-1])
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c, nil
-		}
-	}
-	return "", errors.New("cannot find node (24 or later): install it, or start the agent yourself and pass -server")
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

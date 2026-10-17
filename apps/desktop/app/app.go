@@ -12,8 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/egoist/mygo/ui"
-
 	"desktop/agent"
 	"desktop/syntax"
 	"desktop/ui/components"
@@ -65,11 +63,7 @@ type App struct {
 	// The transparency slider is held: what it sets is kept once let go,
 	// not on every frame of the drag.
 	sliding bool
-	// The theme made from the settings and the system's, until either
-	// changes; the system's is dark or not.
-	theme      *ui.Theme
-	scheme     *components.Scheme
-	systemDark bool
+	look
 	// The providers, and the models of those a picker showed; whether the
 	// settings show those not detected.
 	catalog    catalog

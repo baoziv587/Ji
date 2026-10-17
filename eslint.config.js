@@ -25,8 +25,9 @@ export default antfu(
     typescript: true,
     // oxfmt owns formatting; ESLint only checks code quality
     stylistic: false,
-    // eval/ is a Python project with its own linter (ruff); its .venv ships JavaScript of its own
-    ignores: ['eval/**'],
+    // eval/ is a Python project with its own linter (ruff); its .venv ships JavaScript of its own. The desktop app
+    // carries the coding agent's server bundled (pnpm desktop:bundle-agent), into the apps it builds too
+    ignores: ['eval/**', 'apps/desktop/{build,.mygo,resources/agent-server}/**'],
   },
   ...createSlopConfig({
     cwd: import.meta.dirname,
