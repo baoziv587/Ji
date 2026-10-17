@@ -15,16 +15,25 @@ func init() {
 // after, and a line changed marks the part that changed.
 func TestDiffColorsEachRunAndMarksTheChange(t *testing.T) {
 	var tr Transcript
-	tr.Apply(agent.Event{Type: "tool_start", ID: "1", Name: "edit", Args: `{"path":"a.go","edits":[{"old_text":"x := 1\n/* a","new_text":"x := 2\n/* a"}]}`})
+	tr.Apply(
+		agent.Event{
+			Type: "tool_start",
+			ID:   "1",
+			Name: "edit",
+			Args: `{"path":"a.go","edits":[{"old_text":"x := 1\n/* a","new_text":"x := 2\n/* a"}]}`,
+		},
+	)
 	diff := tr.Steps[0].Tool.Diff
 	removed, added := diff[3], diff[5]
 	if removed.Code == nil || removed.Code == added.Code || added.At != 0 || diff[6].At != 1 {
 		t.Fatalf("diff %+v", diff)
 	}
-	if removed.Changed != [2]int{5, 6} || added.Changed != [2]int{5, 6} || diff[6].Changed != [2]int{} {
+	if removed.Changed != [2]int{5, 6} || added.Changed != [2]int{5, 6} ||
+		diff[6].Changed != [2]int{} {
 		t.Errorf("changed %v %v %v", removed.Changed, added.Changed, diff[6].Changed)
 	}
-	if line := added.Code.Lines()[0]; line[len(line)-1] != (syntax.Span{Text: "2", Kind: syntax.Number}) {
+	two := syntax.Span{Text: "2", Kind: syntax.Number}
+	if line := added.Code.Lines()[0]; line[len(line)-1] != two {
 		t.Errorf("added %+v", line)
 	}
 }

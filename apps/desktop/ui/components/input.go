@@ -8,7 +8,13 @@ import (
 func TextInput(c *ui.Context, value *string) ui.Element {
 	t := c.Theme()
 	p := PaletteOf(t)
-	box := ui.Row(c).Height(36).Padding(0, 12).Radius(t.Radius).AlignItems(ui.Center).Border(1, p.Input).Background(p.Card).
+	box := ui.Row(c).
+		Height(36).
+		Padding(0, 12).
+		Radius(t.Radius).
+		AlignItems(ui.Center).
+		Border(1, p.Input).
+		Background(p.Card).
 		Transition(ColorTransition)
 	var input ui.Element
 	box.Children(func() {

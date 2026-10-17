@@ -37,9 +37,21 @@ func Badge(c *ui.Context, text string, v Variant) ui.Element {
 // inside a seam of it.
 func Tag(c *ui.Context, text string, color ui.Color) ui.Element {
 	t := c.Theme()
-	tag := ui.Row(c).AlignItems(ui.Center).Height(20).Padding(0, 6).Radius(4).Background(color.Alpha(0.1)).Border(1, color.Alpha(0.45)).Shrink(0)
+	tag := ui.Row(c).
+		AlignItems(ui.Center).
+		Height(20).
+		Padding(0, 6).
+		Radius(4).
+		Background(color.Alpha(0.1)).
+		Border(1, color.Alpha(0.45)).
+		Shrink(0)
 	tag.Children(func() {
-		ui.Text(c, text).FontSize(TextXS(t)).FontWeight(500).LetterSpacing(0.2).TextColor(color).SingleLine()
+		ui.Text(c, text).
+			FontSize(TextXS(t)).
+			FontWeight(500).
+			LetterSpacing(0.2).
+			TextColor(color).
+			SingleLine()
 	})
 	return tag
 }
@@ -48,9 +60,21 @@ func Tag(c *ui.Context, text string, color ui.Color) ui.Element {
 func Kbd(c *ui.Context, key string) ui.Element {
 	t := c.Theme()
 	p := PaletteOf(t)
-	k := ui.Row(c).Height(20).MinWidth(20).Padding(0, 4).Radius(4).Background(p.Accent).Justify(ui.Center).AlignItems(ui.Center).Shrink(0)
+	k := ui.Row(c).
+		Height(20).
+		MinWidth(20).
+		Padding(0, 4).
+		Radius(4).
+		Background(p.Accent).
+		Justify(ui.Center).
+		AlignItems(ui.Center).
+		Shrink(0)
 	k.Children(func() {
-		ui.Text(c, key).FontSize(TextXS(t)).FontWeight(500).TextColor(p.MutedForeground).SingleLine()
+		ui.Text(c, key).
+			FontSize(TextXS(t)).
+			FontWeight(500).
+			TextColor(p.MutedForeground).
+			SingleLine()
 	})
 	return k
 }
@@ -64,61 +88,79 @@ func Spinner(c *ui.Context, label string, size float32, color ui.Color) ui.Eleme
 	if color.A == 0 {
 		color = PaletteOf(c.Theme()).MutedForeground
 	}
-	return ui.Box(c).Size(size, size).Shrink(0).Role(ui.RoleProgress).Label(label).Draw(func(p *ui.Painter, r ui.Rect) {
-		p.After(UntilTick(p.Now()))
-		turn := float64(p.Now().UnixMilli()%1000) / 1000 * 2 * math.Pi
-		// Loader2's arc: radius 9 of 24, from 3 o'clock round to 72° short of it
-		cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, r.W*9/24
-		var arc ui.Path
-		const steps = 36
-		for i := 0; i <= steps; i++ {
-			a := turn + float64(i)/steps*1.6*math.Pi
-			x, y := cx+radius*float32(math.Cos(a)), cy+radius*float32(math.Sin(a))
-			if i == 0 {
-				arc.MoveTo(x, y)
-			} else {
-				arc.LineTo(x, y)
+	return ui.Box(c).
+		Size(size, size).
+		Shrink(0).
+		Role(ui.RoleProgress).
+		Label(label).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			p.After(UntilTick(p.Now()))
+			turn := float64(p.Now().UnixMilli()%1000) / 1000 * 2 * math.Pi
+			// Loader2's arc: radius 9 of 24, from 3 o'clock round to 72° short of it
+			cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, r.W*9/24
+			var arc ui.Path
+			const steps = 36
+			for i := 0; i <= steps; i++ {
+				a := turn + float64(i)/steps*1.6*math.Pi
+				x, y := cx+radius*float32(math.Cos(a)), cy+radius*float32(math.Sin(a))
+				if i == 0 {
+					arc.MoveTo(x, y)
+				} else {
+					arc.LineTo(x, y)
+				}
 			}
-		}
-		p.StrokePath(&arc, r.W/12, color)
-	})
+			p.StrokePath(&arc, r.W/12, color)
+		})
 }
 
 // Gauge is how full something is, value between 0 and 1: a ring filled
 // clockwise from the top in color, on a track of quiet ink, size wide,
 // named by label. The arc runs down to a lower value along drain, as the
 // history is compacted, and up to a higher one at once.
-func Gauge(c *ui.Context, label string, value float64, size float32, color ui.Color, drain *Drain) ui.Element {
+func Gauge(
+	c *ui.Context,
+	label string,
+	value float64,
+	size float32,
+	color ui.Color,
+	drain *Drain,
+) ui.Element {
 	value = min(max(value, 0), 1)
 	track := PaletteOf(c.Theme()).MutedForeground.Alpha(0.25)
 	drain.toward(value, c.Now(), c.Preferences().ReduceMotion)
-	return ui.Box(c).Size(size, size).Shrink(0).Role(ui.RoleProgress).Range(0, 1, value).Label(label).Draw(func(p *ui.Painter, r ui.Rect) {
-		shown := drain.at(p.Now())
-		if shown != value {
-			p.AnimationFrame()
-		}
-		width := r.W / 7
-		cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, (r.W-width)/2
-		var ring ui.Path
-		ring.Circle(cx, cy, radius)
-		p.StrokePath(&ring, width, track)
-		if shown == 0 {
-			return
-		}
-
-		var arc ui.Path
-		steps := int(math.Ceil(shown * 48))
-		for i := 0; i <= steps; i++ {
-			a := (float64(i)/float64(steps)*shown - 0.25) * 2 * math.Pi
-			x, y := cx+radius*float32(math.Cos(a)), cy+radius*float32(math.Sin(a))
-			if i == 0 {
-				arc.MoveTo(x, y)
-			} else {
-				arc.LineTo(x, y)
+	return ui.Box(c).
+		Size(size, size).
+		Shrink(0).
+		Role(ui.RoleProgress).
+		Range(0, 1, value).
+		Label(label).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			shown := drain.at(p.Now())
+			if shown != value {
+				p.AnimationFrame()
 			}
-		}
-		p.StrokePath(&arc, width, color)
-	})
+			width := r.W / 7
+			cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, (r.W-width)/2
+			var ring ui.Path
+			ring.Circle(cx, cy, radius)
+			p.StrokePath(&ring, width, track)
+			if shown == 0 {
+				return
+			}
+
+			var arc ui.Path
+			steps := int(math.Ceil(shown * 48))
+			for i := 0; i <= steps; i++ {
+				a := (float64(i)/float64(steps)*shown - 0.25) * 2 * math.Pi
+				x, y := cx+radius*float32(math.Cos(a)), cy+radius*float32(math.Sin(a))
+				if i == 0 {
+					arc.MoveTo(x, y)
+				} else {
+					arc.LineTo(x, y)
+				}
+			}
+			p.StrokePath(&arc, width, color)
+		})
 }
 
 // drainTime is how long a Gauge's arc takes to run down.
@@ -161,10 +203,21 @@ func EmptyHeader(c *ui.Context, icon *ui.SVG, title, description string) {
 	t := c.Theme()
 	p := PaletteOf(t)
 	ui.Column(c).MaxWidth(384).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Row(c).Size(40, 40).Margin(0, 0, 8).Radius(10).Background(p.Muted).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, icon).FontSize(24).TextColor(p.Foreground)
-		})
-		ui.Text(c, title).FontSize(TextLG(t)).FontWeight(500).LetterSpacing(-0.4).TextAlign(ui.Center)
+		ui.Row(c).
+			Size(40, 40).
+			Margin(0, 0, 8).
+			Radius(10).
+			Background(p.Muted).
+			Justify(ui.Center).
+			AlignItems(ui.Center).
+			Children(func() {
+				ui.Icon(c, icon).FontSize(24).TextColor(p.Foreground)
+			})
+		ui.Text(c, title).
+			FontSize(TextLG(t)).
+			FontWeight(500).
+			LetterSpacing(-0.4).
+			TextAlign(ui.Center)
 		ui.Text(c, description).TextColor(p.MutedForeground).LineHeight(1.625).TextAlign(ui.Center)
 	})
 }

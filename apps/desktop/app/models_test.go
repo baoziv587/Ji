@@ -52,21 +52,40 @@ func TestModelPickerSwitchesTheSessionsModel(t *testing.T) {
 		t.Errorf("switched to %v, want %v", f.models["a"], want)
 	}
 	if a.views["a"].models.open || a.views["a"].t.State.Model != "groq/qwen3-32b" {
-		t.Errorf("open %v, model %q: the picker closes on the model chosen", a.views["a"].models.open, a.views["a"].t.State.Model)
+		t.Errorf(
+			"open %v, model %q: the picker closes on the model chosen",
+			a.views["a"].models.open,
+			a.views["a"].t.State.Model,
+		)
 	}
 }
 
 // While the session replies, its model stays as it is.
 func TestModelPickerIsOffWhileReplying(t *testing.T) {
 	a, f := testApp()
-	a.apply(a.views["a"], agent.Event{Type: "state", State: &agent.State{ID: "a", Model: "deepseek/deepseek-flash", Mode: "ask", Replying: true}})
+	a.apply(
+		a.views["a"],
+		agent.Event{
+			Type: "state",
+			State: &agent.State{
+				ID:       "a",
+				Model:    "deepseek/deepseek-flash",
+				Mode:     "ask",
+				Replying: true,
+			},
+		},
+	)
 	tt := ui.NewTester(a.View, 1100, 700)
 
 	_ = tt.Click("Model")
 	tt.Frame()
 
 	if a.views["a"].models.open || tt.HasText("DeepSeek Flash") || len(f.models) != 0 {
-		t.Errorf("open %v, switched %v: the picker opens while replying", a.views["a"].models.open, f.models)
+		t.Errorf(
+			"open %v, switched %v: the picker opens while replying",
+			a.views["a"].models.open,
+			f.models,
+		)
 	}
 }
 
@@ -79,7 +98,10 @@ func TestSettingsListProvidersAndLogIn(t *testing.T) {
 	a.OpenSettings()
 	tt.Frame()
 
-	for _, text := range []string{"Providers", "DeepSeek", "DEEPSEEK_API_KEY", "Groq", "stored credential", "Not detected (2)"} {
+	for _, text := range []string{
+		"Providers", "DeepSeek", "DEEPSEEK_API_KEY", "Groq",
+		"stored credential", "Not detected (2)",
+	} {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
 		}
@@ -103,7 +125,11 @@ func TestSettingsListProvidersAndLogIn(t *testing.T) {
 	tt.Frame()
 
 	if a.settingsOpen || !reflect.DeepEqual(f.commands["a"], []string{"/login openai"}) {
-		t.Errorf("open %v, commands %v: Log in runs /login in the session shown", a.settingsOpen, f.commands["a"])
+		t.Errorf(
+			"open %v, commands %v: Log in runs /login in the session shown",
+			a.settingsOpen,
+			f.commands["a"],
+		)
 	}
 }
 
@@ -133,7 +159,8 @@ func TestDefaultModelIsWhatNewSessionsStartOn(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.Settings.Model != "deepseek/deepseek-v4-pro" || len(saved) == 0 || saved[len(saved)-1].Model != "deepseek/deepseek-v4-pro" {
+	if a.Settings.Model != "deepseek/deepseek-v4-pro" || len(saved) == 0 ||
+		saved[len(saved)-1].Model != "deepseek/deepseek-v4-pro" {
 		t.Fatalf("model %q, saved %v", a.Settings.Model, saved)
 	}
 

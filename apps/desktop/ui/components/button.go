@@ -58,7 +58,13 @@ func Button(c *ui.Context, label string, style ButtonStyle) ui.Element {
 	t := c.Theme()
 	p := PaletteOf(t)
 	m, icon := sizes[style.Size], style.Icon
-	b := ui.ButtonBase(c).Height(m.height).Radius(t.Radius).Gap(m.gap).FocusRing(false).Transition(ColorTransition).Shrink(0)
+	b := ui.ButtonBase(c).
+		Height(m.height).
+		Radius(t.Radius).
+		Gap(m.gap).
+		FocusRing(false).
+		Transition(ColorTransition).
+		Shrink(0)
 	if style.Disabled {
 		b.Disabled(true).Opacity(0.5)
 	}

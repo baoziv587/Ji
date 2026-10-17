@@ -70,7 +70,11 @@ func (a *App) archive(id string, archived bool) {
 				a.show(next)
 			}
 			a.close(id)
-			a.toast = &toast{message: "Archived “" + titleOf(s) + "”", action: "Undo", run: func() { a.unarchive(id) }}
+			a.toast = &toast{
+				message: "Archived “" + titleOf(s) + "”",
+				action:  "Undo",
+				run:     func() { a.unarchive(id) },
+			}
 		})
 		return nil
 	})
@@ -165,11 +169,21 @@ func (a *App) switchMode(view *sessionView) {
 	if view.t.State.Mode == "ask" {
 		mode = "auto"
 	}
-	a.callState(view, func(ctx context.Context) (agent.State, error) { return a.agent.SetMode(ctx, view.id, mode) })
+	a.callState(
+		view,
+		func(ctx context.Context) (agent.State, error) {
+			return a.agent.SetMode(ctx, view.id, mode)
+		},
+	)
 }
 
 func (a *App) think(view *sessionView, level string) {
-	a.callState(view, func(ctx context.Context) (agent.State, error) { return a.agent.Think(ctx, view.id, level) })
+	a.callState(
+		view,
+		func(ctx context.Context) (agent.State, error) {
+			return a.agent.Think(ctx, view.id, level)
+		},
+	)
 }
 
 // answer replies to the session's open questions; nil dismisses them.
@@ -178,5 +192,7 @@ func (a *App) answer(view *sessionView, answers [][]string) {
 	if asking == nil {
 		return
 	}
-	a.call(func(ctx context.Context) error { return a.agent.Answer(ctx, view.id, asking.ID, answers) })
+	a.call(
+		func(ctx context.Context) error { return a.agent.Answer(ctx, view.id, asking.ID, answers) },
+	)
 }

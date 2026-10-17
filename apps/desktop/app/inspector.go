@@ -37,7 +37,13 @@ var panelMotion = ui.ElementTransition{
 // session's steps it is, and the buttons to the one before and after, to
 // copy it and to close; under it, the step whole. Up and Down go through
 // the steps while the text area does not take them, and Esc closes it.
-func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, covering bool, width float32) {
+func (a *App) inspector(
+	c *ui.Context,
+	view *sessionView,
+	s *conversation.Item,
+	covering bool,
+	width float32,
+) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	if s != view.inspectedLast {
@@ -50,7 +56,12 @@ func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, 
 	if covering {
 		under = 1
 	}
-	pane := ui.Box(c.Key("inspector")).Shrink(0).Background(p.Card.Alpha(under)).BorderWidth(0, 0, 0, 1).BorderColor(p.Border).Transition(panelMotion)
+	pane := ui.Box(c.Key("inspector")).
+		Shrink(0).
+		Background(p.Card.Alpha(under)).
+		BorderWidth(0, 0, 0, 1).
+		BorderColor(p.Border).
+		Transition(panelMotion)
 	if covering {
 		pane.Absolute().Top(0).Bottom(0).Left(0).Right(0)
 	} else {
@@ -61,12 +72,21 @@ func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, 
 		ui.Box(c.Key(fmt.Sprint("step:", s.Step))).Fill().Transition(ui.ElementTransition{
 			Duration: 240 * time.Millisecond, Ease: components.EaseOutExpo, Enter: &ui.Motion{Y: 6},
 		}).Children(func() {
-			conversation.Inspect(c, &view.inspectList, &view.t, s).Fill().Padding(TitleBarHeight, 0, 24).ScrollbarInsets(TitleBarHeight, 0, 0)
+			conversation.Inspect(c, &view.inspectList, &view.t, s).
+				Fill().
+				Padding(TitleBarHeight, 0, 24).
+				ScrollbarInsets(TitleBarHeight, 0, 0)
 		})
 		a.inspectorBar(c, view, s, covering, under)
 
 		if !covering {
-			edge := ui.Box(c).Absolute().Left(-3).Top(0).Width(6).FillHeight().Cursor(ui.CursorResizeEW)
+			edge := ui.Box(c).
+				Absolute().
+				Left(-3).
+				Top(0).
+				Width(6).
+				FillHeight().
+				Cursor(ui.CursorResizeEW)
 			a.resizing = edge.Pressed()
 			if dx, _, ok := edge.Dragged(); ok && dx != 0 {
 				a.Layout.Inspector = max(width-dx, inspectorMin)
@@ -84,50 +104,96 @@ func (a *App) inspector(c *ui.Context, view *sessionView, s *conversation.Item, 
 	}
 }
 
-func (a *App) inspectorBar(c *ui.Context, view *sessionView, s *conversation.Item, covering bool, under float32) {
+func (a *App) inspectorBar(
+	c *ui.Context,
+	view *sessionView,
+	s *conversation.Item,
+	covering bool,
+	under float32,
+) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	steps := view.t.Steps
-	ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(8).Padding(0, 10, 0, 16).AlignItems(ui.Center).
-		Material(a.bar(under)).DragWindow().Children(func() {
-		if covering {
-			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.ChevronLeft}).
-				Label("Back to the Conversation").Tooltip("Back (Esc)").Margin(0, 0, 0, -6).Clicked() {
+	ui.Row(c).
+		Absolute().
+		Top(0).
+		Left(0).
+		Right(0).
+		Height(TitleBarHeight).
+		Gap(8).
+		Padding(0, 10, 0, 16).
+		AlignItems(ui.Center).
+		Material(a.bar(under)).
+		DragWindow().
+		Children(func() {
+			if covering {
+				if components.Button(c, "", components.ButtonStyle{
+					Variant: components.Ghost,
+					Size:    components.SizeIconSmall,
+					Icon:    icons.ChevronLeft,
+				}).
+					Label("Back to the Conversation").
+					Tooltip("Back (Esc)").
+					Margin(0, 0, 0, -6).
+					Clicked() {
+					a.closeInspector(view)
+				}
+			}
+			ui.Box(c.Key(fmt.Sprint("mark:", s.Step, stepState(s)))).
+				Size(16, 16).
+				Shrink(0).
+				Transition(components.Rise).
+				Children(func() {
+					stepMark(c, view, s)
+				})
+			name := "Thinking"
+			if s.Tool != nil {
+				name = s.Tool.Name
+			}
+			ui.Text(c, name).Font("monospace").FontWeight(600).SingleLine().Shrink(1)
+			if s.Tool != nil && s.Tool.Done {
+				ui.Text(c, format.Duration(s.Tool.MS)).
+					Font("monospace").
+					FontSize(components.TextXS(t)).
+					TextColor(p.MutedForeground).
+					FontFeatures("tnum").
+					Shrink(0)
+			}
+			ui.Box(c).Grow(1).MinWidth(8)
+
+			ui.Text(c, fmt.Sprintf("%d of %d", s.Step+1, len(steps))).
+				FontSize(components.TextXS(t)).
+				TextColor(p.MutedForeground).
+				FontFeatures("tnum").
+				Shrink(0).
+				Margin(0, 4, 0, 0)
+			ghost := components.ButtonStyle{
+				Variant: components.Ghost,
+				Size:    components.SizeIconSmall,
+			}
+			ghost.Icon, ghost.Disabled = icons.ChevronUp, s.Step == 0
+			if components.Button(c, "", ghost).
+				Label("Previous Step").
+				Tooltip("Previous step (↑)").
+				Clicked() {
+				a.inspectStep(view, s, -1)
+			}
+			ghost.Icon, ghost.Disabled = icons.ChevronDown, s.Step == len(steps)-1
+			if components.Button(c, "", ghost).
+				Label("Next Step").
+				Tooltip("Next step (↓)").
+				Clicked() {
+				a.inspectStep(view, s, 1)
+			}
+
+			ghost.Disabled = false
+			view.copied.Button(c, ghost, func() string { return copyText(s) }).Tooltip(copyTip(s))
+			ghost.Icon = icons.X
+			if !covering &&
+				components.Button(c, "", ghost).Label("Close").Tooltip("Close (Esc)").Clicked() {
 				a.closeInspector(view)
 			}
-		}
-		ui.Box(c.Key(fmt.Sprint("mark:", s.Step, stepState(s)))).Size(16, 16).Shrink(0).Transition(components.Rise).Children(func() {
-			stepMark(c, view, s)
 		})
-		name := "Thinking"
-		if s.Tool != nil {
-			name = s.Tool.Name
-		}
-		ui.Text(c, name).Font("monospace").FontWeight(600).SingleLine().Shrink(1)
-		if s.Tool != nil && s.Tool.Done {
-			ui.Text(c, format.Duration(s.Tool.MS)).Font("monospace").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).FontFeatures("tnum").Shrink(0)
-		}
-		ui.Box(c).Grow(1).MinWidth(8)
-
-		ui.Text(c, fmt.Sprintf("%d of %d", s.Step+1, len(steps))).FontSize(components.TextXS(t)).TextColor(p.MutedForeground).FontFeatures("tnum").Shrink(0).
-			Margin(0, 4, 0, 0)
-		ghost := components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall}
-		ghost.Icon, ghost.Disabled = icons.ChevronUp, s.Step == 0
-		if components.Button(c, "", ghost).Label("Previous Step").Tooltip("Previous step (↑)").Clicked() {
-			a.inspectStep(view, s, -1)
-		}
-		ghost.Icon, ghost.Disabled = icons.ChevronDown, s.Step == len(steps)-1
-		if components.Button(c, "", ghost).Label("Next Step").Tooltip("Next step (↓)").Clicked() {
-			a.inspectStep(view, s, 1)
-		}
-
-		ghost.Disabled = false
-		view.copied.Button(c, ghost, func() string { return copyText(s) }).Tooltip(copyTip(s))
-		ghost.Icon = icons.X
-		if !covering && components.Button(c, "", ghost).Label("Close").Tooltip("Close (Esc)").Clicked() {
-			a.closeInspector(view)
-		}
-	})
 }
 
 // stepMark is how a step went, as its line in the conversation says it.

@@ -30,16 +30,24 @@ func TestLinesKeepEveryLineAndItsKinds(t *testing.T) {
 	if len(lines) != 3 {
 		t.Fatalf("%d lines", len(lines))
 	}
-	want := Line{{"    ", Plain}, {"return", Keyword}, {" ", Plain}, {`"hi"`, String}, {" ", Plain}, {"// done", Comment}}
+	want := Line{
+		{"    ", Plain},
+		{"return", Keyword},
+		{" ", Plain},
+		{`"hi"`, String},
+		{" ", Plain},
+		{"// done", Comment},
+	}
 	if !reflect.DeepEqual(lines[1], want) {
 		t.Errorf("line 2 %+v", lines[1])
 	}
+	texts := strings.Split("func main() {\n    return \"hi\" // done\n}", "\n")
 	for i, line := range lines {
 		text := ""
 		for _, s := range line {
 			text += s.Text
 		}
-		if want := strings.Split("func main() {\n    return \"hi\" // done\n}", "\n")[i]; text != want {
+		if want := texts[i]; text != want {
 			t.Errorf("line %d reads %q, want %q", i+1, text, want)
 		}
 	}
@@ -149,7 +157,8 @@ func TestBlockShowsTheSameLinesAsItGrows(t *testing.T) {
 	}
 	b.Grow("x := 1\ny := 2\nz", false)
 	lines = b.Lines()
-	if b.Version() == v || &lines[0][0] != first || len(lines) != 3 || lines[2][0] != (Span{"z", Plain}) {
+	if b.Version() == v || &lines[0][0] != first || len(lines) != 3 ||
+		lines[2][0] != (Span{"z", Plain}) {
 		t.Errorf("version %d, lines %+v", b.Version(), lines)
 	}
 	b.Grow("x := 1\ny := 2\nzz", false)
@@ -172,7 +181,9 @@ func TestBlockColorsALineOnceItEnds(t *testing.T) {
 
 	b.Grow("/* a\nb */ x := 1\n", false)
 	lines = b.Lines()
-	if len(lines) != 3 || lines[0][0] != (Span{"/* a", Comment}) || lines[1][0] != (Span{"b */", Comment}) || lines[2] != nil {
+	if len(lines) != 3 || lines[0][0] != (Span{"/* a", Comment}) ||
+		lines[1][0] != (Span{"b */", Comment}) ||
+		lines[2] != nil {
 		t.Errorf("lines %+v", lines)
 	}
 
@@ -219,7 +230,8 @@ func TestBlockLexesInTheBackground(t *testing.T) {
 		<-ready
 		b.Lines()
 	}
-	if lines := b.Lines(); len(lines) != 3 || lines[1][0] != (Span{"y ", Plain}) || lines[1][3] != (Span{"2", Number}) {
+	if lines := b.Lines(); len(lines) != 3 || lines[1][0] != (Span{"y ", Plain}) ||
+		lines[1][3] != (Span{"2", Number}) {
 		t.Errorf("lines %+v", lines)
 	}
 }

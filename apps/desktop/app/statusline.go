@@ -15,7 +15,12 @@ import (
 // statusLine is the terminal's status line: what the reply does and for
 // how long, the mode, what a yes allowed, the steers not yet delivered,
 // which entry of the menu is chosen, then the keys that work now.
-func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entries []commands.Entry) {
+func (a *App) statusLine(
+	c *ui.Context,
+	s agent.Session,
+	view *sessionView,
+	entries []commands.Entry,
+) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	st := view.t.State
@@ -39,7 +44,8 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 					small(label, p.Foreground).Shrink(1)
 					elapsed := time.Since(view.t.Since)
 					figures(c, fmt.Sprintf("%ds", int(elapsed.Seconds())), p.MutedForeground)
-					// The spinner turns without building the view, so the count asks for its next second
+					// The spinner turns without building the view, so the count asks
+					// for its next second
 					c.After(time.Second - elapsed%time.Second)
 				})
 			})
@@ -51,7 +57,12 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 				if st.Mode != "ask" {
 					color = p.Warning
 				}
-				mode := ui.ButtonBase(c).Padding(0, 4).Radius(4).FocusRing(false).Transition(components.ColorTransition).Label("Mode")
+				mode := ui.ButtonBase(c).
+					Padding(0, 4).
+					Radius(4).
+					FocusRing(false).
+					Transition(components.ColorTransition).
+					Label("Mode")
 				if !canSwitchMode(s, st) {
 					mode.Disabled(true)
 				} else if mode.Hovered() {
@@ -61,11 +72,17 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 				mode.Children(func() { small(st.Mode, color).FontWeight(500) })
 				switch st.Mode {
 				case "ask":
-					mode.Tooltip("Every command, file read and change waits for a yes. ⇧⇥ approves the folder's files.")
+					mode.Tooltip(
+						"Every command, file read and change waits for a yes. ⇧⇥ approves the folder's files.",
+					)
 				case "auto":
-					mode.Tooltip("Files inside the folder are approved; commands still wait for a yes. ⇧⇥ asks about all.")
+					mode.Tooltip(
+						"Files inside the folder are approved; commands still wait for a yes. ⇧⇥ asks about all.",
+					)
 				default:
-					mode.Tooltip("Nothing waits for a yes, outside the folder too. ⇧⇥ goes back to ask.")
+					mode.Tooltip(
+						"Nothing waits for a yes, outside the folder too. ⇧⇥ goes back to ask.",
+					)
 				}
 				if mode.Clicked() {
 					a.switchMode(view)
@@ -76,10 +93,19 @@ func (a *App) statusLine(c *ui.Context, s agent.Session, view *sessionView, entr
 			parts = append(parts, func() { small(st.Allowed, p.Warning).Shrink(1) })
 		}
 		if st.Queued > 0 {
-			parts = append(parts, func() { figures(c, fmt.Sprintf("%d queued", st.Queued), p.Info) })
+			parts = append(
+				parts,
+				func() { figures(c, fmt.Sprintf("%d queued", st.Queued), p.Info) },
+			)
 		}
 		if len(entries) > 0 {
-			parts = append(parts, func() { figures(c, fmt.Sprintf("%d of %d", view.menu.Selected+1, len(entries)), p.MutedForeground) })
+			parts = append(
+				parts,
+				func() {
+					position := fmt.Sprintf("%d of %d", view.menu.Selected+1, len(entries))
+					figures(c, position, p.MutedForeground)
+				},
+			)
 		}
 
 		for i, part := range parts {
@@ -132,8 +158,15 @@ func usageGauge(c *ui.Context, u agent.UsageReading, open *bool, drain *componen
 	ctx := u.Context
 	full, color := contextFill(p, ctx)
 
-	trigger := ui.ButtonBase(c).Height(24).Padding(0, 6, 0, 4).Gap(6).Radius(6).AlignItems(ui.Center).Shrink(0).
-		FocusRing(false).Transition(components.ColorTransition)
+	trigger := ui.ButtonBase(c).
+		Height(24).
+		Padding(0, 6, 0, 4).
+		Gap(6).
+		Radius(6).
+		AlignItems(ui.Center).
+		Shrink(0).
+		FocusRing(false).
+		Transition(components.ColorTransition)
 	if trigger.Hovered() || *open {
 		trigger.Background(p.Accent)
 	}
@@ -154,7 +187,14 @@ func usageGauge(c *ui.Context, u agent.UsageReading, open *bool, drain *componen
 	} else {
 		trigger.Label(fmt.Sprintf("Usage: context %d%% used, %s", int(full*100), spent))
 		if !*open {
-			trigger.Tooltip(fmt.Sprintf("ctx %s%s/%s", estimated(ctx), format.Count(ctx.Tokens), format.Count(ctx.Limit)))
+			trigger.Tooltip(
+				fmt.Sprintf(
+					"ctx %s%s/%s",
+					estimated(ctx),
+					format.Count(ctx.Tokens),
+					format.Count(ctx.Limit),
+				),
+			)
 		}
 	}
 	if trigger.Clicked() {
@@ -162,18 +202,37 @@ func usageGauge(c *ui.Context, u agent.UsageReading, open *bool, drain *componen
 	}
 
 	ui.PopoverBase(c, trigger, open, func(panel ui.Element) {
-		panel.Margin(4, 0, 0, 0).Padding(12).Gap(4).Width(240).Radius(t.Radius).Background(p.Popover).Border(1, p.Border).
+		panel.Margin(4, 0, 0, 0).
+			Padding(12).
+			Gap(4).
+			Width(240).
+			Radius(t.Radius).
+			Background(p.Popover).
+			Border(1, p.Border).
 			Shadow(0, 4, 6, -1, ui.RGBA(0, 0, 0, 0.1))
 		if ctx != nil {
 			ui.Row(c).Height(20).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Context").TextColor(p.Foreground).FontWeight(500).Grow(1)
-				ui.Text(c, fmt.Sprintf("%s%s / %s", estimated(ctx), format.Count(ctx.Tokens), format.Count(ctx.Limit))).
-					Font("monospace").FontSize(components.TextCode(t)).TextColor(p.Foreground).FontFeatures("tnum")
+				used := fmt.Sprintf(
+					"%s%s / %s",
+					estimated(ctx),
+					format.Count(ctx.Tokens),
+					format.Count(ctx.Limit),
+				)
+				ui.Text(c, used).
+					Font("monospace").
+					FontSize(components.TextCode(t)).
+					TextColor(p.Foreground).
+					FontFeatures("tnum")
 			})
 			ui.Box(c).Height(4).Margin(4, 0).Draw(func(pt *ui.Painter, r ui.Rect) {
 				pt.Fill(r, p.MutedForeground.Alpha(0.25), 2)
 				if full > 0 {
-					pt.Fill(ui.Rect{X: r.X, Y: r.Y, W: max(r.W*float32(full), r.H), H: r.H}, color, 2)
+					pt.Fill(
+						ui.Rect{X: r.X, Y: r.Y, W: max(r.W*float32(full), r.H), H: r.H},
+						color,
+						2,
+					)
 				}
 			})
 			hint := "Compacts at " + format.Count(ctx.Limit)
@@ -196,7 +255,11 @@ func usageGauge(c *ui.Context, u agent.UsageReading, open *bool, drain *componen
 		for _, row := range rows {
 			ui.Row(c).Height(20).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, row[0]).TextColor(p.MutedForeground).Grow(1)
-				ui.Text(c, row[1]).Font("monospace").FontSize(components.TextCode(t)).TextColor(p.Foreground).FontFeatures("tnum")
+				ui.Text(c, row[1]).
+					Font("monospace").
+					FontSize(components.TextCode(t)).
+					TextColor(p.Foreground).
+					FontFeatures("tnum")
 			})
 		}
 	})
@@ -237,7 +300,11 @@ func cost(dollars float64) string {
 // barText is the small text of the status and usage lines, its digits
 // tabular so a count that changes does not jiggle what follows it.
 func barText(c *ui.Context, text string, color ui.Color) ui.Element {
-	return ui.Text(c, text).FontSize(components.TextXS(c.Theme())).TextColor(color).FontFeatures("tnum").SingleLine()
+	return ui.Text(c, text).
+		FontSize(components.TextXS(c.Theme())).
+		TextColor(color).
+		FontFeatures("tnum").
+		SingleLine()
 }
 
 // figures is bar text that measures something, in the monospace of the

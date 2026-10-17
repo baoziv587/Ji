@@ -84,7 +84,8 @@ func (l *look) apply(c *ui.Context, s *Settings) {
 	s.Theme = scheme.Name
 
 	dark := s.Appearance.IsDark(system.Dark)
-	if l.theme == nil || l.theme.Dark != dark || l.theme.FontSize != system.FontSize || l.scheme != scheme {
+	if l.theme == nil || l.theme.Dark != dark || l.theme.FontSize != system.FontSize ||
+		l.scheme != scheme {
 		l.theme, l.scheme = components.Theme(system, scheme, dark), scheme
 	}
 
@@ -132,13 +133,25 @@ func (a *App) noSession(c *ui.Context) {
 		if len(a.list.Sessions) > 0 {
 			title = "No session chosen"
 		}
-		components.EmptyHeader(c, icons.FolderOpen, title, "A session works in one folder: it reads, edits and runs commands there, and asks before it does.")
+		components.EmptyHeader(
+			c,
+			icons.FolderOpen,
+			title,
+			"A session works in one folder: it reads, edits and runs commands there, and asks before it does.",
+		)
 		ui.Row(c).Gap(8).Children(func() {
-			if a.list.DefaultRoot != "" && components.Button(c, "New Session in "+filepath.Base(a.list.DefaultRoot), components.ButtonStyle{}).
-				Tooltip(a.list.DefaultRoot).Clicked() {
+			newInDefault := "New Session in " + filepath.Base(a.list.DefaultRoot)
+			if a.list.DefaultRoot != "" &&
+				components.Button(c, newInDefault, components.ButtonStyle{}).
+					Tooltip(a.list.DefaultRoot).
+					Clicked() {
 				a.NewSession(a.list.DefaultRoot)
 			}
-			if a.ChooseFolder != nil && components.Button(c, "Choose Folder…", components.ButtonStyle{Variant: components.Outline}).Clicked() {
+			if a.ChooseFolder != nil &&
+				components.Button(c, "Choose Folder…", components.ButtonStyle{
+					Variant: components.Outline,
+				}).
+					Clicked() {
 				a.NewSessionInFolder()
 			}
 		})
@@ -157,7 +170,13 @@ func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 		// while dragged
 		conv := a.conversation(c, s, view)
 		if !a.resizing {
-			conv.Transition(ui.ElementTransition{Duration: panelMotion.Duration, Ease: panelMotion.Ease, Size: true})
+			conv.Transition(
+				ui.ElementTransition{
+					Duration: panelMotion.Duration,
+					Ease:     panelMotion.Ease,
+					Size:     true,
+				},
+			)
 		}
 
 		// The step shown is read once its lines in the conversation, which

@@ -52,7 +52,11 @@ func work(c *ui.Context, t *Transcript, w *Work) {
 				w.window.seen = n
 			})
 			invalidate := c.Invalidate
-			steps.Draw(func(_ *ui.Painter, r ui.Rect) { w.window.painted(r, t.sight, len(w.Steps), invalidate) })
+			steps.Draw(
+				func(_ *ui.Painter, r ui.Rect) {
+					w.window.painted(r, t.sight, len(w.Steps), invalidate)
+				},
+			)
 		})
 		if progress < 1 {
 			clip.Height(progress * steps.Bounds().H)
@@ -73,8 +77,15 @@ func workLine(c *ui.Context, t *Transcript, w *Work, parts ui.CollapsibleParts) 
 	th := c.Theme()
 	p := components.PaletteOf(th)
 	outcome := w.Outcome()
-	line := parts.Trigger.Height(28).Gap(8).Padding(0, 8).Margin(0, -8).Radius(6).AlignItems(ui.Center).
-		FocusRing(false).TextColor(p.MutedForeground).Transition(components.ColorTransition)
+	line := parts.Trigger.Height(28).
+		Gap(8).
+		Padding(0, 8).
+		Margin(0, -8).
+		Radius(6).
+		AlignItems(ui.Center).
+		FocusRing(false).
+		TextColor(p.MutedForeground).
+		Transition(components.ColorTransition)
 	hovered := line.Hovered()
 	if hovered {
 		line.Background(p.Accent.Alpha(0.6)).TextColor(p.Foreground)
@@ -84,43 +95,82 @@ func workLine(c *ui.Context, t *Transcript, w *Work, parts ui.CollapsibleParts) 
 	line.Children(func() {
 		// The state, a new mark as it changes, so the check comes in as the
 		// spinner goes
-		ui.Box(c.Key("state:"+outcome)).Size(16, 16).Shrink(0).Transition(components.Rise).Children(func() {
-			switch outcome {
-			case "running":
-				color := p.Primary
-				if t.Asking != nil {
-					color = p.Waiting
+		ui.Box(c.Key("state:"+outcome)).
+			Size(16, 16).
+			Shrink(0).
+			Transition(components.Rise).
+			Children(func() {
+				switch outcome {
+				case "running":
+					color := p.Primary
+					if t.Asking != nil {
+						color = p.Waiting
+					}
+					components.Spinner(c, "Running", 16, color)
+				case "failed":
+					ui.Icon(c, icons.X).FontSize(16).TextColor(p.Destructive).Label("Failed")
+				case "stopped":
+					ui.Icon(c, icons.Square).
+						FontSize(16).
+						TextColor(p.MutedForeground).
+						Label("Stopped")
+				default:
+					ui.Icon(c, icons.Check).FontSize(16).TextColor(p.Success).Label("Done")
 				}
-				components.Spinner(c, "Running", 16, color)
-			case "failed":
-				ui.Icon(c, icons.X).FontSize(16).TextColor(p.Destructive).Label("Failed")
-			case "stopped":
-				ui.Icon(c, icons.Square).FontSize(16).TextColor(p.MutedForeground).Label("Stopped")
-			default:
-				ui.Icon(c, icons.Check).FontSize(16).TextColor(p.Success).Label("Done")
-			}
-		})
+			})
 
 		// What it does now, each step taking the last one's place, or what
 		// it did, once it rests
-		ui.Row(c).Grow(1).Shrink(1).MinWidth(0).Gap(8).AlignItems(ui.Center).ClipX().Children(func() {
-			now := w.Current
-			if now == nil {
-				ui.Text(c.Key("summary"), w.Summary).SingleLine().Shrink(1).MinWidth(0).Transition(components.Rise)
-				return
-			}
-			ui.Row(c.Key(fmt.Sprint("now:", now.Step))).Gap(8).AlignItems(ui.Center).Shrink(1).MinWidth(0).Transition(components.Rise).Children(func() {
-				if now.Kind == KindThinking {
-					ui.Text(c, "Thinking").TextColor(p.Thinking).FontWeight(500).Shrink(0)
-					if w.Glimpse != "" {
-						ui.Text(c, w.Glimpse).TextColor(p.MutedForeground).FontSize(components.TextXS(th)).SingleLine().Shrink(1).MinWidth(0)
-					}
+		ui.Row(c).
+			Grow(1).
+			Shrink(1).
+			MinWidth(0).
+			Gap(8).
+			AlignItems(ui.Center).
+			ClipX().
+			Children(func() {
+				now := w.Current
+				if now == nil {
+					ui.Text(c.Key("summary"), w.Summary).
+						SingleLine().
+						Shrink(1).
+						MinWidth(0).
+						Transition(components.Rise)
 					return
 				}
-				ui.Text(c, now.Tool.Name).Font("monospace").FontWeight(500).TextColor(p.Foreground).Shrink(0)
-				ui.Text(c, now.Tool.Target).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.MutedForeground).SingleLine().Shrink(1).MinWidth(0)
+				ui.Row(c.Key(fmt.Sprint("now:", now.Step))).
+					Gap(8).
+					AlignItems(ui.Center).
+					Shrink(1).
+					MinWidth(0).
+					Transition(components.Rise).
+					Children(func() {
+						if now.Kind == KindThinking {
+							ui.Text(c, "Thinking").TextColor(p.Thinking).FontWeight(500).Shrink(0)
+							if w.Glimpse != "" {
+								ui.Text(c, w.Glimpse).
+									TextColor(p.MutedForeground).
+									FontSize(components.TextXS(th)).
+									SingleLine().
+									Shrink(1).
+									MinWidth(0)
+							}
+							return
+						}
+						ui.Text(c, now.Tool.Name).
+							Font("monospace").
+							FontWeight(500).
+							TextColor(p.Foreground).
+							Shrink(0)
+						ui.Text(c, now.Tool.Target).
+							Font("monospace").
+							FontSize(components.TextXS(th)).
+							TextColor(p.MutedForeground).
+							SingleLine().
+							Shrink(1).
+							MinWidth(0)
+					})
 			})
-		})
 
 		figure, done := "", 0
 		if outcome == "running" {
@@ -133,7 +183,12 @@ func workLine(c *ui.Context, t *Transcript, w *Work, parts ui.CollapsibleParts) 
 			figure = format.Duration(w.MS)
 		}
 		if figure != "" {
-			ui.Text(c, figure).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.MutedForeground).FontFeatures("tnum").Shrink(0)
+			ui.Text(c, figure).
+				Font("monospace").
+				FontSize(components.TextXS(th)).
+				TextColor(p.MutedForeground).
+				FontFeatures("tnum").
+				Shrink(0)
 		}
 		ui.Icon(c, icons.ChevronRight).FontSize(16).Rotate(90 * parts.Progress()).Shrink(0)
 	})
@@ -148,17 +203,39 @@ func step(c *ui.Context, t *Transcript, s *Item, move ui.ElementTransition, last
 	row.Children(func() {
 		thread(c, s, last)
 		if s.Kind == KindThinking {
-			ui.Text(c, "Thought").FontSize(components.TextXS(th)).FontWeight(500).TextColor(p.Thinking).Shrink(0)
-			ui.Text(c, firstLine(s.Text)).FontSize(components.TextXS(th)).TextColor(p.MutedForeground).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+			ui.Text(c, "Thought").
+				FontSize(components.TextXS(th)).
+				FontWeight(500).
+				TextColor(p.Thinking).
+				Shrink(0)
+			ui.Text(c, firstLine(s.Text)).
+				FontSize(components.TextXS(th)).
+				TextColor(p.MutedForeground).
+				SingleLine().
+				Grow(1).
+				Shrink(1).
+				MinWidth(0)
 			return
 		}
 		call := s.Tool
-		ui.Text(c, call.Name).Font("monospace").FontSize(components.TextXS(th)).FontWeight(500).TextColor(p.Foreground).Shrink(0)
+		ui.Text(c, call.Name).
+			Font("monospace").
+			FontSize(components.TextXS(th)).
+			FontWeight(500).
+			TextColor(p.Foreground).
+			Shrink(0)
 		target := call.Target
 		if target == "" {
 			target = call.Summary
 		}
-		ui.Text(c, relative(target, t.State.Root)).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.MutedForeground).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+		ui.Text(c, relative(target, t.State.Root)).
+			Font("monospace").
+			FontSize(components.TextXS(th)).
+			TextColor(p.MutedForeground).
+			SingleLine().
+			Grow(1).
+			Shrink(1).
+			MinWidth(0)
 		if call.Edit {
 			lineCounts(c, call.Added, call.Removed)
 		}
@@ -236,25 +313,31 @@ func thread(c *ui.Context, s *Item, last bool) {
 	running := s.Tool != nil && !s.Tool.Done
 	// The line stops short of the mark on either side, so it reads on any
 	// fill the row has
-	ui.Box(c).Size(16, 26).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Draw(func(paint *ui.Painter, r ui.Rect) {
-		x, y := r.X+r.W/2, r.Y+r.H/2
-		gap := float32(5)
-		if running {
-			gap = 8
-		}
-		thread := p.MutedForeground.Alpha(0.3)
-		paint.Line(x, r.Y, x, y-gap, 1, thread)
-		if !last {
-			paint.Line(x, y+gap, x, r.Y+r.H, 1, thread)
-		}
-		if !running {
-			paint.Fill(ui.Rect{X: x - 2.5, Y: y - 2.5, W: 5, H: 5}, mark, 2.5)
-		}
-	}).Children(func() {
-		if running {
-			components.Spinner(c, "Running", 12, p.Primary)
-		}
-	})
+	ui.Box(c).
+		Size(16, 26).
+		Shrink(0).
+		Justify(ui.Center).
+		AlignItems(ui.Center).
+		Draw(func(paint *ui.Painter, r ui.Rect) {
+			x, y := r.X+r.W/2, r.Y+r.H/2
+			gap := float32(5)
+			if running {
+				gap = 8
+			}
+			thread := p.MutedForeground.Alpha(0.3)
+			paint.Line(x, r.Y, x, y-gap, 1, thread)
+			if !last {
+				paint.Line(x, y+gap, x, r.Y+r.H, 1, thread)
+			}
+			if !running {
+				paint.Fill(ui.Rect{X: x - 2.5, Y: y - 2.5, W: 5, H: 5}, mark, 2.5)
+			}
+		}).
+		Children(func() {
+			if running {
+				components.Spinner(c, "Running", 12, p.Primary)
+			}
+		})
 }
 
 // fileLine is a file the work changed, in sight while the work is closed:
@@ -266,7 +349,13 @@ func fileLine(c *ui.Context, t *Transcript, f *FileChange) {
 		ui.Row(c).Size(16, 16).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, icons.Pencil).FontSize(13).TextColor(p.MutedForeground)
 		})
-		ui.Text(c, f.Path).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.Foreground).SingleLine().Shrink(1).MinWidth(0)
+		ui.Text(c, f.Path).
+			Font("monospace").
+			FontSize(components.TextXS(th)).
+			TextColor(p.Foreground).
+			SingleLine().
+			Shrink(1).
+			MinWidth(0)
 		lineCounts(c, f.Added, f.Removed)
 		ui.Box(c).Grow(1)
 	})
@@ -286,8 +375,19 @@ func failedLine(c *ui.Context, t *Transcript, s *Item) {
 		ui.Row(c).Size(16, 16).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, icon).FontSize(13).TextColor(color).Label("Failed")
 		})
-		ui.Text(c, call.Name).Font("monospace").FontSize(components.TextXS(th)).FontWeight(500).TextColor(p.Foreground).Shrink(0)
-		ui.Text(c, why).FontSize(components.TextXS(th)).TextColor(color.Mix(p.MutedForeground, 0.35)).SingleLine().Grow(1).Shrink(1).MinWidth(0)
+		ui.Text(c, call.Name).
+			Font("monospace").
+			FontSize(components.TextXS(th)).
+			FontWeight(500).
+			TextColor(p.Foreground).
+			Shrink(0)
+		ui.Text(c, why).
+			FontSize(components.TextXS(th)).
+			TextColor(color.Mix(p.MutedForeground, 0.35)).
+			SingleLine().
+			Grow(1).
+			Shrink(1).
+			MinWidth(0)
 	})
 }
 
@@ -295,8 +395,15 @@ func failedLine(c *ui.Context, t *Transcript, s *Item) {
 // and hides it when clicked again; on the brand's tint while it shows.
 func stepButton(c *ui.Context, t *Transcript, s *Item) ui.Element {
 	p := components.PaletteOf(c.Theme())
-	b := ui.ButtonBase(c).Gap(8).Padding(0, 8).Margin(0, -8).Radius(6).AlignItems(ui.Center).FocusRing(false).
-		Transition(components.ColorTransition).Label("Show " + stepName(s))
+	b := ui.ButtonBase(c).
+		Gap(8).
+		Padding(0, 8).
+		Margin(0, -8).
+		Radius(6).
+		AlignItems(ui.Center).
+		FocusRing(false).
+		Transition(components.ColorTransition).
+		Label("Show " + stepName(s))
 	switch {
 	case t.Inspected == s:
 		b.Background(p.Primary.Alpha(0.14))
@@ -327,7 +434,12 @@ func lineCounts(c *ui.Context, added, removed int) {
 // figures is a measure in tabular figures, quiet.
 func figures(c *ui.Context, s string) ui.Element {
 	th := c.Theme()
-	return ui.Text(c, s).Font("monospace").FontSize(components.TextXS(th)).TextColor(components.PaletteOf(th).MutedForeground).FontFeatures("tnum").Shrink(0)
+	return ui.Text(c, s).
+		Font("monospace").
+		FontSize(components.TextXS(th)).
+		TextColor(components.PaletteOf(th).MutedForeground).
+		FontFeatures("tnum").
+		Shrink(0)
 }
 
 // stepName is what a step is called: its tool, or Thinking.

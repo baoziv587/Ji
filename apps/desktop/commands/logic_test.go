@@ -10,12 +10,27 @@ import (
 // commands are the service's commands, as a session lists them.
 var commands = []agent.Command{
 	{Name: "/think", Arg: "<off|high>", Hint: "sets thinking", Choices: []string{"off", "high"}},
-	{Name: "/fast", Arg: "[on|off]", Hint: "answers faster, for more usage", Choices: []string{"on", "off"}},
+	{
+		Name:    "/fast",
+		Arg:     "[on|off]",
+		Hint:    "answers faster, for more usage",
+		Choices: []string{"on", "off"},
+	},
 	{Name: "/compact", Hint: "summarizes the conversation so far"},
 	{Name: "/help", Hint: "lists keys, commands and tools"},
 	{Name: "/exit", Hint: "quits"},
-	{Name: "/login", Arg: "<provider>", Hint: "signs in: in the browser, or with a key typed in", Choices: []string{"deepseek", "openai", "openai-codex"}},
-	{Name: "/impeccable", Arg: "[command]", Hint: "designs and polishes interfaces", Group: "Skills"},
+	{
+		Name:    "/login",
+		Arg:     "<provider>",
+		Hint:    "signs in: in the browser, or with a key typed in",
+		Choices: []string{"deepseek", "openai", "openai-codex"},
+	},
+	{
+		Name:  "/impeccable",
+		Arg:   "[command]",
+		Hint:  "designs and polishes interfaces",
+		Group: "Skills",
+	},
 }
 
 func TestCommandMenuRanksAsTheTerminalDoes(t *testing.T) {
@@ -31,7 +46,9 @@ func TestCommandMenuRanksAsTheTerminalDoes(t *testing.T) {
 		want  []string
 	}{
 		// Every command for a `/`, in the service's order
-		{"/", []string{"/think ", "/fast ", "/compact", "/help", "/exit", "/login ", "/impeccable "}},
+		{"/", []string{
+			"/think ", "/fast ", "/compact", "/help", "/exit", "/login ", "/impeccable ",
+		}},
 		// Names that start with it, then names that have it, then hints that do
 		{"/co", []string{"/compact", "/help"}},
 		{"/in", []string{"/think ", "/login ", "/impeccable "}},

@@ -109,16 +109,33 @@ func TestMessagesAndSkillsGoTheirWays(t *testing.T) {
 
 func TestNoticesAndHelpShowInTheConversation(t *testing.T) {
 	a, f := testApp()
-	f.events["a"] = append(f.events["a"],
+	f.events["a"] = append(
+		f.events["a"],
 		agent.Event{Type: "notice", Level: "success", Text: "Thinking: off"},
-		agent.Event{Type: "notice", Level: "warn", Text: "No such command: /nope. /help lists them."},
-		agent.Event{Type: "help", Sections: []agent.HelpSection{{Title: "Commands", Rows: [][2]string{{"/think", "<off|high>  sets thinking"}}}, {Title: "Mode", Text: "ask: before every command"}}},
+		agent.Event{
+			Type:  "notice",
+			Level: "warn",
+			Text:  "No such command: /nope. /help lists them.",
+		},
+		agent.Event{
+			Type: "help",
+			Sections: []agent.HelpSection{
+				{Title: "Commands", Rows: [][2]string{{"/think", "<off|high>  sets thinking"}}},
+				{Title: "Mode", Text: "ask: before every command"},
+			},
+		},
 	)
 	a.views = map[string]*sessionView{}
 	a.Select("a")
 	tt := ui.NewTester(a.View, 1100, 900)
 
-	for _, text := range []string{"Thinking: off", "No such command: /nope. /help lists them.", "<off|high>  sets thinking", "ask: before every command", "switches ask/auto"} {
+	for _, text := range []string{
+		"Thinking: off",
+		"No such command: /nope. /help lists them.",
+		"<off|high>  sets thinking",
+		"ask: before every command",
+		"switches ask/auto",
+	} {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
 		}
@@ -127,9 +144,12 @@ func TestNoticesAndHelpShowInTheConversation(t *testing.T) {
 
 func TestLoginAsksForAKeyAndCanBeDismissed(t *testing.T) {
 	a, f := testApp()
-	f.events["a"] = append(f.events["a"], agent.Event{Type: "ask", ID: "2", Questions: []agent.Question{{
-		Title: "Enter your DeepSeek API key", Other: true, Secret: true, Placeholder: "sk-…",
-	}}})
+	f.events["a"] = append(
+		f.events["a"],
+		agent.Event{Type: "ask", ID: "2", Questions: []agent.Question{{
+			Title: "Enter your DeepSeek API key", Other: true, Secret: true, Placeholder: "sk-…",
+		}}},
+	)
 	a.views = map[string]*sessionView{}
 	a.Select("a")
 	tt := ui.NewTester(a.View, 1100, 760)
@@ -155,9 +175,28 @@ func TestLoginAsksForAKeyAndCanBeDismissed(t *testing.T) {
 
 func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 	a, f := testApp()
-	f.events["a"] = append(f.events["a"],
-		agent.Event{Type: "state", State: &agent.State{ID: "a", Mode: "auto", Allowed: "allows commands", Replying: true, Queued: 2, Commands: testCommands,
-			Usage: agent.UsageReading{Context: &agent.ContextSize{Tokens: 150_000, Limit: 200_000}, Cost: 0.0123, Input: 48213, Output: 3104, Cache: 86, Speed: 41, Calls: 4}}},
+	f.events["a"] = append(
+		f.events["a"],
+		agent.Event{
+			Type: "state",
+			State: &agent.State{
+				ID:       "a",
+				Mode:     "auto",
+				Allowed:  "allows commands",
+				Replying: true,
+				Queued:   2,
+				Commands: testCommands,
+				Usage: agent.UsageReading{
+					Context: &agent.ContextSize{Tokens: 150_000, Limit: 200_000},
+					Cost:    0.0123,
+					Input:   48213,
+					Output:  3104,
+					Cache:   86,
+					Speed:   41,
+					Calls:   4,
+				},
+			},
+		},
 		agent.Event{Type: "user", Text: "run the tests"},
 		agent.Event{Type: "tool_start", ID: "1", Name: "bash", Args: "{}"},
 	)
@@ -165,7 +204,10 @@ func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 	a.Select("a")
 	tt := ui.NewTester(a.View, 1100, 760)
 
-	for _, text := range []string{"Running bash", "auto", "allows commands", "2 queued", "steers", "75%", "$0.01", "cache 86%"} {
+	for _, text := range []string{
+		"Running bash", "auto", "allows commands", "2 queued", "steers",
+		"75%", "$0.01", "cache 86%",
+	} {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
 		}
@@ -178,7 +220,9 @@ func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	for _, text := range []string{"150k / 200k", "Compacts at 200k", "$0.01", "48.2k", "3.1k", "86%", "41 tok/s"} {
+	for _, text := range []string{
+		"150k / 200k", "Compacts at 200k", "$0.01", "48.2k", "3.1k", "86%", "41 tok/s",
+	} {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
 		}

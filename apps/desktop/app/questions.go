@@ -18,7 +18,8 @@ func (a *App) questions(c *ui.Context, view *sessionView) {
 	p := components.PaletteOf(t)
 	asking := view.t.Asking
 	// A call waiting for a yes: one click answers it
-	approval := asking.Tool != "" && len(asking.Questions) == 1 && !asking.Questions[0].Multiple && !asking.Questions[0].Other
+	approval := asking.Tool != "" && len(asking.Questions) == 1 && !asking.Questions[0].Multiple &&
+		!asking.Questions[0].Other
 
 	ui.Column(c).Padding(0, 24, 12).Children(func() {
 		card := conversation.Centered(c, 12, func() {
@@ -34,12 +35,19 @@ func (a *App) questions(c *ui.Context, view *sessionView) {
 				})
 				if q.Detail != "" {
 					// The lines' bands span the panel, so it pads only above and below
-					conversation.Diff(c.Key(fmt.Sprintf("detail:%s:%d", asking.ID, i)), asking.Details[i]).
-						MaxHeight(220).Padding(8, 0).Radius(t.Radius).Background(p.Muted)
+					key := c.Key(fmt.Sprintf("detail:%s:%d", asking.ID, i))
+					conversation.Diff(key, asking.Details[i]).
+						MaxHeight(220).
+						Padding(8, 0).
+						Radius(t.Radius).
+						Background(p.Muted)
 				}
 				ui.Row(c.Key(i)).Gap(8).Wrap().Children(func() {
 					for _, o := range q.Options {
-						style := components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall}
+						style := components.ButtonStyle{
+							Variant: components.Outline,
+							Size:    components.SizeSmall,
+						}
 						switch {
 						case approval && o.Value == "yes":
 							style.Variant = components.Default
@@ -72,7 +80,10 @@ func (a *App) questions(c *ui.Context, view *sessionView) {
 					case len(q.Options) == 0:
 						placeholder = "Type your answer"
 					}
-					input := components.TextInput(c.Key(fmt.Sprint("other", i)), &view.answer.others[i]).Placeholder(placeholder).Label("Your answer")
+					key := c.Key(fmt.Sprint("other", i))
+					input := components.TextInput(key, &view.answer.others[i]).
+						Placeholder(placeholder).
+						Label("Your answer")
 					if q.Secret {
 						input.Password()
 					}
@@ -81,11 +92,17 @@ func (a *App) questions(c *ui.Context, view *sessionView) {
 			// An approval's No says it all; the model's questions can be left unanswered
 			if !approval {
 				ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-					if components.Button(c, "Dismiss", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeSmall}).
-						Tooltip("Answer none of them: the agent asks what you want instead").Clicked() {
+					dismiss := components.ButtonStyle{
+						Variant: components.Ghost,
+						Size:    components.SizeSmall,
+					}
+					if components.Button(c, "Dismiss", dismiss).
+						Tooltip("Answer none of them: the agent asks what you want instead").
+						Clicked() {
 						a.answer(view, nil)
 					}
-					if components.Button(c, "Send answer", components.ButtonStyle{Size: components.SizeSmall}).Clicked() {
+					send := components.ButtonStyle{Size: components.SizeSmall}
+					if components.Button(c, "Send answer", send).Clicked() {
 						a.answer(view, view.answer.answers(asking.Questions))
 					}
 				})

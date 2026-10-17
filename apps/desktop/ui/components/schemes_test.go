@@ -36,7 +36,8 @@ func TestColorsReadAsShadcnWritesThem(t *testing.T) {
 		l, c, h := oklch(ui.Hex(hex))
 		got, err := ParseColor(fmt.Sprintf("oklch(%.5f %.5f %.3f)", l, c, h))
 		want := ui.Hex(hex)
-		if err != nil || absDiff(got.R, want.R) > 1 || absDiff(got.G, want.G) > 1 || absDiff(got.B, want.B) > 1 {
+		if err != nil || absDiff(got.R, want.R) > 1 || absDiff(got.G, want.G) > 1 ||
+			absDiff(got.B, want.B) > 1 {
 			t.Errorf("%s through oklch: %+v, %v", hex, got, err)
 		}
 	}
@@ -67,8 +68,10 @@ func TestSchemeReadsAPastedTheme(t *testing.T) {
 @layer base { * { @apply border-border; } body { @apply bg-background; } }`
 
 	_, err := ParseScheme("Pasted", theme)
-	if err == nil || !strings.Contains(err.Error(), ":root: missing --foreground") || !strings.Contains(err.Error(), "--code-type") ||
-		strings.Contains(err.Error(), "--background,") || strings.Contains(err.Error(), "--primary,") {
+	if err == nil || !strings.Contains(err.Error(), ":root: missing --foreground") ||
+		!strings.Contains(err.Error(), "--code-type") ||
+		strings.Contains(err.Error(), "--background,") ||
+		strings.Contains(err.Error(), "--primary,") {
 		t.Errorf("err %v", err)
 	}
 
@@ -81,7 +84,17 @@ func TestSchemeReadsAPastedTheme(t *testing.T) {
 		}
 		return b.String() + "}\n"
 	}
-	s, err := ParseScheme("Pasted", full(":root")+strings.Replace(full(".dark"), "--sidebar-accent: #102030", "--sidebar-accent: oklch(0.3 0 0 / 60%)", 1))
+	s, err := ParseScheme(
+		"Pasted",
+		full(
+			":root",
+		)+strings.Replace(
+			full(".dark"),
+			"--sidebar-accent: #102030",
+			"--sidebar-accent: oklch(0.3 0 0 / 60%)",
+			1,
+		),
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +108,10 @@ func TestSchemesAreNamedAfterTheirFiles(t *testing.T) {
 	for _, s := range Schemes {
 		names = append(names, s.Name)
 	}
-	if got := strings.Join(names, ", "); got != "Forest, Graphite, Lagoon, Monochrome, Slate, Supabase" {
+	if got := strings.Join(
+		names,
+		", ",
+	); got != "Forest, Graphite, Lagoon, Monochrome, Slate, Supabase" {
 		t.Errorf("schemes %s", got)
 	}
 	if got := schemeName("ocean-mist.css"); got != "Ocean Mist" {
@@ -105,7 +121,10 @@ func TestSchemesAreNamedAfterTheirFiles(t *testing.T) {
 
 // A stylesheet saved shows at once, or what is wrong with it.
 func TestSchemesAreReadAgainAsTheyAreSaved(t *testing.T) {
-	if source := SchemesSource(); !strings.HasSuffix(source, filepath.FromSlash("ui/components/schemes")) {
+	if source := SchemesSource(); !strings.HasSuffix(
+		source,
+		filepath.FromSlash("ui/components/schemes"),
+	) {
 		t.Errorf("schemes watched in %q", source)
 	}
 
@@ -121,7 +140,11 @@ func TestSchemesAreReadAgainAsTheyAreSaved(t *testing.T) {
 		err     error
 	}
 	reads := make(chan read, 8)
-	go func() { _ = WatchSchemes(ctx, dir, func(schemes []*Scheme, err error) { reads <- read{schemes, err} }) }()
+	go func() {
+		_ = WatchSchemes(ctx, dir, func(schemes []*Scheme, err error) {
+			reads <- read{schemes, err}
+		})
+	}()
 
 	// save writes the file again until a read of it is as wanted: the watch
 	// starts on its own, and a save before it may still be read
@@ -143,14 +166,25 @@ func TestSchemesAreReadAgainAsTheyAreSaved(t *testing.T) {
 		t.Errorf("%s saved, read as %+v", file, last)
 	}
 
-	save("forest.css", strings.Replace(string(forest), "--primary: #307d33", "--primary: #ca3214", 1), func(r read) bool {
-		return r.err == nil && len(r.schemes) == 1 && r.schemes[0].Light.Primary == ui.Hex("#ca3214")
-	})
-	save("forest.css", strings.Replace(string(forest), "--foreground: #39221e;", "", 1), func(r read) bool {
-		return r.err != nil && strings.Contains(r.err.Error(), "schemes/forest.css: :root: missing --foreground")
-	})
+	save(
+		"forest.css",
+		strings.Replace(string(forest), "--primary: #307d33", "--primary: #ca3214", 1),
+		func(r read) bool {
+			return r.err == nil && len(r.schemes) == 1 &&
+				r.schemes[0].Light.Primary == ui.Hex("#ca3214")
+		},
+	)
+	save(
+		"forest.css",
+		strings.Replace(string(forest), "--foreground: #39221e;", "", 1),
+		func(r read) bool {
+			return r.err != nil &&
+				strings.Contains(r.err.Error(), "schemes/forest.css: :root: missing --foreground")
+		},
+	)
 	save("forest.css", string(forest), func(r read) bool { return r.err == nil })
 	save("ocean-mist.css", string(forest), func(r read) bool {
-		return r.err == nil && len(r.schemes) == 2 && r.schemes[0].Name == "Forest" && r.schemes[1].Name == "Ocean Mist"
+		return r.err == nil && len(r.schemes) == 2 && r.schemes[0].Name == "Forest" &&
+			r.schemes[1].Name == "Ocean Mist"
 	})
 }

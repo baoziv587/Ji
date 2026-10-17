@@ -21,7 +21,12 @@ func TestEndToEnd(t *testing.T) {
 		t.Skip("JI_AGENT_E2E is not set")
 	}
 	root, sessions := t.TempDir(), t.TempDir()
-	options := Options{Root: root, Sessions: sessions, Model: os.Getenv("JI_AGENT_MODEL"), Thinking: "low"}
+	options := Options{
+		Root:     root,
+		Sessions: sessions,
+		Model:    os.Getenv("JI_AGENT_MODEL"),
+		Thinking: "low",
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
@@ -38,7 +43,11 @@ func TestEndToEnd(t *testing.T) {
 	events := make(chan agent.Event, 1024)
 	following, stopFollowing := context.WithCancel(ctx)
 	go client.Follow(following, session.ID, 0, func(e agent.Event) { events <- e })
-	if _, err := client.Send(ctx, session.ID, "Use the bash tool to run exactly: echo hi > hello.txt. Then reply with the single word: done"); err != nil {
+	if _, err := client.Send(
+		ctx,
+		session.ID,
+		"Use the bash tool to run exactly: echo hi > hello.txt. Then reply with the single word: done",
+	); err != nil {
 		t.Fatal(err)
 	}
 	for e := range events {
@@ -78,7 +87,8 @@ func TestEndToEnd(t *testing.T) {
 	}, func(error) {})
 	list := <-listed
 	stopListing()
-	if len(list.Sessions) != 1 || list.Sessions[0].ID != session.ID || !strings.HasPrefix(list.Sessions[0].Title, "Use the bash tool") {
+	if len(list.Sessions) != 1 || list.Sessions[0].ID != session.ID ||
+		!strings.HasPrefix(list.Sessions[0].Title, "Use the bash tool") {
 		t.Fatalf("listed %+v", list.Sessions)
 	}
 

@@ -79,7 +79,11 @@ func TestAnEndpointIsAddedWithTheModelsItServes(t *testing.T) {
 	click(t, tt, "Add the model id")
 	click(t, tt, "Add endpoint")
 
-	want := agent.Endpoint{Name: "Local LLM", BaseURL: "http://localhost:11434/v1", Models: []agent.EndpointModel{{ID: "llama3"}, {ID: "mistral-small"}}}
+	want := agent.Endpoint{
+		Name:    "Local LLM",
+		BaseURL: "http://localhost:11434/v1",
+		Models:  []agent.EndpointModel{{ID: "llama3"}, {ID: "mistral-small"}},
+	}
 	if len(f.endpoints) != 1 || !reflect.DeepEqual(f.endpoints[0], want) {
 		t.Fatalf("kept %+v, want %+v", f.endpoints, want)
 	}
@@ -98,7 +102,8 @@ func TestAnEndpointThatCannotBeReachedSaysSo(t *testing.T) {
 	tt.Type("http://localhost:1/v1")
 	click(t, tt, "Fetch models")
 
-	if a.adding == nil || !tt.HasText("could not reach http://localhost:1/v1/models: ECONNREFUSED") {
+	if a.adding == nil ||
+		!tt.HasText("could not reach http://localhost:1/v1/models: ECONNREFUSED") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 	tt.Key(0, ui.KeyEscape)
@@ -128,7 +133,8 @@ func TestAnEndpointsContextWindowIsANumber(t *testing.T) {
 	click(t, tt, "Context window in tokens")
 	tt.Type("lots")
 	click(t, tt, "Add endpoint")
-	if len(f.endpoints) != 0 || !tt.HasText("The context window is a number of tokens, as 131072.") {
+	if len(f.endpoints) != 0 ||
+		!tt.HasText("The context window is a number of tokens, as 131072.") {
 		t.Fatalf("kept %v, texts %q", f.endpoints, tt.Texts())
 	}
 }
@@ -137,8 +143,16 @@ func TestAnEndpointsContextWindowIsANumber(t *testing.T) {
 func TestRemovingAnEndpointAsksInItsRow(t *testing.T) {
 	a, f, tt := settingsTester(t)
 	f.providers = append(append([]agent.Provider{}, testProviders...), agent.Provider{
-		ID: "local-llm", Name: "Local LLM", Detected: true, Source: "no key", APIKey: true, Models: 1,
-		Endpoint: &agent.Endpoint{BaseURL: "http://localhost:11434/v1", Models: []agent.EndpointModel{{ID: "llama3"}}},
+		ID:       "local-llm",
+		Name:     "Local LLM",
+		Detected: true,
+		Source:   "no key",
+		APIKey:   true,
+		Models:   1,
+		Endpoint: &agent.Endpoint{
+			BaseURL: "http://localhost:11434/v1",
+			Models:  []agent.EndpointModel{{ID: "llama3"}},
+		},
 	})
 	a.loadProviders()
 	tt.Frame()
@@ -154,7 +168,8 @@ func TestRemovingAnEndpointAsksInItsRow(t *testing.T) {
 	click(t, tt, "Remove Local LLM")
 	click(t, tt, "Remove: Local LLM")
 
-	if !reflect.DeepEqual(f.removed, []string{"local-llm"}) || tt.HasText("Local LLM") && !tt.HasText("Local LLM is removed.") {
+	if !reflect.DeepEqual(f.removed, []string{"local-llm"}) ||
+		tt.HasText("Local LLM") && !tt.HasText("Local LLM is removed.") {
 		t.Errorf("removed %v, texts %q", f.removed, tt.Texts())
 	}
 }

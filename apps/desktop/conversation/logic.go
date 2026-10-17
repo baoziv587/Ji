@@ -117,7 +117,9 @@ func diffLines(text string) []DiffLine {
 	for i, line := range lines {
 		out[i].Text = line
 		switch {
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"), strings.HasPrefix(line, "@@"):
+		case strings.HasPrefix(line, "+++"),
+			strings.HasPrefix(line, "---"),
+			strings.HasPrefix(line, "@@"):
 			out[i].Kind = DiffMeta
 		case strings.HasPrefix(line, "+"):
 			out[i].Kind = DiffAdded
@@ -172,7 +174,12 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 		}
 		t.doing("Thinking")
 	case "tool_start":
-		call := &ToolCall{ID: e.ID, Name: e.Name, Args: e.Args, Summary: format.OneLine(format.Head(e.Args, 512))}
+		call := &ToolCall{
+			ID:      e.ID,
+			Name:    e.Name,
+			Args:    e.Args,
+			Summary: format.OneLine(format.Head(e.Args, 512)),
+		}
 		describe(call)
 		t.add(&Item{Kind: KindTool, Tool: call})
 		if t.running == nil {
@@ -200,7 +207,13 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 				colorDiff(details[i], lang)
 			}
 		}
-		t.Asking = &Asking{ID: e.ID, Tool: e.Tool, Outside: e.Outside, Questions: e.Questions, Details: details}
+		t.Asking = &Asking{
+			ID:        e.ID,
+			Tool:      e.Tool,
+			Outside:   e.Outside,
+			Questions: e.Questions,
+			Details:   details,
+		}
 		t.doing("Waiting for your answer")
 	case "ask_closed":
 		if t.Asking != nil && t.Asking.ID == e.ID {
@@ -236,7 +249,13 @@ func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 		case "stopped":
 			t.add(&Item{Kind: KindNotice, Text: "Stopped. Your message is back in the input."})
 		case "failed":
-			t.add(&Item{Kind: KindNotice, Failed: true, Text: e.Error + "\nYour message is back in the input."})
+			t.add(
+				&Item{
+					Kind:   KindNotice,
+					Failed: true,
+					Text:   e.Error + "\nYour message is back in the input.",
+				},
+			)
 		}
 		if e.Outcome != "done" {
 			t.Unsent = e.Unsent

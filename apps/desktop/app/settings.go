@@ -36,7 +36,10 @@ type Settings struct {
 }
 
 // DefaultSettings are the settings of a first run, under those kept.
-var DefaultSettings = Settings{Transparency: transparencyStandard, ContentTransparency: transparencyStandard}
+var DefaultSettings = Settings{
+	Transparency:        transparencyStandard,
+	ContentTransparency: transparencyStandard,
+}
 
 var appearances = []struct {
 	value components.Appearance
@@ -128,7 +131,11 @@ func (a *App) applyApprovals() {
 		a.update(func() {
 			// Not connected, it is set again once the window is
 			if err != nil && a.link.up {
-				a.toast = &toast{message: "Could not set approvals to " + mode + ": " + err.Error(), action: "Retry", run: a.applyApprovals}
+				a.toast = &toast{
+					message: "Could not set approvals to " + mode + ": " + err.Error(),
+					action:  "Retry",
+					run:     a.applyApprovals,
+				}
 			}
 		})
 	})
@@ -148,20 +155,44 @@ func (a *App) settings(c *ui.Context) {
 
 	page := pageOf(a.settingsPage)
 	ui.Box(c).Grow(1).MinHeight(0).Children(func() {
-		ui.Scroll(c.Key(page.id)).Fill().Padding(TitleBarHeight+32, 24, 48).ScrollbarInsets(TitleBarHeight, 0, 0).Children(func() {
-			ui.Row(c).Justify(ui.Center).Children(func() {
-				ui.Column(c).Grow(1).MaxWidth(636).Gap(page.gap).Children(func() { page.draw(a, c) })
+		ui.Scroll(c.Key(page.id)).
+			Fill().
+			Padding(TitleBarHeight+32, 24, 48).
+			ScrollbarInsets(TitleBarHeight, 0, 0).
+			Children(func() {
+				ui.Row(c).Justify(ui.Center).Children(func() {
+					ui.Column(c).
+						Grow(1).
+						MaxWidth(636).
+						Gap(page.gap).
+						Children(func() { page.draw(a, c) })
+				})
 			})
-		})
 
-		ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(TitleBarHeight).Gap(6).Padding(0, 10, 0, 16).AlignItems(ui.Center).
-			Material(a.bar(a.contentCover(c))).DragWindow().Children(func() {
-			ui.Text(c, page.title).FontWeight(600).Grow(1)
-			if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.X}).
-				Label("Close Settings").Tooltip("Close (Esc)").Clicked() {
-				a.settingsOpen = false
-			}
-		})
+		ui.Row(c).
+			Absolute().
+			Top(0).
+			Left(0).
+			Right(0).
+			Height(TitleBarHeight).
+			Gap(6).
+			Padding(0, 10, 0, 16).
+			AlignItems(ui.Center).
+			Material(a.bar(a.contentCover(c))).
+			DragWindow().
+			Children(func() {
+				ui.Text(c, page.title).FontWeight(600).Grow(1)
+				if components.Button(c, "", components.ButtonStyle{
+					Variant: components.Ghost,
+					Size:    components.SizeIconSmall,
+					Icon:    icons.X,
+				}).
+					Label("Close Settings").
+					Tooltip("Close (Esc)").
+					Clicked() {
+					a.settingsOpen = false
+				}
+			})
 	})
 }
 
@@ -171,15 +202,23 @@ func (a *App) settings(c *ui.Context) {
 func (a *App) settingsNav(c *ui.Context) {
 	p := components.PaletteOf(c.Theme())
 	a.sidebarBar(c, func() {
-		back := components.Button(c, "Sessions", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeSmall, Icon: icons.ChevronLeft}).
-			Label("Back to the sessions").Tooltip("Back to the sessions (Esc)").Margin(0, 0, 0, -8)
+		back := components.Button(c, "Sessions", components.ButtonStyle{
+			Variant: components.Ghost,
+			Size:    components.SizeSmall,
+			Icon:    icons.ChevronLeft,
+		}).
+			Label("Back to the sessions").
+			Tooltip("Back to the sessions (Esc)").
+			Margin(0, 0, 0, -8)
 		if back.Clicked() {
 			a.settingsOpen = false
 		}
 		ui.Box(c).Grow(1)
 		// Beside the window controls there is room for the count alone
 		if n := a.waiting(); n > 0 {
-			components.Tag(c, fmt.Sprint(n), p.Waiting).Label(fmt.Sprintf("%d waiting", n)).Tooltip(fmt.Sprintf("%d waiting for an answer", n))
+			components.Tag(c, fmt.Sprint(n), p.Waiting).
+				Label(fmt.Sprintf("%d waiting", n)).
+				Tooltip(fmt.Sprintf("%d waiting for an answer", n))
 		}
 	})
 
@@ -187,7 +226,10 @@ func (a *App) settingsNav(c *ui.Context) {
 	if ui.Sidebar(c, &page, func() {
 		ui.SidebarSection(c, "Settings", nil, func() {
 			for _, s := range settingsPages {
-				item := ui.SidebarItem(c.Key(s.id), s.id, nil, s.title).Height(32).Padding(0, 8).Transition(components.ColorTransition)
+				item := ui.SidebarItem(c.Key(s.id), s.id, nil, s.title).
+					Height(32).
+					Padding(0, 8).
+					Transition(components.ColorTransition)
 				if s.id == a.settingsPage {
 					a.chosen(c, item)
 				}
@@ -235,7 +277,8 @@ func (a *App) appearance(c *ui.Context) {
 	ui.Column(c).Gap(12).Children(func() {
 		ui.Column(c).Gap(2).Children(func() {
 			ui.Text(c, "Color theme").FontWeight(500)
-			ui.Text(c, "Each comes in light and dark; shown here as the window is now.").TextColor(p.MutedForeground)
+			ui.Text(c, "Each comes in light and dark; shown here as the window is now.").
+				TextColor(p.MutedForeground)
 		})
 		ui.RadioGroup(c, func() {
 			for _, s := range components.Schemes {
@@ -289,7 +332,15 @@ func (a *App) modes(c *ui.Context) {
 				ui.Text(c, m.label).FontWeight(500).TextColor(color).SingleLine()
 			})
 		}
-	}).Row().Shrink(0).Height(36).Padding(3).Gap(2).Radius(t.Radius).Background(p.Muted).Label("Mode")
+	}).
+		Row().
+		Shrink(0).
+		Height(36).
+		Padding(3).
+		Gap(2).
+		Radius(t.Radius).
+		Background(p.Muted).
+		Label("Mode")
 }
 
 // transparency is a setting of the window's glass, named and said, with
@@ -303,7 +354,15 @@ func (a *App) transparency(c *ui.Context, name, note string, value *float64) {
 			ui.Text(c, note).TextColor(p.MutedForeground)
 		})
 		ui.Column(c).Width(236).Shrink(0).Gap(2).Children(func() {
-			if ui.StepSlider(c.Key(name), value, transparencySolid, transparencyClear, transparencyStep).Label(name).Pressed() {
+			if ui.StepSlider(
+				c.Key(name),
+				value,
+				transparencySolid,
+				transparencyClear,
+				transparencyStep,
+			).
+				Label(name).
+				Pressed() {
 				a.sliding = true
 			}
 			ui.Row(c).Justify(ui.SpaceBetween).Children(func() {
@@ -324,8 +383,15 @@ func (a *App) schemeCard(c *ui.Context, s *components.Scheme) {
 	q := s.Of(t.Dark)
 	chosen := components.SchemeNamed(a.Settings.Theme) == s
 
-	card := ui.RadioBase(c.Key(s.Name), &a.Settings.Theme, s.Name).Column().Width(150).Gap(8).Padding(4).Radius(12).
-		FocusRing(false).Transition(components.ColorTransition).Label(s.Name + " theme")
+	card := ui.RadioBase(c.Key(s.Name), &a.Settings.Theme, s.Name).
+		Column().
+		Width(150).
+		Gap(8).
+		Padding(4).
+		Radius(12).
+		FocusRing(false).
+		Transition(components.ColorTransition).
+		Label(s.Name + " theme")
 
 	edge := p.Border
 	switch {
@@ -337,7 +403,13 @@ func (a *App) schemeCard(c *ui.Context, s *components.Scheme) {
 	components.FocusRing(card, p, 0)
 
 	card.Children(func() {
-		window := ui.Row(c).Height(84).Radius(8).Clip().Background(q.Background).Border(1, edge).Transition(components.ColorTransition)
+		window := ui.Row(c).
+			Height(84).
+			Radius(8).
+			Clip().
+			Background(q.Background).
+			Border(1, edge).
+			Transition(components.ColorTransition)
 		if chosen {
 			window.Shadow(0, 0, 0, 1, p.Primary)
 		}
@@ -346,23 +418,44 @@ func (a *App) schemeCard(c *ui.Context, s *components.Scheme) {
 				ui.Box(c).Width(w).Height(4).Radius(2).Background(color).Shrink(0)
 			}
 
-			ui.Column(c).Width(38).Shrink(0).Padding(10, 5).Gap(6).Background(q.Sidebar).BorderWidth(0, 1, 0, 0).BorderColor(q.SidebarBorder).Children(func() {
-				line(18, q.MutedForeground.Alpha(0.45))
-				ui.Row(c).Height(10).Padding(0, 3).Radius(3).Background(q.SidebarAccent).AlignItems(ui.Center).Children(func() {
-					line(14, q.Foreground.Alpha(0.6))
+			ui.Column(c).
+				Width(38).
+				Shrink(0).
+				Padding(10, 5).
+				Gap(6).
+				Background(q.Sidebar).
+				BorderWidth(0, 1, 0, 0).
+				BorderColor(q.SidebarBorder).
+				Children(func() {
+					line(18, q.MutedForeground.Alpha(0.45))
+					ui.Row(c).
+						Height(10).
+						Padding(0, 3).
+						Radius(3).
+						Background(q.SidebarAccent).
+						AlignItems(ui.Center).
+						Children(func() {
+							line(14, q.Foreground.Alpha(0.6))
+						})
+					line(22, q.Foreground.Alpha(0.3))
+					line(16, q.Foreground.Alpha(0.3))
 				})
-				line(22, q.Foreground.Alpha(0.3))
-				line(16, q.Foreground.Alpha(0.3))
-			})
 
 			ui.Column(c).Grow(1).Padding(8, 8, 7).Gap(5).Children(func() {
 				ui.Box(c).AlignSelf(ui.End).Width(44).Height(10).Radius(4).Background(q.Secondary)
 				line(66, q.Foreground.Alpha(0.45))
 				line(48, q.Foreground.Alpha(0.45))
 				ui.Box(c).Grow(1)
-				ui.Row(c).Height(16).Padding(0, 3, 0, 6).Radius(5).Border(1, q.Input).AlignItems(ui.Center).Justify(ui.End).Children(func() {
-					ui.Box(c).Size(10, 10).Radius(5).Background(q.Primary)
-				})
+				ui.Row(c).
+					Height(16).
+					Padding(0, 3, 0, 6).
+					Radius(5).
+					Border(1, q.Input).
+					AlignItems(ui.Center).
+					Justify(ui.End).
+					Children(func() {
+						ui.Box(c).Size(10, 10).Radius(5).Background(q.Primary)
+					})
 			})
 		})
 
@@ -403,8 +496,15 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 		mark = p.Warning
 	}
 
-	row := ui.RadioBase(c, &a.Settings.Approvals, mode).Label(mode).Gap(12).Padding(12, 16).AlignItems(ui.Start).
-		Radius(t.Radius+2).Border(1, p.Border).FocusRing(false).Transition(components.ColorTransition)
+	row := ui.RadioBase(c, &a.Settings.Approvals, mode).
+		Label(mode).
+		Gap(12).
+		Padding(12, 16).
+		AlignItems(ui.Start).
+		Radius(t.Radius+2).
+		Border(1, p.Border).
+		FocusRing(false).
+		Transition(components.ColorTransition)
 	switch {
 	case chosen:
 		row.Border(1, mark).Background(mark.Alpha(0.06))
@@ -418,12 +518,20 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 		if chosen {
 			edge = mark
 		}
-		ui.Row(c).Size(16, 16).Shrink(0).Margin(2, 0, 0).Radius(8).Border(1, edge).Justify(ui.Center).AlignItems(ui.Center).
-			Transition(components.ColorTransition).Children(func() {
-			if chosen {
-				ui.Box(c).Size(8, 8).Radius(4).Background(mark)
-			}
-		})
+		ui.Row(c).
+			Size(16, 16).
+			Shrink(0).
+			Margin(2, 0, 0).
+			Radius(8).
+			Border(1, edge).
+			Justify(ui.Center).
+			AlignItems(ui.Center).
+			Transition(components.ColorTransition).
+			Children(func() {
+				if chosen {
+					ui.Box(c).Size(8, 8).Radius(4).Background(mark)
+				}
+			})
 
 		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
 			ui.Text(c, mode).FontWeight(500)
@@ -431,7 +539,9 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 			if chosen && mode == "yolo" {
 				ui.Row(c).Gap(6).Margin(6, 0, 0).AlignItems(ui.Center).Children(func() {
 					ui.Icon(c, icons.TriangleAlert).FontSize(14).TextColor(p.Warning)
-					ui.Text(c, "Commands run and files change unseen, outside the folder too.").TextColor(p.Warning).Shrink(1)
+					ui.Text(c, "Commands run and files change unseen, outside the folder too.").
+						TextColor(p.Warning).
+						Shrink(1)
 				})
 			}
 		})
@@ -487,15 +597,26 @@ func (a *App) providers(c *ui.Context) {
 	if len(detected) == 0 {
 		ui.Row(c).Padding(12, 16).Radius(t.Radius+2).Border(1, p.Border).Children(func() {
 			ui.Text(c, "None has a key yet: add one with Add provider, set its variable before starting Ji Agent, or log in below.").
-				TextColor(p.MutedForeground).Shrink(1)
+				TextColor(p.MutedForeground).
+				Shrink(1)
 		})
 	} else {
 		providerRows(c, detected, func(provider agent.Provider) { a.detectedTrail(c, provider) })
 	}
 	if len(others) > 0 {
-		components.Disclosure(c, fmt.Sprintf("Not detected (%d)", len(others)), ui.Color{}, &a.othersOpen, func() {
-			providerRows(c, others, func(provider agent.Provider) { a.undetectedTrail(c, provider) })
-		})
+		components.Disclosure(
+			c,
+			fmt.Sprintf("Not detected (%d)", len(others)),
+			ui.Color{},
+			&a.othersOpen,
+			func() {
+				providerRows(
+					c,
+					others,
+					func(provider agent.Provider) { a.undetectedTrail(c, provider) },
+				)
+			},
+		)
 	}
 }
 
@@ -509,12 +630,24 @@ func (a *App) providersHeading(c *ui.Context) {
 			ui.Text(c, "Detected from their API key variables and the keys kept in ~/.ji, by /login or here. A session picks its model among theirs, in its title bar.").
 				TextColor(p.MutedForeground)
 		})
-		if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.RefreshCw}).
-			Label("Check providers again").Tooltip("Check again").Clicked() {
+		if components.Button(c, "", components.ButtonStyle{
+			Variant: components.Ghost,
+			Size:    components.SizeIconSmall,
+			Icon:    icons.RefreshCw,
+		}).
+			Label("Check providers again").
+			Tooltip("Check again").
+			Clicked() {
 			a.loadProviders()
 		}
-		if components.Button(c, "Add provider", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.Plus, Disabled: !a.catalog.listed || a.adding != nil}).
-			Tooltip("A key for one of the catalog's, or a server of your own").Clicked() {
+		if components.Button(c, "Add provider", components.ButtonStyle{
+			Variant:  components.Outline,
+			Size:     components.SizeSmall,
+			Icon:     icons.Plus,
+			Disabled: !a.catalog.listed || a.adding != nil,
+		}).
+			Tooltip("A key for one of the catalog's, or a server of your own").
+			Clicked() {
 			a.openProviderForm(&providerForm{})
 		}
 	})
@@ -536,7 +669,12 @@ func (a *App) detectedTrail(c *ui.Context, provider agent.Provider) {
 	}
 	components.Tag(c, provider.Source, color).Tooltip(sourceNote(provider))
 	// As wide in every row, so the tags line up over rows with none
-	ui.Row(c).Width(52).Shrink(0).Gap(4).Justify(ui.End).Children(func() { a.providerActions(c, provider) })
+	ui.Row(c).
+		Width(52).
+		Shrink(0).
+		Gap(4).
+		Justify(ui.End).
+		Children(func() { a.providerActions(c, provider) })
 }
 
 // undetectedTrail is the way to give a provider not detected a key: a key
@@ -546,12 +684,19 @@ func (a *App) undetectedTrail(c *ui.Context, provider agent.Provider) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	if !provider.APIKey && !provider.OAuth {
-		ui.Text(c, "Set up in the environment").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine()
+		ui.Text(c, "Set up in the environment").
+			FontSize(components.TextXS(t)).
+			TextColor(p.MutedForeground).
+			SingleLine()
 		return
 	}
 	if provider.OAuth {
 		_, _, inSession := a.current()
-		login := components.Button(c, "Log in", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeExtraSmall, Disabled: !inSession}).
+		login := components.Button(c, "Log in", components.ButtonStyle{
+			Variant:  components.Ghost,
+			Size:     components.SizeExtraSmall,
+			Disabled: !inSession,
+		}).
 			Label("Log in to " + provider.Name)
 		tip := "/login " + provider.ID + " in the session shown: it signs in in the browser"
 		if !inSession {
@@ -562,8 +707,13 @@ func (a *App) undetectedTrail(c *ui.Context, provider agent.Provider) {
 			a.loginTo(provider.ID)
 		}
 	}
-	if provider.APIKey && components.Button(c, "Add key", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall}).
-		Label("Add a key for "+provider.Name).Clicked() {
+	if provider.APIKey &&
+		components.Button(c, "Add key", components.ButtonStyle{
+			Variant: components.Outline,
+			Size:    components.SizeExtraSmall,
+		}).
+			Label("Add a key for "+provider.Name).
+			Clicked() {
 		a.keyForm(provider.ID)
 	}
 }
@@ -573,8 +723,14 @@ func (a *App) undetectedTrail(c *ui.Context, provider agent.Provider) {
 // the environment gives is changed there, so has none.
 func (a *App) providerActions(c *ui.Context, provider agent.Provider) {
 	icon := func(svg *ui.SVG, label string) bool {
-		return components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconExtraSmall, Icon: svg}).
-			Label(label).Tooltip(label).Clicked()
+		return components.Button(c, "", components.ButtonStyle{
+			Variant: components.Ghost,
+			Size:    components.SizeIconExtraSmall,
+			Icon:    svg,
+		}).
+			Label(label).
+			Tooltip(label).
+			Clicked()
 	}
 	switch {
 	case provider.Endpoint != nil:
@@ -623,18 +779,35 @@ func (a *App) defaultModel(c *ui.Context) {
 			}
 			ui.Text(c, note).TextColor(p.MutedForeground)
 			if provider, ok := a.provider(providerOf(model)); ok && !provider.Detected {
-				ui.Text(c, provider.Name+" has no key now: its sessions cannot reply until it has one.").TextColor(p.Warning)
+				ui.Text(c, provider.Name+" has no key now: its sessions cannot reply until it has one.").
+					TextColor(p.Warning)
 			}
 		})
 
 		ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
-			if model != "" && components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.X}).
-				Label("Use the service's model").Tooltip("Back to the service's own").Clicked() {
+			if model != "" &&
+				components.Button(c, "", components.ButtonStyle{
+					Variant: components.Ghost,
+					Size:    components.SizeIconSmall,
+					Icon:    icons.X,
+				}).
+					Label("Use the service's model").
+					Tooltip("Back to the service's own").
+					Clicked() {
 				a.Settings.Model = ""
 			}
 
-			trigger := ui.ButtonBase(c).Height(32).MaxWidth(280).Padding(0, 8, 0, 12).Gap(6).Radius(t.Radius).AlignItems(ui.Center).
-				Border(1, p.Input).FocusRing(false).Transition(components.ColorTransition).Label("Choose the default model")
+			trigger := ui.ButtonBase(c).
+				Height(32).
+				MaxWidth(280).
+				Padding(0, 8, 0, 12).
+				Gap(6).
+				Radius(t.Radius).
+				AlignItems(ui.Center).
+				Border(1, p.Input).
+				FocusRing(false).
+				Transition(components.ColorTransition).
+				Label("Choose the default model")
 			if trigger.Hovered() || a.defaults.open {
 				trigger.Background(p.Accent)
 			}
@@ -650,7 +823,14 @@ func (a *App) defaultModel(c *ui.Context) {
 			if trigger.Clicked() {
 				a.toggleModels(&a.defaults, model)
 			}
-			a.modelMenu(c, trigger, &a.defaults, model, false, func(spec string) { a.Settings.Model = spec })
+			a.modelMenu(
+				c,
+				trigger,
+				&a.defaults,
+				model,
+				false,
+				func(spec string) { a.Settings.Model = spec },
+			)
 		})
 	})
 }
@@ -672,7 +852,11 @@ func providerRows(c *ui.Context, providers []agent.Provider, trail func(agent.Pr
 	p := components.PaletteOf(t)
 	ui.Column(c).Radius(t.Radius+2).Border(1, p.Border).Clip().Children(func() {
 		for i, provider := range providers {
-			row := ui.Row(c.Key(provider.ID)).Height(48).Padding(0, 16).Gap(12).AlignItems(ui.Center)
+			row := ui.Row(c.Key(provider.ID)).
+				Height(48).
+				Padding(0, 16).
+				Gap(12).
+				AlignItems(ui.Center)
 			if i > 0 {
 				row.BorderWidth(1, 0, 0, 0).BorderColor(p.Border)
 			}
@@ -683,7 +867,12 @@ func providerRows(c *ui.Context, providers []agent.Provider, trail func(agent.Pr
 			row.Children(func() {
 				ui.Row(c).Grow(1).Shrink(1).Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, provider.Name).FontWeight(500).SingleLine().Shrink(0)
-					ui.Text(c, detail).Font("monospace").FontSize(components.TextCode(t)).TextColor(p.MutedForeground).SingleLine().Shrink(1)
+					ui.Text(c, detail).
+						Font("monospace").
+						FontSize(components.TextCode(t)).
+						TextColor(p.MutedForeground).
+						SingleLine().
+						Shrink(1)
 				})
 				trail(provider)
 			})

@@ -8,7 +8,9 @@ import (
 )
 
 func TestReadEventsParsesTheStream(t *testing.T) {
-	stream := ": ping\n\nid: 1\ndata: {\"seq\":1,\"type\":\"text\",\"delta\":\"hi\"}\n\nid: 2\ndata: {\"seq\":2,\"type\":\"reply_end\"}\n\n"
+	stream := ": ping\n\n" +
+		"id: 1\ndata: {\"seq\":1,\"type\":\"text\",\"delta\":\"hi\"}\n\n" +
+		"id: 2\ndata: {\"seq\":2,\"type\":\"reply_end\"}\n\n"
 	var got []Event
 	err := readEvents(strings.NewReader(stream), func(raw json.RawMessage) {
 		var e Event
@@ -31,7 +33,10 @@ func TestHelpReadsRowsAndLines(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := []HelpSection{{Title: "Commands", Rows: [][2]string{{"/think", "<off|high>  sets thinking"}}}, {Title: "Mode", Text: "ask: before every command"}}
+	want := []HelpSection{
+		{Title: "Commands", Rows: [][2]string{{"/think", "<off|high>  sets thinking"}}},
+		{Title: "Mode", Text: "ask: before every command"},
+	}
 	if !reflect.DeepEqual(e.Sections, want) {
 		t.Errorf("sections %+v", e.Sections)
 	}

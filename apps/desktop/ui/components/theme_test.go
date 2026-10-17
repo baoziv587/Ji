@@ -61,13 +61,31 @@ func TestDarkSchemesStepApart(t *testing.T) {
 		ground := lightness("Background")
 		for _, a := range above {
 			if l := lightness(a.name); l-ground < a.step {
-				t.Errorf("%s %s: lightness %.3f, at least %.2f above the ground's %.3f", s.Name, a.name, l, a.step, ground)
+				t.Errorf(
+					"%s %s: lightness %.3f, at least %.2f above the ground's %.3f",
+					s.Name,
+					a.name,
+					l,
+					a.step,
+					ground,
+				)
 			}
 		}
 
-		muted, text, thinking := lightness("MutedForeground"), lightness("Foreground"), lightness("Thinking")
+		muted, text, thinking := lightness(
+			"MutedForeground",
+		), lightness(
+			"Foreground",
+		), lightness(
+			"Thinking",
+		)
 		if muted < 0.72 || text-muted < 0.12 {
-			t.Errorf("%s MutedForeground: lightness %.3f, at least 0.72 and 0.12 below the text's %.3f", s.Name, muted, text)
+			t.Errorf(
+				"%s MutedForeground: lightness %.3f, at least 0.72 and 0.12 below the text's %.3f",
+				s.Name,
+				muted,
+				text,
+			)
 		}
 		if thinking < 0.74 {
 			t.Errorf("%s Thinking: lightness %.3f, at least 0.74", s.Name, thinking)
@@ -97,7 +115,14 @@ func TestLightSchemesStepApart(t *testing.T) {
 		ground := lightness("Background")
 		for _, b := range below {
 			if l := lightness(b.name); ground-l < b.step {
-				t.Errorf("%s %s: lightness %.3f, at least %.2f below the ground's %.3f", s.Name, b.name, l, b.step, ground)
+				t.Errorf(
+					"%s %s: lightness %.3f, at least %.2f below the ground's %.3f",
+					s.Name,
+					b.name,
+					l,
+					b.step,
+					ground,
+				)
 			}
 		}
 		if r := contrast(s.Light.MutedForeground, s.Light.Muted); r < 5.5 {
@@ -115,7 +140,13 @@ func TestSchemesHaveNoViolet(t *testing.T) {
 			for i := range v.NumField() {
 				_, chroma, hue := oklch(v.Field(i).Interface().(ui.Color))
 				if chroma > 0.02 && hue >= 280 && hue <= 345 {
-					t.Errorf("%s %s %s: hue %.0f° is violet", s.Name, mode, v.Type().Field(i).Name, hue)
+					t.Errorf(
+						"%s %s %s: hue %.0f° is violet",
+						s.Name,
+						mode,
+						v.Type().Field(i).Name,
+						hue,
+					)
 				}
 			}
 		}
@@ -141,10 +172,28 @@ func colorfulOf(c ui.Color) colorful.Color {
 func TestCodeColorsRead(t *testing.T) {
 	for _, s := range Schemes {
 		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
-			for name, c := range map[string]ui.Color{"CodeKeyword": p.CodeKeyword, "CodeString": p.CodeString, "CodeNumber": p.CodeNumber, "CodeType": p.CodeType} {
-				for ground, g := range map[string]ui.Color{"Muted": p.Muted, "Card": p.Card, "Background": p.Background} {
+			codes := map[string]ui.Color{
+				"CodeKeyword": p.CodeKeyword,
+				"CodeString":  p.CodeString,
+				"CodeNumber":  p.CodeNumber,
+				"CodeType":    p.CodeType,
+			}
+			grounds := map[string]ui.Color{
+				"Muted":      p.Muted,
+				"Card":       p.Card,
+				"Background": p.Background,
+			}
+			for name, c := range codes {
+				for ground, g := range grounds {
 					if r := contrast(c, g); r < 7 {
-						t.Errorf("%s %s %s on %s: %.2f:1, at least 7:1", s.Name, mode, name, ground, r)
+						t.Errorf(
+							"%s %s %s on %s: %.2f:1, at least 7:1",
+							s.Name,
+							mode,
+							name,
+							ground,
+							r,
+						)
 					}
 				}
 			}
@@ -155,13 +204,27 @@ func TestCodeColorsRead(t *testing.T) {
 // Code in a sentence reads on its tint over every surface a reply is on,
 // at 4.5:1 at least, a word in the brand's hue, or grey as a grey brand.
 func TestInlineCodeReads(t *testing.T) {
+	kinds := map[CodeKind]string{CodeWord: "word", CodePath: "path", CodeCall: "call"}
 	for _, s := range Schemes {
 		for mode, p := range map[string]Palette{"light": s.Light, "dark": s.Dark} {
-			for kind, name := range map[CodeKind]string{CodeWord: "word", CodePath: "path", CodeCall: "call"} {
+			grounds := map[string]ui.Color{
+				"Secondary":  p.Secondary,
+				"Muted":      p.Muted,
+				"Card":       p.Card,
+				"Background": p.Background,
+			}
+			for kind, name := range kinds {
 				ink, tint := p.InlineCode(kind)
-				for ground, g := range map[string]ui.Color{"Secondary": p.Secondary, "Muted": p.Muted, "Card": p.Card, "Background": p.Background} {
+				for ground, g := range grounds {
 					if r := contrast(ink, tint.Over(g)); r < 4.5 {
-						t.Errorf("%s %s %s on its tint on %s: %.2f:1, at least 4.5:1", s.Name, mode, name, ground, r)
+						t.Errorf(
+							"%s %s %s on its tint on %s: %.2f:1, at least 4.5:1",
+							s.Name,
+							mode,
+							name,
+							ground,
+							r,
+						)
 					}
 				}
 			}
@@ -171,7 +234,14 @@ func TestInlineCodeReads(t *testing.T) {
 			case p.Grey() && c >= 0.02:
 				t.Errorf("%s %s Emphasis: chroma %.3f, grey as the brand", s.Name, mode, c)
 			case !p.Grey() && (c < 0.04 || math.Abs(hue-brand) > 10):
-				t.Errorf("%s %s Emphasis: chroma %.3f at %.0f°, at least 0.04 at the brand's %.0f°", s.Name, mode, c, hue, brand)
+				t.Errorf(
+					"%s %s Emphasis: chroma %.3f at %.0f°, at least 0.04 at the brand's %.0f°",
+					s.Name,
+					mode,
+					c,
+					hue,
+					brand,
+				)
 			}
 			if p.Grey() != (brandChroma < 0.02) {
 				t.Errorf("%s %s: brand chroma %.3f, grey %v", s.Name, mode, brandChroma, p.Grey())

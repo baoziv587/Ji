@@ -33,11 +33,19 @@ func (b *Progress) Bar(c *ui.Context, label string, value float64, busy bool) ui
 	return ui.Box(c).Height(progressHeight).Radius(radius).Background(p.Primary.Alpha(0.2)).Clip().
 		Role(ui.RoleProgress).Range(0, 1, value).Label(label).
 		Draw(func(pt *ui.Painter, r ui.Rect) {
-			phase := float32(pt.Now().UnixMilli()%sweep.Milliseconds()) / float32(sweep.Milliseconds())
+			phase := float32(
+				pt.Now().UnixMilli()%sweep.Milliseconds(),
+			) / float32(
+				sweep.Milliseconds(),
+			)
 			if value < 0 {
 				pt.AnimationFrame()
 				w := r.W * 0.3
-				pt.Fill(ui.Rect{X: r.X - w + (r.W+w)*phase, Y: r.Y, W: w, H: r.H}, p.Primary, radius)
+				pt.Fill(
+					ui.Rect{X: r.X - w + (r.W+w)*phase, Y: r.Y, W: w, H: r.H},
+					p.Primary,
+					radius,
+				)
 				return
 			}
 
@@ -55,10 +63,18 @@ func (b *Progress) Bar(c *ui.Context, label string, value float64, busy bool) ui
 			w := r.W * 0.4
 			sheen := p.PrimaryForeground.Alpha(0.35)
 			pt.Clip(fill, radius, func() {
-				pt.FillGradient(ui.Rect{X: r.X - w + (r.W+w)*phase, Y: r.Y, W: w, H: r.H}, ui.LinearGradient{
-					Angle: 90,
-					Stops: []ui.GradientStop{{Color: sheen.Alpha(0), At: 0}, {Color: sheen, At: 0.5}, {Color: sheen.Alpha(0), At: 1}},
-				}, 0)
+				pt.FillGradient(
+					ui.Rect{X: r.X - w + (r.W+w)*phase, Y: r.Y, W: w, H: r.H},
+					ui.LinearGradient{
+						Angle: 90,
+						Stops: []ui.GradientStop{
+							{Color: sheen.Alpha(0), At: 0},
+							{Color: sheen, At: 0.5},
+							{Color: sheen.Alpha(0), At: 1},
+						},
+					},
+					0,
+				)
 			})
 		})
 }

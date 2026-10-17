@@ -84,7 +84,9 @@ func TestInstallUnpacksTheRelease(t *testing.T) {
 	if got, _ := Find(rt); got != node {
 		t.Errorf("Find returns %q, not the runtime installed", got)
 	}
-	if link, _ := os.Readlink(filepath.Join(rt.Dir, top, "bin", "npm")); link != "../lib/npm-cli.js" {
+	if link, _ := os.Readlink(
+		filepath.Join(rt.Dir, top, "bin", "npm"),
+	); link != "../lib/npm-cli.js" {
 		t.Errorf("bin/npm links to %q", link)
 	}
 	if left, _ := filepath.Glob(filepath.Join(rt.Dir, ".installing-*")); len(left) > 0 {
@@ -94,8 +96,16 @@ func TestInstallUnpacksTheRelease(t *testing.T) {
 
 func TestInstallRefusesWhatIsNotTheRelease(t *testing.T) {
 	top := "node-v24.0.0-" + platform()
-	rt := serve(t, archive(t, entry{name: top + "/bin/node", body: "tampered"}), strings.Repeat("0", 64))
-	if _, err := rt.Install(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "SHA-256") {
+	rt := serve(
+		t,
+		archive(t, entry{name: top + "/bin/node", body: "tampered"}),
+		strings.Repeat("0", 64),
+	)
+	if _, err := rt.Install(
+		context.Background(),
+		nil,
+	); err == nil ||
+		!strings.Contains(err.Error(), "SHA-256") {
 		t.Errorf("installed an archive of another checksum: %v", err)
 	}
 	if entries, _ := os.ReadDir(rt.Dir); len(entries) > 0 {
@@ -110,7 +120,11 @@ func TestInstallKeepsToItsDirectory(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			rt := serve(t, archive(t, e), "")
-			if _, err := rt.Install(context.Background(), nil); err == nil || !strings.Contains(err.Error(), "outside") {
+			if _, err := rt.Install(
+				context.Background(),
+				nil,
+			); err == nil ||
+				!strings.Contains(err.Error(), "outside") {
 				t.Errorf("unpacked %s outside the runtime: %v", name, err)
 			}
 		})

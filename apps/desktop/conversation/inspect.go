@@ -91,7 +91,15 @@ func inspectLines(t *Transcript, call *ToolCall) []inspectLine {
 	if call.Edit {
 		out = append(out, inspectLine{kind: inspectHeading, text: "Changes"})
 		for i, line := range call.Diff {
-			out = append(out, inspectLine{kind: inspectDiff, line: line, first: i == 0, last: i == len(call.Diff)-1})
+			out = append(
+				out,
+				inspectLine{
+					kind:  inspectDiff,
+					line:  line,
+					first: i == 0,
+					last:  i == len(call.Diff)-1,
+				},
+			)
 		}
 	} else if call.Args != "" {
 		out = append(out, inspectLine{kind: inspectHeading, text: "Input"})
@@ -100,17 +108,33 @@ func inspectLines(t *Transcript, call *ToolCall) []inspectLine {
 
 	switch {
 	case !call.Done:
-		out = append(out, inspectLine{kind: inspectHeading, text: "Output"}, inspectLine{kind: inspectPending})
+		out = append(
+			out,
+			inspectLine{kind: inspectHeading, text: "Output"},
+			inspectLine{kind: inspectPending},
+		)
 	case call.Stopped:
-		out = append(out, inspectLine{kind: inspectHeading, text: "Stopped"}, inspectLine{kind: inspectProse, text: "The reply ended before this call did."})
+		out = append(
+			out,
+			inspectLine{kind: inspectHeading, text: "Stopped"},
+			inspectLine{kind: inspectProse, text: "The reply ended before this call did."},
+		)
 	case call.Output == "":
-		out = append(out, inspectLine{kind: inspectHeading, text: "Output"}, inspectLine{kind: inspectProse, text: "No output."})
+		out = append(
+			out,
+			inspectLine{kind: inspectHeading, text: "Output"},
+			inspectLine{kind: inspectProse, text: "No output."},
+		)
 	case call.OK && call.Name == "read":
 		out = append(append(out, inspectLine{kind: inspectHeading, text: "Output"}), read(call)...)
 	case call.OK:
-		out = append(append(out, inspectLine{kind: inspectHeading, text: "Output"}), code(call.Output, nil, 1)...)
+		out = append(
+			append(out, inspectLine{kind: inspectHeading, text: "Output"}),
+			code(call.Output, nil, 1)...)
 	default:
-		out = append(append(out, inspectLine{kind: inspectHeading, text: "Error"}), code(call.Output, nil, 1)...)
+		out = append(
+			append(out, inspectLine{kind: inspectHeading, text: "Error"}),
+			code(call.Output, nil, 1)...)
 	}
 	call.lines, call.linesDone = out, call.Done
 	return out
@@ -153,7 +177,14 @@ func code(text string, lang *syntax.Lang, from int) []inspectLine {
 	digits := len(fmt.Sprint(from + n - 1))
 	out := make([]inspectLine, n)
 	for i := range out {
-		out[i] = inspectLine{kind: inspectCode, line: DiffLine{Code: block, At: i}, n: from + i, digits: digits, first: i == 0, last: i == n-1}
+		out[i] = inspectLine{
+			kind:   inspectCode,
+			line:   DiffLine{Code: block, At: i},
+			n:      from + i,
+			digits: digits,
+			first:  i == 0,
+			last:   i == n-1,
+		}
 	}
 	return out
 }
@@ -164,7 +195,11 @@ func inspectRow(c *ui.Context, t *Transcript, line inspectLine) {
 	xs := components.TextXS(th)
 	switch line.kind {
 	case inspectHeading:
-		ui.Text(c, line.text).FontSize(xs).FontWeight(500).TextColor(p.MutedForeground).Padding(20, 16, 8)
+		ui.Text(c, line.text).
+			FontSize(xs).
+			FontWeight(500).
+			TextColor(p.MutedForeground).
+			Padding(20, 16, 8)
 	case inspectSubject:
 		var subject ui.Element
 		if line.line.Code != nil {
@@ -203,15 +238,26 @@ func inspectRow(c *ui.Context, t *Transcript, line inspectLine) {
 			bottom = 8
 		}
 		ui.Row(c).Padding(0, 16).Children(func() {
-			well := ui.Row(c).Grow(1).MinWidth(0).Background(p.Muted).Radius(top, top, bottom, bottom).Padding(top/2, 0, bottom/2)
+			well := ui.Row(c).
+				Grow(1).
+				MinWidth(0).
+				Background(p.Muted).
+				Radius(top, top, bottom, bottom).
+				Padding(top/2, 0, bottom/2)
 			well.Children(func() {
 				_, band := diffColors(th, line.line.Kind)
-				ui.Row(c).Grow(1).MinWidth(0).Gap(12).Padding(1, 12).Background(band).Children(func() {
-					if line.kind == inspectCode {
-						lineNumber(c, line.n, line.digits)
-					}
-					codeLine(c, line.line).LineHeight(1.5).Grow(1).Shrink(1).MinWidth(0)
-				})
+				ui.Row(c).
+					Grow(1).
+					MinWidth(0).
+					Gap(12).
+					Padding(1, 12).
+					Background(band).
+					Children(func() {
+						if line.kind == inspectCode {
+							lineNumber(c, line.n, line.digits)
+						}
+						codeLine(c, line.line).LineHeight(1.5).Grow(1).Shrink(1).MinWidth(0)
+					})
 			})
 		})
 	}

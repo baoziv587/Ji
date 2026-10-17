@@ -61,7 +61,11 @@ const (
 )
 
 func NewOnboarding(update func(func())) *Onboarding {
-	return &Onboarding{update: update, async: func(fn func()) { go fn() }, Settings: DefaultSettings}
+	return &Onboarding{
+		update:   update,
+		async:    func(fn func()) { go fn() },
+		Settings: DefaultSettings,
+	}
 }
 
 // Begin looks for Node.js, and starts the service on what it finds.
@@ -169,11 +173,15 @@ func waiting(c *ui.Context, label string) {
 }
 
 func (o *Onboarding) missing(c *ui.Context, p *components.Palette) {
-	why := fmt.Sprintf("The agent runs on Node.js %d or later, which this Mac does not have. Ji Agent can download a copy of its own, kept apart from any Node.js you install.", nodejs.MinMajor)
+	why := fmt.Sprintf(
+		"The agent runs on Node.js %d or later, which this Mac does not have. Ji Agent can download a copy of its own, kept apart from any Node.js you install.",
+		nodejs.MinMajor,
+	)
 	components.EmptyHeader(c, icons.Download, "Ji Agent needs Node.js", why)
 
 	ui.Row(c).Gap(8).Children(func() {
-		if components.Button(c, "Install Node.js", components.ButtonStyle{Icon: icons.Download}).Clicked() {
+		if components.Button(c, "Install Node.js", components.ButtonStyle{Icon: icons.Download}).
+			Clicked() {
 			o.install()
 		}
 		if components.Button(c, "Check Again", components.ButtonStyle{Variant: components.Outline}).
@@ -183,8 +191,14 @@ func (o *Onboarding) missing(c *ui.Context, p *components.Palette) {
 	})
 
 	ui.Column(c).Gap(2).AlignItems(ui.Center).Children(func() {
-		for _, line := range []string{"Node.js " + o.Version + " from nodejs.org, about 50 MB, into", o.Where} {
-			ui.Text(c, line).TextColor(p.MutedForeground).FontSize(components.TextXS(c.Theme())).TextAlign(ui.Center)
+		for _, line := range []string{
+			"Node.js " + o.Version + " from nodejs.org, about 50 MB, into",
+			o.Where,
+		} {
+			ui.Text(c, line).
+				TextColor(p.MutedForeground).
+				FontSize(components.TextXS(c.Theme())).
+				TextAlign(ui.Center)
 		}
 	})
 }
@@ -206,7 +220,9 @@ func (o *Onboarding) downloading(c *ui.Context, p *components.Palette) {
 		ui.Row(c).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "Installing Node.js "+o.Version).FontWeight(500).Grow(1)
 			if value >= 0 {
-				ui.Text(c, fmt.Sprintf("%d%%", int(value*100))).TextColor(p.MutedForeground).FontFeatures("tnum")
+				ui.Text(c, fmt.Sprintf("%d%%", int(value*100))).
+					TextColor(p.MutedForeground).
+					FontFeatures("tnum")
 			}
 		})
 
@@ -214,11 +230,18 @@ func (o *Onboarding) downloading(c *ui.Context, p *components.Palette) {
 
 		// As tall as the button, so the row keeps its height once it goes
 		ui.Row(c).Height(24).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, status).TextColor(p.MutedForeground).FontSize(components.TextXS(c.Theme())).FontFeatures("tnum").Grow(1)
+			ui.Text(c, status).
+				TextColor(p.MutedForeground).
+				FontSize(components.TextXS(c.Theme())).
+				FontFeatures("tnum").
+				Grow(1)
 			if d.unpacking() {
 				return
 			}
-			cancel := components.ButtonStyle{Variant: components.Ghost, Size: components.SizeExtraSmall}
+			cancel := components.ButtonStyle{
+				Variant: components.Ghost,
+				Size:    components.SizeExtraSmall,
+			}
 			if components.Button(c, "Cancel", cancel).Clicked() {
 				o.cancel()
 			}

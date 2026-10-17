@@ -147,7 +147,9 @@ var parser = goldmark.New(goldmark.WithExtensions(extension.GFM)).Parser()
 
 // held is a line that may still turn out a fence, a table's, a rule, a
 // heading, an item or a quote while it is written: the terminal's HOLD.
-var held = regexp.MustCompile("(?i)^ {0,3}(?:`{0,3}$|```|~{0,3}$|~~~|\\|)|^[\\s>#*+\\-_\\d.)\\[\\]x]*$")
+var held = regexp.MustCompile(
+	"(?i)^ {0,3}(?:`{0,3}$|```|~{0,3}$|~~~|\\|)|^[\\s>#*+\\-_\\d.)\\[\\]x]*$",
+)
 
 // fenceOpen and fenceClose open and close a fenced block.
 var (
@@ -228,7 +230,10 @@ func (m *markdown) scan(text string) {
 		m.scanned = start + n + 1
 
 		if m.fence != "" {
-			if f := fenceClose.FindStringSubmatch(line); f != nil && f[1][0] == m.fence[0] && len(f[1]) >= len(m.fence) {
+			if f := fenceClose.FindStringSubmatch(
+				line,
+			); f != nil && f[1][0] == m.fence[0] &&
+				len(f[1]) >= len(m.fence) {
 				m.fence = ""
 				if m.fenceAlone {
 					m.fenceAlone = false
@@ -248,7 +253,10 @@ func (m *markdown) scan(text string) {
 		if margin && line[0] == '<' {
 			m.html = true
 		}
-		if f := fenceOpen.FindStringSubmatch(line); f != nil && (f[1][0] == '~' || !strings.Contains(f[2], "`")) {
+		if f := fenceOpen.FindStringSubmatch(
+			line,
+		); f != nil &&
+			(f[1][0] == '~' || !strings.Contains(f[2], "`")) {
 			m.fence = f[1]
 			if margin && !m.html {
 				m.cut(text, start, m.blankCut && m.stable == start)
@@ -274,7 +282,14 @@ func (m *markdown) cut(text string, at int, blank bool) {
 // code blocks it did not take, or, for blocks still being written, those
 // it took.
 func (m *markdown) parse(src string, whole bool) []*fenced {
-	f := flattener{src: []byte(src), whole: whole, cut: m.stable > 0 && m.blankCut, codes: m.codes, out: m.blocks, pending: -1}
+	f := flattener{
+		src:     []byte(src),
+		whole:   whole,
+		cut:     m.stable > 0 && m.blankCut,
+		codes:   m.codes,
+		out:     m.blocks,
+		pending: -1,
+	}
 	f.children(parser.Parse(text.NewReader(f.src)))
 	m.blocks = f.out
 	if whole {
@@ -360,7 +375,8 @@ func (f *flattener) list(n *ast.List) {
 	tight := f.tight
 	first := float32(8)
 	switch {
-	case n.HasBlankPreviousLines() || f.cut && n.PreviousSibling() == nil && n.Parent().Type() == ast.TypeDocument:
+	case n.HasBlankPreviousLines() ||
+		f.cut && n.PreviousSibling() == nil && n.Parent().Type() == ast.TypeDocument:
 		first = 12
 	case tight:
 		first = 4
@@ -510,7 +526,9 @@ func (f *flattener) inline(n ast.Node) []mdRun {
 			case *ast.Text:
 				value := c.Segment.Value(f.src)
 				if !c.IsRaw() {
-					value = util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(value)))
+					value = util.ResolveEntityNames(
+						util.ResolveNumericReferences(util.UnescapePunctuations(value)),
+					)
 				}
 				add(string(value), style, url)
 				if c.SoftLineBreak() || c.HardLineBreak() {
@@ -521,7 +539,11 @@ func (f *flattener) inline(n ast.Node) []mdRun {
 			case *ast.CodeSpan:
 				for t := c.FirstChild(); t != nil; t = t.NextSibling() {
 					if t, ok := t.(*ast.Text); ok {
-						add(strings.ReplaceAll(string(t.Segment.Value(f.src)), "\n", " "), style|styleCode, url)
+						add(
+							strings.ReplaceAll(string(t.Segment.Value(f.src)), "\n", " "),
+							style|styleCode,
+							url,
+						)
 					}
 				}
 			case *ast.Emphasis:

@@ -152,7 +152,10 @@ func findScript(bundled string) (string, error) {
 	if exists(bundled) {
 		return bundled, nil
 	}
-	return "", fmt.Errorf("cannot find %s, and the app carries no bundle of it (pnpm desktop:build): pass -agent with its path, or -server with the address of a running one", serverScript)
+	return "", fmt.Errorf(
+		"cannot find %s, and the app carries no bundle of it (pnpm desktop:build): pass -agent with its path, or -server with the address of a running one",
+		serverScript,
+	)
 }
 
 func exists(path string) bool {

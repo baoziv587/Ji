@@ -8,7 +8,11 @@ import (
 
 // Code is a block of code: bg-muted rounded-md.
 func Code(c *ui.Context, fn func()) ui.Element {
-	return ui.Column(c).Padding(8, 12).Radius(c.Theme().Radius).Background(components.PaletteOf(c.Theme()).Muted).Children(fn)
+	return ui.Column(c).
+		Padding(8, 12).
+		Radius(c.Theme().Radius).
+		Background(components.PaletteOf(c.Theme()).Muted).
+		Children(fn)
 }
 
 // Diff shows a command or a diff in color, its added and removed lines on

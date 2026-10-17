@@ -47,12 +47,24 @@ func (c *Client) FollowSessions(ctx context.Context, fn func(Sessions), status f
 
 func (c *Client) CreateSession(ctx context.Context, root, model string) (Session, error) {
 	var s Session
-	return s, c.do(ctx, http.MethodPost, "/api/sessions", map[string]string{"root": root, "model": model}, &s)
+	return s, c.do(
+		ctx,
+		http.MethodPost,
+		"/api/sessions",
+		map[string]string{"root": root, "model": model},
+		&s,
+	)
 }
 
 func (c *Client) Archive(ctx context.Context, id string, archived bool) (Session, error) {
 	var s Session
-	return s, c.do(ctx, http.MethodPost, sessionPath(id, "archive"), map[string]bool{"archived": archived}, &s)
+	return s, c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "archive"),
+		map[string]bool{"archived": archived},
+		&s,
+	)
 }
 
 func (c *Client) State(ctx context.Context, id string) (State, error) {
@@ -64,7 +76,13 @@ func (c *Client) Send(ctx context.Context, id, text string) (string, error) {
 	var out struct {
 		Result string `json:"result"`
 	}
-	err := c.do(ctx, http.MethodPost, sessionPath(id, "messages"), map[string]string{"text": text}, &out)
+	err := c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "messages"),
+		map[string]string{"text": text},
+		&out,
+	)
 	return out.Result, err
 }
 
@@ -72,7 +90,13 @@ func (c *Client) Command(ctx context.Context, id, line string) (string, error) {
 	var out struct {
 		Result string `json:"result"`
 	}
-	err := c.do(ctx, http.MethodPost, sessionPath(id, "commands"), map[string]string{"line": line}, &out)
+	err := c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "commands"),
+		map[string]string{"line": line},
+		&out,
+	)
 	return out.Result, err
 }
 
@@ -81,7 +105,13 @@ func (c *Client) Answer(ctx context.Context, id, question string, answers [][]st
 	if answers == nil {
 		body = map[string]any{"dismissed": true}
 	}
-	return c.do(ctx, http.MethodPost, sessionPath(id, "questions/"+url.PathEscape(question)), body, nil)
+	return c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "questions/"+url.PathEscape(question)),
+		body,
+		nil,
+	)
 }
 
 func (c *Client) Stop(ctx context.Context, id string) error {
@@ -90,7 +120,13 @@ func (c *Client) Stop(ctx context.Context, id string) error {
 
 func (c *Client) SetMode(ctx context.Context, id, mode string) (State, error) {
 	var s State
-	return s, c.do(ctx, http.MethodPost, sessionPath(id, "mode"), map[string]string{"mode": mode}, &s)
+	return s, c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "mode"),
+		map[string]string{"mode": mode},
+		&s,
+	)
 }
 
 func (c *Client) SetModes(ctx context.Context, mode string) error {
@@ -99,12 +135,24 @@ func (c *Client) SetModes(ctx context.Context, mode string) error {
 
 func (c *Client) Think(ctx context.Context, id, level string) (State, error) {
 	var s State
-	return s, c.do(ctx, http.MethodPost, sessionPath(id, "thinking"), map[string]string{"level": level}, &s)
+	return s, c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "thinking"),
+		map[string]string{"level": level},
+		&s,
+	)
 }
 
 func (c *Client) UseModel(ctx context.Context, id, model string) (State, error) {
 	var s State
-	return s, c.do(ctx, http.MethodPost, sessionPath(id, "model"), map[string]string{"model": model}, &s)
+	return s, c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "model"),
+		map[string]string{"model": model},
+		&s,
+	)
 }
 
 func (c *Client) Providers(ctx context.Context) ([]Provider, error) {
@@ -120,7 +168,12 @@ func (c *Client) Models(ctx context.Context, provider string) ([]Model, error) {
 }
 
 func (c *Client) StoreKey(ctx context.Context, provider, key string) ([]Provider, error) {
-	return c.providers(ctx, http.MethodPut, providerPath(provider, "key"), map[string]string{"key": key})
+	return c.providers(
+		ctx,
+		http.MethodPut,
+		providerPath(provider, "key"),
+		map[string]string{"key": key},
+	)
 }
 
 func (c *Client) ForgetKey(ctx context.Context, provider string) ([]Provider, error) {
@@ -139,7 +192,13 @@ func (c *Client) ProbeEndpoint(ctx context.Context, baseURL, key, id string) ([]
 	var out struct {
 		Models []string `json:"models"`
 	}
-	err := c.do(ctx, http.MethodPost, "/api/endpoints/probe", map[string]string{"baseUrl": baseURL, "key": key, "id": id}, &out)
+	err := c.do(
+		ctx,
+		http.MethodPost,
+		"/api/endpoints/probe",
+		map[string]string{"baseUrl": baseURL, "key": key, "id": id},
+		&out,
+	)
 	return out.Models, err
 }
 
@@ -166,7 +225,13 @@ func (c *Client) Follow(ctx context.Context, id string, after int, fn func(Event
 
 // reconnect reads a stream until ctx ends, connecting again a second after
 // each drop; after, when given, says from where.
-func (c *Client) reconnect(ctx context.Context, path string, after *int, fn func(json.RawMessage), status func(error)) {
+func (c *Client) reconnect(
+	ctx context.Context,
+	path string,
+	after *int,
+	fn func(json.RawMessage),
+	status func(error),
+) {
 	for ctx.Err() == nil {
 		err := c.stream(ctx, path, after, fn, status)
 		if ctx.Err() != nil {
@@ -181,7 +246,13 @@ func (c *Client) reconnect(ctx context.Context, path string, after *int, fn func
 }
 
 // stream reads one connection's events until it drops.
-func (c *Client) stream(ctx context.Context, path string, after *int, fn func(json.RawMessage), status func(error)) error {
+func (c *Client) stream(
+	ctx context.Context,
+	path string,
+	after *int,
+	fn func(json.RawMessage),
+	status func(error),
+) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
 		return err

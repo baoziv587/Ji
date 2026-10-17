@@ -30,36 +30,53 @@ func (a *App) sidebar(c *ui.Context) {
 		}
 		background = p.Sidebar.Alpha(veil.at(a.Settings.Transparency))
 	}
-	ui.Column(c).Fill().Background(background).BorderWidth(0, 1, 0, 0).BorderColor(p.SidebarBorder).Children(func() {
-		if a.settingsOpen {
-			a.settingsNav(c)
-		} else {
-			a.sessionsNav(c)
-		}
-
-		ui.Row(c).Gap(6).Padding(8, 10, 10).Justify(ui.End).Children(func() {
-			if a.ChooseFolder != nil {
-				open := components.Button(c, "Open Folder…", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.FolderOpen}).
-					Tooltip("Start a session in another folder (⌘O)").Grow(1)
-				if open.Clicked() {
-					a.NewSessionInFolder()
-				}
-			}
-
-			gear := components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Settings}).
-				Label("Settings").Tooltip("Settings (⌘,)")
+	ui.Column(c).
+		Fill().
+		Background(background).
+		BorderWidth(0, 1, 0, 0).
+		BorderColor(p.SidebarBorder).
+		Children(func() {
 			if a.settingsOpen {
-				gear.Background(p.SidebarAccent)
+				a.settingsNav(c)
+			} else {
+				a.sessionsNav(c)
 			}
-			if gear.Clicked() {
-				if a.settingsOpen {
-					a.settingsOpen = false
-				} else {
-					a.OpenSettings()
+
+			ui.Row(c).Gap(6).Padding(8, 10, 10).Justify(ui.End).Children(func() {
+				if a.ChooseFolder != nil {
+					openStyle := components.ButtonStyle{
+						Variant: components.Outline,
+						Size:    components.SizeSmall,
+						Icon:    icons.FolderOpen,
+					}
+					open := components.Button(c, "Open Folder…", openStyle).
+						Tooltip("Start a session in another folder (⌘O)").
+						Grow(1)
+					if open.Clicked() {
+						a.NewSessionInFolder()
+					}
 				}
-			}
+
+				gearStyle := components.ButtonStyle{
+					Variant: components.Ghost,
+					Size:    components.SizeIconSmall,
+					Icon:    icons.Settings,
+				}
+				gear := components.Button(c, "", gearStyle).
+					Label("Settings").
+					Tooltip("Settings (⌘,)")
+				if a.settingsOpen {
+					gear.Background(p.SidebarAccent)
+				}
+				if gear.Clicked() {
+					if a.settingsOpen {
+						a.settingsOpen = false
+					} else {
+						a.OpenSettings()
+					}
+				}
+			})
 		})
-	})
 }
 
 // sessionsNav is the sidebar's title bar, how the service is reached and
@@ -73,8 +90,15 @@ func (a *App) sessionsNav(c *ui.Context) {
 		}
 		ui.Box(c).Size(6, 6).Radius(3).Background(dot).Label("Connection").Tooltip(a.link.tooltip())
 		ui.Text(c, "Sessions").FontWeight(600).Grow(1)
-		if components.Button(c, "", components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall, Icon: icons.Plus}).
-			Label("New Session").Tooltip("New Session (⌘N)").Clicked() {
+		plus := components.ButtonStyle{
+			Variant: components.Ghost,
+			Size:    components.SizeIconSmall,
+			Icon:    icons.Plus,
+		}
+		if components.Button(c, "", plus).
+			Label("New Session").
+			Tooltip("New Session (⌘N)").
+			Clicked() {
 			a.NewSession("")
 		}
 	})
@@ -86,11 +110,16 @@ func (a *App) sessionsNav(c *ui.Context) {
 			a.section(c, g)
 		}
 		if len(groups.archived) > 0 {
-			ui.SidebarSection(c, fmt.Sprintf("Archived (%d)", len(groups.archived)), &a.archivedOpen, func() {
-				for _, i := range groups.archived {
-					a.row(c, a.list.Sessions[i])
-				}
-			})
+			ui.SidebarSection(
+				c,
+				fmt.Sprintf("Archived (%d)", len(groups.archived)),
+				&a.archivedOpen,
+				func() {
+					for _, i := range groups.archived {
+						a.row(c, a.list.Sessions[i])
+					}
+				},
+			)
 		}
 	}).Background(ui.Transparent).Grow(1).Changed() {
 		a.Select(chosen)
@@ -102,7 +131,14 @@ func (a *App) sessionsNav(c *ui.Context) {
 // lined up with the items' text.
 func (a *App) sidebarBar(c *ui.Context, fn func()) {
 	bar := c.TitleBar()
-	ui.Row(c).Height(TitleBarHeight).Shrink(0).Padding(0, 10, 0, max(bar.Left+16, 18)).Gap(8).AlignItems(ui.Center).DragWindow().Children(fn)
+	ui.Row(c).
+		Height(TitleBarHeight).
+		Shrink(0).
+		Padding(0, 10, 0, max(bar.Left+16, 18)).
+		Gap(8).
+		AlignItems(ui.Center).
+		DragWindow().
+		Children(fn)
 }
 
 // chosen marks the sidebar's active item, focused or not, on the
@@ -190,7 +226,10 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	status := a.status(s)
-	item := ui.SidebarItem(c.Key(s.ID), s.ID, nil, titleOf(s)).Height(32).Padding(0, 8).Transition(components.ColorTransition)
+	item := ui.SidebarItem(c.Key(s.ID), s.ID, nil, titleOf(s)).
+		Height(32).
+		Padding(0, 8).
+		Transition(components.ColorTransition)
 	if s.ID == a.selected {
 		a.chosen(c, item)
 	}
@@ -203,7 +242,11 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 		case "failed":
 			components.Tag(c, "Failed", p.Destructive)
 		default:
-			ui.Text(c, format.Ago(s.Updated, time.Now())).FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground).FontFeatures("tnum")
+			ui.Text(c, format.Ago(s.Updated, time.Now())).
+				FontSize(components.TextXS(t)).
+				FontWeight(500).
+				TextColor(p.MutedForeground).
+				FontFeatures("tnum")
 		}
 	})
 	item.ContextMenu(func(m *ui.Menu) {
