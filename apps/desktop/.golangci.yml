@@ -1,7 +1,12 @@
 version: '2'
 linters:
   default: standard
+  enable:
+    - lll
   settings:
+    lll:
+      line-length: 100
+      tab-width: 4
     staticcheck:
       # staticcheck's defaults, and o.look.apply kept as it reads: the theme's
       # look, not a method of its own
@@ -18,8 +23,18 @@ linters:
     # defer f.Close() and the like
     presets:
       - std-error-handling
+    rules:
+      # A line long for a string, kept whole so that it can be searched for
+      - linters:
+          - lll
+        source: '"[^"]{50,}"|`'
 formatters:
   # Not gofumpt: the module is named desktop, without a dot, and it would
   # group desktop/... with the standard library
   enable:
     - gofmt
+    - golines
+  settings:
+    golines:
+      max-len: 100
+      tab-len: 4

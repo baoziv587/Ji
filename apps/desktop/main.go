@@ -3,12 +3,14 @@
 // in a JSONL log; this app starts it, or connects to one already running, and
 // draws the sessions with MyGo's native UI (package app).
 //
-//	pnpm desktop                             # from the repository: works on the directory it is run from
+//	pnpm desktop                             # from the repository: works on the
+//	                                         # directory it is run from
 //	pnpm desktop:build                       # the .app and .dmg, with the service bundled in
 //	go tool mygo dev                         # with live reload, working on this directory
 //	go run . -root ~/code/project            # works on another project
 //	go run . -server http://127.0.0.1:4317   # connects to a running service (pnpm agent-server)
-//	go run . -onboarding                     # installs Node.js as if there were none (pnpm desktop:onboarding)
+//	go run . -onboarding                     # installs Node.js as if there were none
+//	                                         # (pnpm desktop:onboarding)
 //
 // The service runs on Node.js: Ji Agent's own once installed, else the
 // system's when new enough. With neither, the window offers to install Ji
@@ -44,18 +46,46 @@ func main() {
 	if home, err := os.UserHomeDir(); err == nil && wd == "/" {
 		wd = home
 	}
-	address := flag.String("server", os.Getenv("JI_AGENT_SERVER"), "address of a running agent service; started here when empty")
+	address := flag.String(
+		"server",
+		os.Getenv("JI_AGENT_SERVER"),
+		"address of a running agent service; started here when empty",
+	)
 	// pnpm runs a script in the package's directory, and says in INIT_CWD where it was run from
-	root := flag.String("root", envOr("JI_AGENT_ROOT", envOr("INIT_CWD", wd)), "where a new session works when no folder is chosen")
-	sessions := flag.String("sessions", os.Getenv("JI_AGENT_SESSIONS"), "where the service keeps the sessions (default: ~/.ji/sessions)")
-	model := flag.String("model", os.Getenv("JI_AGENT_MODEL"), "the model, provider/id (default: the service's)")
-	thinking := flag.String("thinking", os.Getenv("JI_AGENT_THINKING"), "the thinking level (default: the service's)")
-	script := flag.String("agent", os.Getenv("JI_AGENT_SCRIPT"), "path of apps/coding-agent/src/server.ts (default: found above this directory)")
+	root := flag.String(
+		"root",
+		envOr("JI_AGENT_ROOT", envOr("INIT_CWD", wd)),
+		"where a new session works when no folder is chosen",
+	)
+	sessions := flag.String(
+		"sessions",
+		os.Getenv("JI_AGENT_SESSIONS"),
+		"where the service keeps the sessions (default: ~/.ji/sessions)",
+	)
+	model := flag.String(
+		"model",
+		os.Getenv("JI_AGENT_MODEL"),
+		"the model, provider/id (default: the service's)",
+	)
+	thinking := flag.String(
+		"thinking",
+		os.Getenv("JI_AGENT_THINKING"),
+		"the thinking level (default: the service's)",
+	)
+	script := flag.String(
+		"agent",
+		os.Getenv("JI_AGENT_SCRIPT"),
+		"path of apps/coding-agent/src/server.ts (default: found above this directory)",
+	)
 	yolo := flag.Bool("yolo", os.Getenv("JI_AGENT_YOLO") == "1", "nothing waits for a yes")
 
 	// Shows the onboarding as if the computer had no Node.js, installing into a
 	// directory of its own that is removed on quit
-	onboarding := flag.Bool("onboarding", os.Getenv("JI_AGENT_ONBOARDING") == "1", "go through the onboarding as if there were no Node.js")
+	onboarding := flag.Bool(
+		"onboarding",
+		os.Getenv("JI_AGENT_ONBOARDING") == "1",
+		"go through the onboarding as if there were no Node.js",
+	)
 	flag.Parse()
 
 	own := nodejs.Runtime{Dir: configPath("runtime"), Release: nodejs.Pinned}
@@ -118,9 +148,13 @@ func main() {
 			// Run from the source, a scheme's stylesheet shows as it is saved
 			if dir := components.SchemesSource(); dir != "" {
 				go func() {
-					err := components.WatchSchemes(ctx, dir, func(schemes []*components.Scheme, err error) {
-						win.Update(func() { a.SchemesChanged(schemes, err) })
-					})
+					err := components.WatchSchemes(
+						ctx,
+						dir,
+						func(schemes []*components.Scheme, err error) {
+							win.Update(func() { a.SchemesChanged(schemes, err) })
+						},
+					)
 					if err != nil {
 						log.Print(err)
 					}
@@ -166,7 +200,11 @@ func main() {
 			{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
 				{Role: mygo.RoleAbout},
 				mygo.Separator(),
-				{Label: "Settings…", Accelerator: "CmdOrCtrl+,", Click: whenOpen((*app.App).OpenSettings)},
+				{
+					Label:       "Settings…",
+					Accelerator: "CmdOrCtrl+,",
+					Click:       whenOpen((*app.App).OpenSettings),
+				},
 				mygo.Separator(),
 				{Role: mygo.RoleServices},
 				mygo.Separator(),
@@ -177,8 +215,16 @@ func main() {
 				{Role: mygo.RoleQuit},
 			}},
 			{Label: "File", Submenu: []*mygo.MenuItem{
-				{Label: "New Session", Accelerator: "CmdOrCtrl+N", Click: whenOpen(func(a *app.App) { a.NewSession("") })},
-				{Label: "Open Folder…", Accelerator: "CmdOrCtrl+O", Click: whenOpen((*app.App).NewSessionInFolder)},
+				{
+					Label:       "New Session",
+					Accelerator: "CmdOrCtrl+N",
+					Click:       whenOpen(func(a *app.App) { a.NewSession("") }),
+				},
+				{
+					Label:       "Open Folder…",
+					Accelerator: "CmdOrCtrl+O",
+					Click:       whenOpen((*app.App).NewSessionInFolder),
+				},
 				mygo.Separator(),
 				{Role: mygo.RoleClose},
 			}},

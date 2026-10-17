@@ -121,7 +121,11 @@ func describe(call *ToolCall) {
 		}
 		return
 	}
-	call.Diff = append(call.Diff, DiffLine{Text: "--- " + a.Path, Kind: DiffMeta}, DiffLine{Text: "+++ " + a.Path, Kind: DiffMeta})
+	call.Diff = append(
+		call.Diff,
+		DiffLine{Text: "--- " + a.Path, Kind: DiffMeta},
+		DiffLine{Text: "+++ " + a.Path, Kind: DiffMeta},
+	)
 	for _, e := range a.Edits {
 		call.Removed += lineCount(e.Old)
 		call.Added += lineCount(e.New)

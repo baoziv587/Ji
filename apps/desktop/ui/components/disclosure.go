@@ -16,8 +16,14 @@ func Disclosure(c *ui.Context, label string, tint ui.Color, open *bool, fn func(
 	return ui.Column(c).Shrink(0).Children(func() {
 		parts := ui.CollapsibleBase(c, open)
 
-		trigger := parts.Trigger.AlignSelf(ui.Start).Height(20).Gap(8).Radius(4).AlignItems(ui.Center).
-			FocusRing(false).TextColor(p.MutedForeground).Transition(ColorTransition)
+		trigger := parts.Trigger.AlignSelf(ui.Start).
+			Height(20).
+			Gap(8).
+			Radius(4).
+			AlignItems(ui.Center).
+			FocusRing(false).
+			TextColor(p.MutedForeground).
+			Transition(ColorTransition)
 		if trigger.Hovered() {
 			trigger.TextColor(p.Foreground)
 		}

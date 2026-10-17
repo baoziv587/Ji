@@ -95,7 +95,12 @@ func (a *App) pickable(current string) []agent.Provider {
 }
 
 func (a *App) useModel(view *sessionView, model string) {
-	a.callState(view, func(ctx context.Context) (agent.State, error) { return a.agent.UseModel(ctx, view.id, model) })
+	a.callState(
+		view,
+		func(ctx context.Context) (agent.State, error) {
+			return a.agent.UseModel(ctx, view.id, model)
+		},
+	)
 }
 
 // providerOf is the provider of a model, "provider/id"; the id itself can
@@ -109,7 +114,8 @@ func providerOf(model string) string {
 // worked out again only when the models or the query change.
 func (m *modelPicker) filtered(models []agent.Model) []agent.Model {
 	key := [2]string{m.provider, m.query}
-	if key == m.shownFor && len(models) == len(m.shownOf) && (len(models) == 0 || &models[0] == &m.shownOf[0]) {
+	if key == m.shownFor && len(models) == len(m.shownOf) &&
+		(len(models) == 0 || &models[0] == &m.shownOf[0]) {
 		return m.shown
 	}
 	m.shownFor, m.shownOf = key, models
@@ -148,8 +154,18 @@ func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 	picker := &view.models
 	off := s.Archived || st.Replying
 
-	trigger := ui.ButtonBase(c).Height(24).Padding(0, 2, 0, 6).Margin(0, -2, 0, -6).Gap(2).Radius(6).AlignItems(ui.Center).Shrink(1).MinWidth(0).
-		FocusRing(false).Transition(components.ColorTransition).Label("Model")
+	trigger := ui.ButtonBase(c).
+		Height(24).
+		Padding(0, 2, 0, 6).
+		Margin(0, -2, 0, -6).
+		Gap(2).
+		Radius(6).
+		AlignItems(ui.Center).
+		Shrink(1).
+		MinWidth(0).
+		FocusRing(false).
+		Transition(components.ColorTransition).
+		Label("Model")
 	if off {
 		trigger.Disabled(true)
 	} else if trigger.Hovered() || picker.open {
@@ -163,7 +179,10 @@ func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 	trigger.Children(func() {
 		ui.Text(c, st.Model).TextColor(color).SingleLine().Shrink(1)
 		if !off {
-			ui.Icon(c, icons.ChevronDown).FontSize(14).TextColor(p.MutedForeground.Alpha(0.6)).Shrink(0)
+			ui.Icon(c, icons.ChevronDown).
+				FontSize(14).
+				TextColor(p.MutedForeground.Alpha(0.6)).
+				Shrink(0)
 		}
 	})
 	switch {
@@ -199,11 +218,23 @@ func (a *App) showProvider(picker *modelPicker, provider string) {
 // detected down the left, the chosen one's models, filtered by what is
 // typed, on the right. pick takes the model chosen, "provider/id", unless
 // it is current; link adds the way to the settings' list of providers.
-func (a *App) modelMenu(c *ui.Context, anchor ui.Element, picker *modelPicker, current string, link bool, pick func(spec string)) {
+func (a *App) modelMenu(
+	c *ui.Context,
+	anchor ui.Element,
+	picker *modelPicker,
+	current string,
+	link bool,
+	pick func(spec string),
+) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	ui.PopoverBase(c, anchor, &picker.open, func(panel ui.Element) {
-		panel.Margin(4, 0, 0, 0).Width(520).Radius(t.Radius).Background(p.Popover).Border(1, p.Border).Clip().
+		panel.Margin(4, 0, 0, 0).
+			Width(520).
+			Radius(t.Radius).
+			Background(p.Popover).
+			Border(1, p.Border).
+			Clip().
 			Shadow(0, 4, 6, -1, ui.RGBA(0, 0, 0, 0.1))
 		ui.Row(c).Height(340).AlignItems(ui.Stretch).Children(func() {
 			a.pickerProviders(c, picker, current, link)
@@ -219,11 +250,16 @@ func (a *App) pickerProviders(c *ui.Context, picker *modelPicker, current string
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	ui.Column(c).Width(176).Shrink(0).Padding(4).Gap(2).Children(func() {
-		ui.Text(c, "Providers").FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground).Padding(6, 8, 2)
+		ui.Text(c, "Providers").
+			FontSize(components.TextXS(t)).
+			FontWeight(500).
+			TextColor(p.MutedForeground).
+			Padding(6, 8, 2)
 		ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
 			ui.Column(c).Gap(2).Children(func() {
 				providers := a.pickable(providerOf(current))
-				// A picker opened with no model, the default before one is chosen, starts on the first provider
+				// A picker opened with no model, the default before one is chosen,
+				// starts on the first provider
 				if picker.provider == "" && len(providers) > 0 {
 					a.showProvider(picker, providers[0].ID)
 				}
@@ -232,11 +268,21 @@ func (a *App) pickerProviders(c *ui.Context, picker *modelPicker, current string
 					if a.catalog.listed {
 						note = "None has a key: set its API key variable, or /login."
 					}
-					ui.Text(c, note).FontSize(components.TextXS(t)).TextColor(p.MutedForeground).Padding(6, 8)
+					ui.Text(c, note).
+						FontSize(components.TextXS(t)).
+						TextColor(p.MutedForeground).
+						Padding(6, 8)
 				}
 				for _, provider := range providers {
-					row := ui.ButtonBase(c.Key(provider.ID)).Height(30).Padding(0, 8).Gap(6).Radius(t.Radius - 2).AlignItems(ui.Center).
-						FocusRing(false).Transition(components.ColorTransition).Label(provider.Name)
+					row := ui.ButtonBase(c.Key(provider.ID)).
+						Height(30).
+						Padding(0, 8).
+						Gap(6).
+						Radius(t.Radius - 2).
+						AlignItems(ui.Center).
+						FocusRing(false).
+						Transition(components.ColorTransition).
+						Label(provider.Name)
 					chosen := provider.ID == picker.provider
 					if chosen || row.Hovered() {
 						row.Background(p.Accent)
@@ -250,7 +296,9 @@ func (a *App) pickerProviders(c *ui.Context, picker *modelPicker, current string
 						figures(c, format.Count(provider.Models), p.MutedForeground).Shrink(0)
 					})
 					if !provider.Detected {
-						row.Tooltip("No key now: set its API key variable, or /login " + provider.ID)
+						row.Tooltip(
+							"No key now: set its API key variable, or /login " + provider.ID,
+						)
 					}
 					if row.Clicked() && !chosen {
 						a.showProvider(picker, provider.ID)
@@ -261,15 +309,27 @@ func (a *App) pickerProviders(c *ui.Context, picker *modelPicker, current string
 		if !link {
 			return
 		}
-		settings := ui.ButtonBase(c).Height(28).Padding(0, 8).Gap(6).Radius(t.Radius - 2).AlignItems(ui.Center).Justify(ui.Start).Shrink(0).
-			FocusRing(false).Transition(components.ColorTransition).Label("All providers")
+		settings := ui.ButtonBase(c).
+			Height(28).
+			Padding(0, 8).
+			Gap(6).
+			Radius(t.Radius - 2).
+			AlignItems(ui.Center).
+			Justify(ui.Start).
+			Shrink(0).
+			FocusRing(false).
+			Transition(components.ColorTransition).
+			Label("All providers")
 		if settings.Hovered() {
 			settings.Background(p.Accent)
 		}
 		components.FocusRing(settings, p, 0)
 		settings.Children(func() {
 			ui.Icon(c, icons.Settings).FontSize(14).TextColor(p.MutedForeground)
-			ui.Text(c, "All providers").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine()
+			ui.Text(c, "All providers").
+				FontSize(components.TextXS(t)).
+				TextColor(p.MutedForeground).
+				SingleLine()
 		})
 		if settings.Clicked() {
 			picker.open = false
@@ -280,7 +340,12 @@ func (a *App) pickerProviders(c *ui.Context, picker *modelPicker, current string
 
 // pickerModels is the chosen provider's models under the filter: the
 // arrows move among them and Enter picks, as a click does.
-func (a *App) pickerModels(c *ui.Context, picker *modelPicker, current string, choose func(spec string)) {
+func (a *App) pickerModels(
+	c *ui.Context,
+	picker *modelPicker,
+	current string,
+	choose func(spec string),
+) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	models := picker.filtered(a.catalog.models[picker.provider])
@@ -292,36 +357,54 @@ func (a *App) pickerModels(c *ui.Context, picker *modelPicker, current string, c
 	}
 
 	ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-		ui.Row(c).Height(40).Padding(0, 12).Gap(8).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(p.Border).Shrink(0).Children(func() {
-			ui.Icon(c, icons.Search).FontSize(14).TextColor(p.MutedForeground)
-			ui.TextInputBase(c.Key("models:"+picker.provider), &picker.query).Placeholder("Search models").Label("Search models").AutoFocus().Grow(1).
-				HandleInput(func(ev ui.InputEvent) bool {
-					if ev.Kind != ui.InputKeyDown || ev.Mods != 0 {
-						return false
-					}
-					switch ev.Key {
-					case ui.KeyDown:
-						picker.at = min(picker.at+1, max(len(models)-1, 0))
-						picker.list.ScrollIntoView(picker.at)
-						return true
-					case ui.KeyUp:
-						picker.at = max(picker.at-1, 0)
-						picker.list.ScrollIntoView(picker.at)
-						return true
-					case ui.KeyEnter:
-						if picker.at < len(models) {
-							pick(models[picker.at])
+		ui.Row(c).
+			Height(40).
+			Padding(0, 12).
+			Gap(8).
+			AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).
+			BorderColor(p.Border).
+			Shrink(0).
+			Children(func() {
+				ui.Icon(c, icons.Search).FontSize(14).TextColor(p.MutedForeground)
+				ui.TextInputBase(c.Key("models:"+picker.provider), &picker.query).
+					Placeholder("Search models").
+					Label("Search models").
+					AutoFocus().
+					Grow(1).
+					HandleInput(func(ev ui.InputEvent) bool {
+						if ev.Kind != ui.InputKeyDown || ev.Mods != 0 {
+							return false
 						}
-						return true
-					}
-					return false
-				})
-		})
+						switch ev.Key {
+						case ui.KeyDown:
+							picker.at = min(picker.at+1, max(len(models)-1, 0))
+							picker.list.ScrollIntoView(picker.at)
+							return true
+						case ui.KeyUp:
+							picker.at = max(picker.at-1, 0)
+							picker.list.ScrollIntoView(picker.at)
+							return true
+						case ui.KeyEnter:
+							if picker.at < len(models) {
+								pick(models[picker.at])
+							}
+							return true
+						}
+						return false
+					})
+			})
 
 		ui.List(c, &picker.list, len(models), func(i int) {
 			m := models[i]
-			row := ui.ButtonBase(c).Height(32).Padding(0, 8).Gap(8).Radius(t.Radius - 2).AlignItems(ui.Center).
-				FocusRing(false).Label(m.ID)
+			row := ui.ButtonBase(c).
+				Height(32).
+				Padding(0, 8).
+				Gap(8).
+				Radius(t.Radius - 2).
+				AlignItems(ui.Center).
+				FocusRing(false).
+				Label(m.ID)
 			if row.Hovered() {
 				picker.at = i
 			}
@@ -329,9 +412,19 @@ func (a *App) pickerModels(c *ui.Context, picker *modelPicker, current string, c
 				row.Background(p.Accent)
 			}
 			row.Children(func() {
-				ui.Text(c, nameOf(m)).TextColor(p.Foreground).SingleLine().Shrink(1).Grow(1).Tooltip(m.ID)
+				ui.Text(c, nameOf(m)).
+					TextColor(p.Foreground).
+					SingleLine().
+					Shrink(1).
+					Grow(1).
+					Tooltip(m.ID)
 				if m.ContextWindow > 0 {
-					figures(c, format.Count(m.ContextWindow), p.MutedForeground).Shrink(0).Tooltip("Context window, in tokens")
+					figures(
+						c,
+						format.Count(m.ContextWindow),
+						p.MutedForeground,
+					).Shrink(0).
+						Tooltip("Context window, in tokens")
 				}
 				if picker.provider+"/"+m.ID == current {
 					ui.Icon(c, icons.Check).FontSize(16).TextColor(p.Foreground)

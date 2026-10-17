@@ -14,19 +14,34 @@ import (
 func List(c *ui.Context, entries []Entry, m *State, st agent.State, choose func(Entry)) ui.Element {
 	t := c.Theme()
 	p := components.PaletteOf(t)
-	panel := ui.Column(c).WidthPercent(100).Padding(4).Radius(t.Radius).Background(p.Popover).Border(1, p.Border).
-		Shadow(0, 4, 6, -1, ui.RGBA(0, 0, 0, 0.1)).Label("Commands")
+	panel := ui.Column(c).
+		WidthPercent(100).
+		Padding(4).
+		Radius(t.Radius).
+		Background(p.Popover).
+		Border(1, p.Border).
+		Shadow(0, 4, 6, -1, ui.RGBA(0, 0, 0, 0.1)).
+		Label("Commands")
 	panel.Children(func() {
 		ui.Scroll(c).MaxHeight(8*32 + 24).Children(func() {
 			group := ""
 			for i, e := range entries {
 				if e.Choice == "" && e.Command.Group != group {
 					group = e.Command.Group
-					ui.Text(c, group).FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground).Padding(6, 8)
+					ui.Text(c, group).
+						FontSize(components.TextXS(t)).
+						FontWeight(500).
+						TextColor(p.MutedForeground).
+						Padding(6, 8)
 				}
 				// A row, not a button: the focus stays in the input, whose keys move along the menu
-				item := ui.Row(c.Key(e.Command.Name+" "+e.Choice)).Height(32).Padding(0, 8).Gap(8).Radius(6).
-					AlignItems(ui.Center).Label(e.Completion())
+				item := ui.Row(c.Key(e.Command.Name+" "+e.Choice)).
+					Height(32).
+					Padding(0, 8).
+					Gap(8).
+					Radius(6).
+					AlignItems(ui.Center).
+					Label(e.Completion())
 				if item.Hovered() && m.Selected != i {
 					m.Selected = i
 				}
@@ -59,10 +74,22 @@ func row(c *ui.Context, e Entry, st agent.State) {
 	// The name whole, as it is what is typed; what it takes and does give way
 	marked(c, e.Command.Name, e.Name, p.Foreground, p.Primary).FontWeight(500).Shrink(0)
 	if e.Command.Arg != "" {
-		ui.Text(c, e.Command.Arg).Font("monospace").FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine().Shrink(1)
+		ui.Text(c, e.Command.Arg).
+			Font("monospace").
+			FontSize(components.TextXS(t)).
+			TextColor(p.MutedForeground).
+			SingleLine().
+			Shrink(1)
 	}
 	ui.Box(c).Grow(1).MinWidth(12)
-	marked(c, e.Command.Hint, e.Hint, p.MutedForeground, p.Primary).FontSize(components.TextXS(t)).Shrink(1)
+	marked(
+		c,
+		e.Command.Hint,
+		e.Hint,
+		p.MutedForeground,
+		p.Primary,
+	).FontSize(components.TextXS(t)).
+		Shrink(1)
 }
 
 // inUse says whether a choice is what the session uses now.

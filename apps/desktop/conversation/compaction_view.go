@@ -25,7 +25,10 @@ func compaction(c *ui.Context, item *Item) {
 	// The status line's spinner still says it runs
 	moving := running && !c.Preferences().ReduceMotion
 	small := func(text string) ui.Element {
-		return ui.Text(c, text).FontSize(components.TextXS(t)).TextColor(p.MutedForeground).SingleLine()
+		return ui.Text(c, text).
+			FontSize(components.TextXS(t)).
+			TextColor(p.MutedForeground).
+			SingleLine()
 	}
 
 	ui.Row(c).Height(20).Gap(12).AlignItems(ui.Center).Children(func() {
@@ -35,11 +38,19 @@ func compaction(c *ui.Context, item *Item) {
 				small("Summarizing what came before")
 			})
 		} else {
-			ui.Row(c.Key("compacted")).Gap(6).AlignItems(ui.Center).Shrink(0).Transition(components.Rise).Children(func() {
-				small("Summarized above")
-				small("·")
-				small(format.Count(item.Before) + " → " + format.Count(item.After) + " tokens").Font("monospace").FontFeatures("tnum")
-			})
+			ui.Row(c.Key("compacted")).
+				Gap(6).
+				AlignItems(ui.Center).
+				Shrink(0).
+				Transition(components.Rise).
+				Children(func() {
+					small("Summarized above")
+					small("·")
+					small(
+						format.Count(item.Before) + " → " + format.Count(item.After) + " tokens",
+					).Font("monospace").
+						FontFeatures("tnum")
+				})
 		}
 		seam(c, p, moving, true)
 	})
@@ -59,7 +70,11 @@ func seam(c *ui.Context, p *components.Palette, moving, right bool) {
 		}
 
 		pt.After(components.UntilHalfTick(pt.Now()))
-		phase := float32(pt.Now().UnixMilli()%squeeze.Milliseconds()) / float32(squeeze.Milliseconds())
+		phase := float32(
+			pt.Now().UnixMilli()%squeeze.Milliseconds(),
+		) / float32(
+			squeeze.Milliseconds(),
+		)
 		// From past the outer end until it is gone into the middle, fading
 		// as it nears it
 		length := r.W * 0.35

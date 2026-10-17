@@ -148,7 +148,8 @@ func Theme(system *ui.Theme, s *Scheme, dark bool) *ui.Theme {
 	t := *system
 	t.Dark = dark
 
-	t.Background, t.Text, t.TextMuted, t.Border = p.Background, p.Foreground, p.MutedForeground, p.Border
+	t.Background, t.Text = p.Background, p.Foreground
+	t.TextMuted, t.Border = p.MutedForeground, p.Border
 	t.Surface, t.SurfaceHover, t.SurfacePressed = p.Secondary, p.Accent, p.Accent
 
 	t.Accent = p.Primary

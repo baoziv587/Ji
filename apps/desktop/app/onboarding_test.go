@@ -37,7 +37,13 @@ func testOnboarding(node string) (*Onboarding, *[]string) {
 func TestOnboardingStartsOnTheNodeFound(t *testing.T) {
 	o, did := testOnboarding("/opt/homebrew/bin/node")
 	o.Begin()
-	if want := []string{"started on /opt/homebrew/bin/node", "ready at http://127.0.0.1:1"}; !slices.Equal(*did, want) {
+	if want := []string{
+		"started on /opt/homebrew/bin/node",
+		"ready at http://127.0.0.1:1",
+	}; !slices.Equal(
+		*did,
+		want,
+	) {
 		t.Errorf("did %q, want %q", *did, want)
 	}
 }
@@ -53,7 +59,14 @@ func TestOnboardingInstallsNodeWhenThereIsNone(t *testing.T) {
 	if err := tt.Click("Install Node.js"); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"installed", "started on /runtime/bin/node", "ready at http://127.0.0.1:1"}; !slices.Equal(*did, want) {
+	if want := []string{
+		"installed",
+		"started on /runtime/bin/node",
+		"ready at http://127.0.0.1:1",
+	}; !slices.Equal(
+		*did,
+		want,
+	) {
 		t.Errorf("did %q, want %q", *did, want)
 	}
 }
@@ -63,7 +76,8 @@ func TestOnboardingShowsTheDownload(t *testing.T) {
 	o.Begin()
 	o.step, o.progress = downloading, download{13_225_000, 52_900_000, 4 * time.Second}
 	tt := ui.NewTester(o.View, 1100, 700)
-	if !tt.HasText("Installing Node.js v24.21.0") || !tt.HasText("25%") || !tt.HasText("13.2 of 52.9 MB · about 12 seconds left") {
+	if !tt.HasText("Installing Node.js v24.21.0") || !tt.HasText("25%") ||
+		!tt.HasText("13.2 of 52.9 MB · about 12 seconds left") {
 		t.Errorf("shows %q", tt.Texts())
 	}
 
@@ -103,7 +117,8 @@ func TestOnboardingCancelledGoesBack(t *testing.T) {
 	if err := tt.Click("Install Node.js"); err != nil {
 		t.Fatal(err)
 	}
-	if !tt.HasText("Ji Agent needs Node.js") || tt.HasText("Ji Agent could not start") || len(*did) > 0 {
+	if !tt.HasText("Ji Agent needs Node.js") || tt.HasText("Ji Agent could not start") ||
+		len(*did) > 0 {
 		t.Errorf("shows %q, did %q: a cancelled install offers to install again", tt.Texts(), *did)
 	}
 }
@@ -124,8 +139,18 @@ func TestOnboardingTriesAgainWhatFailed(t *testing.T) {
 	if err := tt.Click("Try Again"); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"started on /usr/local/bin/node", "ready at http://127.0.0.1:1"}; !slices.Equal(*did, want) {
-		t.Errorf("did %q, want %q: trying again starts the service on the Node.js found", *did, want)
+	if want := []string{
+		"started on /usr/local/bin/node",
+		"ready at http://127.0.0.1:1",
+	}; !slices.Equal(
+		*did,
+		want,
+	) {
+		t.Errorf(
+			"did %q, want %q: trying again starts the service on the Node.js found",
+			*did,
+			want,
+		)
 	}
 }
 

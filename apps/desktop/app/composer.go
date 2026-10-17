@@ -26,26 +26,51 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 	ui.Column(c).Padding(0, 24, 12).Children(func() {
 		conversation.Centered(c, 6, func() {
 			if s.Archived {
-				ui.Row(c).Gap(12).AlignItems(ui.Center).Padding(12, 16).Radius(t.Radius).Border(1, p.Border).Children(func() {
-					ui.Text(c, "This session is archived. Unarchive it to go on.").TextColor(p.MutedForeground).Grow(1)
-					if components.Button(c, "Unarchive", components.ButtonStyle{Variant: components.Outline, Size: components.SizeSmall, Icon: icons.ArchiveRestore}).Clicked() {
-						a.unarchive(s.ID)
-					}
-				})
+				ui.Row(c).
+					Gap(12).
+					AlignItems(ui.Center).
+					Padding(12, 16).
+					Radius(t.Radius).
+					Border(1, p.Border).
+					Children(func() {
+						ui.Text(c, "This session is archived. Unarchive it to go on.").
+							TextColor(p.MutedForeground).
+							Grow(1)
+						unarchive := components.ButtonStyle{
+							Variant: components.Outline,
+							Size:    components.SizeSmall,
+							Icon:    icons.ArchiveRestore,
+						}
+						if components.Button(c, "Unarchive", unarchive).Clicked() {
+							a.unarchive(s.ID)
+						}
+					})
 				return
 			}
 			entries := view.menu.Entries(st.Commands, view.draft)
 			// One pane of frosted glass, untoned, the conversation blurred
 			// through it: the status line, the input, the usage
-			pane := ui.Column(c).Gap(4).Padding(8).Radius(16).Border(1, p.Input).Material(glass.Blur{Radius: 12}).Transition(components.ColorTransition)
+			pane := ui.Column(c).
+				Gap(4).
+				Padding(8).
+				Radius(16).
+				Border(1, p.Input).
+				Material(glass.Blur{Radius: 12}).
+				Transition(components.ColorTransition)
 			pane.Children(func() {
 				a.statusLine(c, s, view, entries)
 				placeholder := "Ask anything, or type / for commands"
 				if st.Replying {
 					placeholder = "Steer the reply: it reads this after the step in progress"
 				}
-				// The menu's keys, Enter and Shift+Tab, before the text area takes them; Shift+Enter is left to it
-				area := ui.TextAreaBase(c.Key("draft"), &view.draft).Lines(2, 8).Placeholder(placeholder).Label("Message").AutoFocus().Padding(4, 4, 0).
+				// The menu's keys, Enter and Shift+Tab, before the text area takes
+				// them; Shift+Enter is left to it
+				area := ui.TextAreaBase(c.Key("draft"), &view.draft).
+					Lines(2, 8).
+					Placeholder(placeholder).
+					Label("Message").
+					AutoFocus().
+					Padding(4, 4, 0).
 					HandleInput(func(ev ui.InputEvent) bool { return a.composerKey(s, view, ev) })
 				if view.refocus {
 					view.refocus = false
@@ -59,7 +84,14 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					usageGauge(c, st.Usage, &view.usageOpen, &view.usageDrain)
 					ui.Box(c).Grow(1)
 					if st.Replying {
-						if components.Button(c, "Stop", components.ButtonStyle{Variant: components.Outline, Size: components.SizeExtraSmall, Icon: icons.Square}).Tooltip("Esc").Clicked() {
+						stop := components.ButtonStyle{
+							Variant: components.Outline,
+							Size:    components.SizeExtraSmall,
+							Icon:    icons.Square,
+						}
+						if components.Button(c, "Stop", stop).
+							Tooltip("Esc").
+							Clicked() {
 							a.stop(s.ID)
 						}
 					}
@@ -68,7 +100,10 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 						label = "Steer"
 					}
 					if components.Button(c, "", components.ButtonStyle{Size: components.SizeIconExtraSmall, Icon: icons.ArrowUp, Disabled: strings.TrimSpace(view.draft) == ""}).
-						Radius(999).Label(label).Tooltip(label + " (↵)").Clicked() {
+						Radius(999).
+						Label(label).
+						Tooltip(label + " (↵)").
+						Clicked() {
 						a.send(view)
 					}
 				})
@@ -78,12 +113,18 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 			}
 
 			// Esc closes the menu and the inspector first
-			if st.Replying && len(entries) == 0 && view.t.Inspected == nil && c.Shortcut(0, ui.KeyEscape) {
+			if st.Replying && len(entries) == 0 && view.t.Inspected == nil &&
+				c.Shortcut(0, ui.KeyEscape) {
 				a.stop(s.ID)
 			}
 			// Over the conversation, as wide as the input
 			if len(entries) > 0 {
-				commands.List(c, entries, &view.menu, view.t.State, func(e commands.Entry) { a.choose(view, e) }).Attach(ui.AnchorTopLeft, ui.AnchorBottomLeft).Top(-4)
+				choose := func(e commands.Entry) {
+					a.choose(view, e)
+				}
+				commands.List(c, entries, &view.menu, view.t.State, choose).
+					Attach(ui.AnchorTopLeft, ui.AnchorBottomLeft).
+					Top(-4)
 			}
 		})
 	})

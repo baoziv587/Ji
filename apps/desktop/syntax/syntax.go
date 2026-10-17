@@ -143,16 +143,26 @@ func kindOf(t chroma.TokenType) Kind {
 		return Type
 	case t == chroma.KeywordConstant:
 		return Number
-	case t.InCategory(chroma.Keyword), t == chroma.OperatorWord, t == chroma.NameDecorator, t == chroma.NameTag:
+	case t.InCategory(chroma.Keyword),
+		t == chroma.OperatorWord,
+		t == chroma.NameDecorator,
+		t == chroma.NameTag:
 		return Keyword
 	case t.InSubCategory(chroma.LiteralString):
 		if t == chroma.LiteralStringEscape || t == chroma.LiteralStringInterpol {
 			return Number
 		}
 		return String
-	case t.InCategory(chroma.Literal), t == chroma.NameConstant, t == chroma.NameBuiltinPseudo, t == chroma.NameEntity:
+	case t.InCategory(chroma.Literal),
+		t == chroma.NameConstant,
+		t == chroma.NameBuiltinPseudo,
+		t == chroma.NameEntity:
 		return Number
-	case t == chroma.NameBuiltin, t == chroma.NameClass, t == chroma.NameNamespace, t == chroma.NameException, t == chroma.NameAttribute:
+	case t == chroma.NameBuiltin,
+		t == chroma.NameClass,
+		t == chroma.NameNamespace,
+		t == chroma.NameException,
+		t == chroma.NameAttribute:
 		return Type
 	case t == chroma.Punctuation, t == chroma.Operator:
 		return Punctuation
@@ -220,7 +230,9 @@ func (b *Block) Grow(text string, whole bool) {
 // which a block that closes leaves out.
 func (b *Block) fit() {
 	if b.covered > len(b.text) {
-		b.colored, b.covered = b.colored[:min(len(b.colored), strings.Count(b.text, "\n")+1)], len(b.text)
+		b.colored, b.covered = b.colored[:min(len(b.colored), strings.Count(b.text, "\n")+1)], len(
+			b.text,
+		)
 		b.head = b.head[:0]
 	}
 }

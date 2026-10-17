@@ -21,7 +21,10 @@ func help(c *ui.Context, sections []agent.HelpSection) {
 	ui.Column(c).Padding(12, 14).Radius(t.Radius).Border(1, p.Border).Gap(12).Children(func() {
 		for i, section := range append(append([]agent.HelpSection{}, sections...), keys) {
 			ui.Column(c.Key(i)).Gap(4).Children(func() {
-				ui.Text(c, section.Title).FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground)
+				ui.Text(c, section.Title).
+					FontSize(components.TextXS(t)).
+					FontWeight(500).
+					TextColor(p.MutedForeground)
 				if section.Text != "" {
 					ui.Text(c, section.Text).LineHeight(1.625)
 				}

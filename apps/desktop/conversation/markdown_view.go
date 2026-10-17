@@ -38,14 +38,25 @@ func markdownBlock(c *ui.Context, b *mdBlock) {
 				if box.first {
 					top = b.gap
 				}
-				ui.Box(c).Width(2).Shrink(0).Radius(1).Background(p.MutedForeground.Alpha(0.5)).Margin(top, 12, 0, 0)
+				ui.Box(c).
+					Width(2).
+					Shrink(0).
+					Radius(1).
+					Background(p.MutedForeground.Alpha(0.5)).
+					Margin(top, 12, 0, 0)
 				continue
 			}
-			ui.Row(c).Width(box.width).Shrink(0).Padding(b.gap, 8, 0, 0).Justify(ui.End).Unselectable().Children(func() {
-				if box.first {
-					listMarker(c, box)
-				}
-			})
+			ui.Row(c).
+				Width(box.width).
+				Shrink(0).
+				Padding(b.gap, 8, 0, 0).
+				Justify(ui.End).
+				Unselectable().
+				Children(func() {
+					if box.first {
+						listMarker(c, box)
+					}
+				})
 		}
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Padding(b.gap, 0, 0).Children(func() {
 			markdownContent(c, b, ink)
@@ -69,7 +80,14 @@ func markdownContent(c *ui.Context, b *mdBlock, ink ui.Color) {
 		case 3:
 			size = th.FontSize + 2
 		}
-		inline(c, b.runs, b.texts(p, size)[0], p.Stressed()).FontSize(size).FontWeight(600).LineHeight(1.4)
+		inline(
+			c,
+			b.runs,
+			b.texts(p, size)[0],
+			p.Stressed(),
+		).FontSize(size).
+			FontWeight(600).
+			LineHeight(1.4)
 	case mdCode:
 		fencedWell(c, b.code)
 	case mdRule:
@@ -87,7 +105,12 @@ func listMarker(c *ui.Context, box mdBox) {
 		ui.Text(c, box.marker).TextColor(p.MutedForeground).LineHeight(1.625).FontFeatures("tnum")
 		return
 	}
-	check := ui.Row(c).Size(14, 14).Margin(4, 0, 0).Radius(4).Justify(ui.Center).AlignItems(ui.Center)
+	check := ui.Row(c).
+		Size(14, 14).
+		Margin(4, 0, 0).
+		Radius(4).
+		Justify(ui.Center).
+		AlignItems(ui.Center)
 	if box.task == taskOpen {
 		check.Border(1, p.MutedForeground.Alpha(0.6))
 		return
@@ -201,12 +224,54 @@ func codeKind(s string) components.CodeKind {
 // fileExtensions are the extensions that make a name with a dot a file's,
 // not a member's, as cdp.js against Browser.close.
 var fileExtensions = map[string]bool{
-	"c": true, "cc": true, "cfg": true, "cjs": true, "conf": true, "cpp": true, "css": true, "csv": true,
-	"env": true, "go": true, "h": true, "hpp": true, "html": true, "ini": true, "java": true, "jpeg": true,
-	"jpg": true, "js": true, "json": true, "jsx": true, "kt": true, "lock": true, "log": true, "md": true,
-	"mdx": true, "mjs": true, "mod": true, "pdf": true, "php": true, "png": true, "py": true, "rb": true,
-	"rs": true, "scss": true, "sh": true, "sql": true, "sum": true, "svg": true, "swift": true, "toml": true,
-	"ts": true, "tsx": true, "txt": true, "vue": true, "xml": true, "yaml": true, "yml": true, "zsh": true,
+	"c":     true,
+	"cc":    true,
+	"cfg":   true,
+	"cjs":   true,
+	"conf":  true,
+	"cpp":   true,
+	"css":   true,
+	"csv":   true,
+	"env":   true,
+	"go":    true,
+	"h":     true,
+	"hpp":   true,
+	"html":  true,
+	"ini":   true,
+	"java":  true,
+	"jpeg":  true,
+	"jpg":   true,
+	"js":    true,
+	"json":  true,
+	"jsx":   true,
+	"kt":    true,
+	"lock":  true,
+	"log":   true,
+	"md":    true,
+	"mdx":   true,
+	"mjs":   true,
+	"mod":   true,
+	"pdf":   true,
+	"php":   true,
+	"png":   true,
+	"py":    true,
+	"rb":    true,
+	"rs":    true,
+	"scss":  true,
+	"sh":    true,
+	"sql":   true,
+	"sum":   true,
+	"svg":   true,
+	"swift": true,
+	"toml":  true,
+	"ts":    true,
+	"tsx":   true,
+	"txt":   true,
+	"vue":   true,
+	"xml":   true,
+	"yaml":  true,
+	"yml":   true,
+	"zsh":   true,
 }
 
 func isFile(s string) bool {
@@ -216,7 +281,10 @@ func isFile(s string) bool {
 
 // isMember is whether s is names joined by dots, :: or ->.
 func isMember(s string) bool {
-	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '.' || r == ':' || r == '-' || r == '>' })
+	parts := strings.FieldsFunc(
+		s,
+		func(r rune) bool { return r == '.' || r == ':' || r == '-' || r == '>' },
+	)
 	if len(parts) < 2 || !strings.ContainsAny(s, ".:>") {
 		return false
 	}
@@ -244,41 +312,47 @@ func table(c *ui.Context, t *mdRows, cells [][]ui.Span, ink ui.Color) {
 		tracks[i] = ui.FitContent()
 	}
 
-	ui.Box(c).AlignSelf(ui.Start).MinWidth(0).Border(1, p.Border).Radius(th.Radius).Clip().Children(func() {
-		ui.Grid(c).ColumnTracks(tracks...).Children(func() {
-			k := 0
-			for r, row := range t.rows {
-				texts := cells[k : k+len(row)]
-				k += len(row)
-				for i := range columns {
-					cell := ui.Column(c).MinWidth(0).Padding(6, 12)
-					if r < len(t.rows)-1 {
-						cell.BorderWidth(0, 0, 1, 0).BorderColor(p.Border)
-					}
-					if r == 0 {
-						cell.Background(p.Muted)
-					}
-					cell.Children(func() {
-						var runs []mdRun
-						var spans []ui.Span
-						if i < len(row) {
-							runs, spans = row[i], texts[i]
+	ui.Box(c).
+		AlignSelf(ui.Start).
+		MinWidth(0).
+		Border(1, p.Border).
+		Radius(th.Radius).
+		Clip().
+		Children(func() {
+			ui.Grid(c).ColumnTracks(tracks...).Children(func() {
+				k := 0
+				for r, row := range t.rows {
+					texts := cells[k : k+len(row)]
+					k += len(row)
+					for i := range columns {
+						cell := ui.Column(c).MinWidth(0).Padding(6, 12)
+						if r < len(t.rows)-1 {
+							cell.BorderWidth(0, 0, 1, 0).BorderColor(p.Border)
 						}
-						text := inline(c, runs, spans, ink).LineHeight(1.5)
 						if r == 0 {
-							text.FontWeight(600)
+							cell.Background(p.Muted)
 						}
-						if i < len(t.align) {
-							switch t.align[i] {
-							case extast.AlignRight:
-								text.TextAlign(ui.End)
-							case extast.AlignCenter:
-								text.TextAlign(ui.Center)
+						cell.Children(func() {
+							var runs []mdRun
+							var spans []ui.Span
+							if i < len(row) {
+								runs, spans = row[i], texts[i]
 							}
-						}
-					})
+							text := inline(c, runs, spans, ink).LineHeight(1.5)
+							if r == 0 {
+								text.FontWeight(600)
+							}
+							if i < len(t.align) {
+								switch t.align[i] {
+								case extast.AlignRight:
+									text.TextAlign(ui.End)
+								case extast.AlignCenter:
+									text.TextAlign(ui.Center)
+								}
+							}
+						})
+					}
 				}
-			}
+			})
 		})
-	})
 }

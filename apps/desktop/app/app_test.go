@@ -59,7 +59,13 @@ func (f *fakeAgent) Archive(_ context.Context, id string, archived bool) (agent.
 	f.archived = append(f.archived, id+map[bool]string{true: ":on", false: ":off"}[archived])
 	return agent.Session{ID: id, Root: "/code/" + id, Title: "Title " + id, Archived: archived}, nil
 }
-func (f *fakeAgent) State(context.Context, string) (agent.State, error) { return agent.State{}, nil }
+
+func (f *fakeAgent) State(
+	context.Context,
+	string,
+) (agent.State, error) {
+	return agent.State{}, nil
+}
 func (f *fakeAgent) Send(_ context.Context, id, text string) (string, error) {
 	f.sent[id] = append(f.sent[id], text)
 	return "started", nil
@@ -110,7 +116,9 @@ func (f *fakeAgent) StoreKey(_ context.Context, provider, key string) ([]agent.P
 	f.keys[provider] = key
 	for i, p := range f.listed() {
 		if p.ID == provider {
-			f.providers[i].Detected, f.providers[i].Stored, f.providers[i].Source = true, true, "stored credential"
+			f.providers[i].Detected = true
+			f.providers[i].Stored = true
+			f.providers[i].Source = "stored credential"
 		}
 	}
 	return f.providers, nil
@@ -132,7 +140,18 @@ func (f *fakeAgent) KeepEndpoint(_ context.Context, e agent.Endpoint) ([]agent.P
 	}
 	kept := e
 	kept.Key = ""
-	f.providers = append(f.listed(), agent.Provider{ID: id, Name: e.Name, Detected: true, Source: "no key", APIKey: true, Models: len(e.Models), Endpoint: &kept})
+	f.providers = append(
+		f.listed(),
+		agent.Provider{
+			ID:       id,
+			Name:     e.Name,
+			Detected: true,
+			Source:   "no key",
+			APIKey:   true,
+			Models:   len(e.Models),
+			Endpoint: &kept,
+		},
+	)
 	return f.providers, nil
 }
 func (f *fakeAgent) RemoveEndpoint(_ context.Context, id string) ([]agent.Provider, error) {
@@ -168,26 +187,64 @@ func (f *fakeAgent) Follow(_ context.Context, id string, _ int, fn func(agent.Ev
 
 // testProviders are the catalog's providers, two of them detected.
 var testProviders = []agent.Provider{
-	{ID: "deepseek", Name: "DeepSeek", Detected: true, Source: "DEEPSEEK_API_KEY", Login: true, APIKey: true, Models: 2},
-	{ID: "groq", Name: "Groq", Detected: true, Source: "stored credential", Login: true, APIKey: true, Stored: true, Models: 2},
+	{
+		ID:       "deepseek",
+		Name:     "DeepSeek",
+		Detected: true,
+		Source:   "DEEPSEEK_API_KEY",
+		Login:    true,
+		APIKey:   true,
+		Models:   2,
+	},
+	{
+		ID:       "groq",
+		Name:     "Groq",
+		Detected: true,
+		Source:   "stored credential",
+		Login:    true,
+		APIKey:   true,
+		Stored:   true,
+		Models:   2,
+	},
 	{ID: "openai", Name: "OpenAI", Login: true, APIKey: true, OAuth: true, Models: 44},
 	{ID: "amazon-bedrock", Name: "Amazon Bedrock", Models: 185},
 }
 
 var testModels = map[string][]agent.Model{
-	"deepseek": {{ID: "deepseek-flash", Name: "DeepSeek Flash", ContextWindow: 128000}, {ID: "deepseek-v4-pro", Name: "DeepSeek V4 Pro", ContextWindow: 128000, Reasoning: true}},
-	"groq":     {{ID: "llama-4-scout", Name: "Llama 4 Scout", ContextWindow: 131072}, {ID: "qwen3-32b", Name: "Qwen3 32B", ContextWindow: 131072}},
+	"deepseek": {
+		{ID: "deepseek-flash", Name: "DeepSeek Flash", ContextWindow: 128000},
+		{ID: "deepseek-v4-pro", Name: "DeepSeek V4 Pro", ContextWindow: 128000, Reasoning: true},
+	},
+	"groq": {
+		{ID: "llama-4-scout", Name: "Llama 4 Scout", ContextWindow: 131072},
+		{ID: "qwen3-32b", Name: "Qwen3 32B", ContextWindow: 131072},
+	},
 }
 
 // testCommands are the service's commands, as a session lists them.
 var testCommands = []agent.Command{
 	{Name: "/think", Arg: "<off|high>", Hint: "sets thinking", Choices: []string{"off", "high"}},
-	{Name: "/fast", Arg: "[on|off]", Hint: "answers faster, for more usage", Choices: []string{"on", "off"}},
+	{
+		Name:    "/fast",
+		Arg:     "[on|off]",
+		Hint:    "answers faster, for more usage",
+		Choices: []string{"on", "off"},
+	},
 	{Name: "/compact", Hint: "summarizes the conversation so far"},
 	{Name: "/help", Hint: "lists keys, commands and tools"},
 	{Name: "/exit", Hint: "quits"},
-	{Name: "/login", Arg: "<provider>", Hint: "signs in: in the browser, or with a key typed in", Choices: []string{"deepseek", "openai", "openai-codex"}},
-	{Name: "/impeccable", Arg: "[command]", Hint: "designs and polishes interfaces", Group: "Skills"},
+	{
+		Name:    "/login",
+		Arg:     "<provider>",
+		Hint:    "signs in: in the browser, or with a key typed in",
+		Choices: []string{"deepseek", "openai", "openai-codex"},
+	},
+	{
+		Name:  "/impeccable",
+		Arg:   "[command]",
+		Hint:  "designs and polishes interfaces",
+		Group: "Skills",
+	},
 }
 
 func init() {
@@ -198,9 +255,27 @@ func init() {
 // sessions in two folders and one archived.
 func testApp() (*App, *fakeAgent) {
 	now := time.Now().UnixMilli()
-	f := &fakeAgent{events: map[string][]agent.Event{}, sent: map[string][]string{}, commands: map[string][]string{}, answers: map[string][][]string{}}
+	f := &fakeAgent{
+		events:   map[string][]agent.Event{},
+		sent:     map[string][]string{},
+		commands: map[string][]string{},
+		answers:  map[string][][]string{},
+	}
 	for _, id := range []string{"a", "b", "c", "d"} {
-		f.events[id] = []agent.Event{{Type: "state", State: &agent.State{ID: id, Root: "/code/" + id, Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}, Commands: testCommands}}}
+		f.events[id] = []agent.Event{
+			{
+				Type: "state",
+				State: &agent.State{
+					ID:             id,
+					Root:           "/code/" + id,
+					Model:          "deepseek/deepseek-flash",
+					Mode:           "ask",
+					Thinking:       "high",
+					ThinkingLevels: []string{"off", "high"},
+					Commands:       testCommands,
+				},
+			},
+		}
 	}
 	a := New(f, func(fn func()) { fn() })
 	a.async = func(fn func()) { fn() }
@@ -208,7 +283,13 @@ func testApp() (*App, *fakeAgent) {
 	a.link.up = true
 	a.setList(agent.Sessions{DefaultRoot: "/code/web", Sessions: []agent.Session{
 		{ID: "a", Root: "/code/web", Title: "Fix the login form", Updated: now},
-		{ID: "b", Root: "/code/api", Title: "Add rate limits", Updated: now - 3_600_000, Status: "asking"},
+		{
+			ID:      "b",
+			Root:    "/code/api",
+			Title:   "Add rate limits",
+			Updated: now - 3_600_000,
+			Status:  "asking",
+		},
 		{ID: "c", Root: "/code/web", Title: "Upgrade React", Updated: now - 7_200_000},
 		{ID: "d", Root: "/code/old", Title: "Old spike", Updated: now - 86_400_000, Archived: true},
 	}})
@@ -219,7 +300,10 @@ func TestSidebarGroupsSessionsByFolder(t *testing.T) {
 	a, f := testApp()
 	tt := ui.NewTester(a.View, 1100, 700)
 
-	for _, text := range []string{"web", "api", "Fix the login form", "Add rate limits", "Upgrade React", "Approval", "Archived (1)"} {
+	for _, text := range []string{
+		"web", "api", "Fix the login form", "Add rate limits", "Upgrade React", "Approval",
+		"Archived (1)",
+	} {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
 		}
@@ -228,7 +312,11 @@ func TestSidebarGroupsSessionsByFolder(t *testing.T) {
 		t.Error("an archived session shows while its section is closed")
 	}
 	if a.selected != "a" || !reflect.DeepEqual(f.followed, []string{"a"}) {
-		t.Errorf("selected %q, followed %v: the most recent session opens first", a.selected, f.followed)
+		t.Errorf(
+			"selected %q, followed %v: the most recent session opens first",
+			a.selected,
+			f.followed,
+		)
 	}
 }
 
@@ -254,10 +342,16 @@ func TestABackgroundSessionTakesInItsEventsLater(t *testing.T) {
 	}
 	if len(a.views["a"].t.Items) != 0 || len(a.views["b"].t.Items) != 0 || len(later) != 2 ||
 		waits[0] > components.Tick || waits[1] != backgroundEvery {
-		t.Fatalf("the one shown has %d items, the other %d; updates after %v", len(a.views["a"].t.Items), len(a.views["b"].t.Items), waits)
+		t.Fatalf(
+			"the one shown has %d items, the other %d; updates after %v",
+			len(a.views["a"].t.Items),
+			len(a.views["b"].t.Items),
+			waits,
+		)
 	}
 	later[0]()
-	if items := a.views["a"].t.Items; len(items) != 1 || items[0].Text != "shown too" || len(a.views["b"].t.Items) != 0 {
+	if items := a.views["a"].t.Items; len(items) != 1 || items[0].Text != "shown too" ||
+		len(a.views["b"].t.Items) != 0 {
 		t.Fatalf("shown, on the tick: %+v", items)
 	}
 	later[1]()
@@ -322,7 +416,11 @@ func TestLongConversationFollowsItsEnd(t *testing.T) {
 
 func TestChoosingASessionShowsIt(t *testing.T) {
 	a, f := testApp()
-	f.events["c"] = append(f.events["c"], agent.Event{Type: "user", Text: "bump react to 19"}, agent.Event{Type: "text", Delta: "Bumped."})
+	f.events["c"] = append(
+		f.events["c"],
+		agent.Event{Type: "user", Text: "bump react to 19"},
+		agent.Event{Type: "text", Delta: "Bumped."},
+	)
 	tt := ui.NewTester(a.View, 1100, 700)
 
 	if err := tt.Click("Upgrade React"); err != nil {
@@ -398,7 +496,8 @@ func TestInspectorShowsAStepAndStepsThroughThem(t *testing.T) {
 	if err := tt.Click("Show grep"); err != nil {
 		t.Fatal(err)
 	}
-	if view.t.Inspected != view.t.Steps[0] || !tt.HasText("src/Login.tsx:14") || !tt.HasText("1 of 2") {
+	if view.t.Inspected != view.t.Steps[0] || !tt.HasText("src/Login.tsx:14") ||
+		!tt.HasText("1 of 2") {
 		t.Fatalf("inspected %+v, texts %q", view.t.Inspected, tt.Texts())
 	}
 
@@ -425,11 +524,20 @@ func TestInspectorShowsAStepAndStepsThroughThem(t *testing.T) {
 
 func TestApprovalAnswersWithAClick(t *testing.T) {
 	a, f := testApp()
-	f.events["a"] = append(f.events["a"], agent.Event{Type: "ask", ID: "7", Tool: "bash", Questions: []agent.Question{{
-		Title:   "Run bash",
-		Detail:  "pnpm test",
-		Options: []agent.Option{{Value: "yes", Label: "Yes"}, {Value: "commands", Label: "Yes, and allow every command from now on"}, {Value: "no", Label: "No"}},
-	}}})
+	f.events["a"] = append(
+		f.events["a"],
+		agent.Event{Type: "ask", ID: "7", Tool: "bash", Questions: []agent.Question{
+			{
+				Title:  "Run bash",
+				Detail: "pnpm test",
+				Options: []agent.Option{
+					{Value: "yes", Label: "Yes"},
+					{Value: "commands", Label: "Yes, and allow every command from now on"},
+					{Value: "no", Label: "No"},
+				},
+			},
+		}},
+	)
 	a.views = map[string]*sessionView{}
 	f.followed = nil
 	a.Select("a")
@@ -472,8 +580,22 @@ func TestModelQuestionTakesPicksAndTypedAnswers(t *testing.T) {
 	a, f := testApp()
 	view := a.views["a"]
 	a.apply(view, agent.Event{Type: "ask", ID: "2", Questions: []agent.Question{
-		{Title: "Which runner?", Options: []agent.Option{{Value: "vitest", Label: "vitest"}, {Value: "jest", Label: "jest"}}, Other: true},
-		{Title: "Which parts?", Options: []agent.Option{{Value: "backend", Label: "backend"}, {Value: "frontend", Label: "frontend"}}, Multiple: true},
+		{
+			Title: "Which runner?",
+			Options: []agent.Option{
+				{Value: "vitest", Label: "vitest"},
+				{Value: "jest", Label: "jest"},
+			},
+			Other: true,
+		},
+		{
+			Title: "Which parts?",
+			Options: []agent.Option{
+				{Value: "backend", Label: "backend"},
+				{Value: "frontend", Label: "frontend"},
+			},
+			Multiple: true,
+		},
 	}})
 	tt := ui.NewTester(a.View, 1100, 760)
 
@@ -486,7 +608,10 @@ func TestModelQuestionTakesPicksAndTypedAnswers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got := f.answers["a/2"]; !reflect.DeepEqual(got, [][]string{{"jest"}, {"frontend", "backend"}}) {
+	if got := f.answers["a/2"]; !reflect.DeepEqual(
+		got,
+		[][]string{{"jest"}, {"frontend", "backend"}},
+	) {
 		t.Errorf("answered %v", got)
 	}
 }
@@ -525,7 +650,11 @@ func TestNewSessionStartsInTheChosenFolder(t *testing.T) {
 }
 
 func TestFirstRunOffersToStart(t *testing.T) {
-	f := &fakeAgent{events: map[string][]agent.Event{}, sent: map[string][]string{}, answers: map[string][][]string{}}
+	f := &fakeAgent{
+		events:  map[string][]agent.Event{},
+		sent:    map[string][]string{},
+		answers: map[string][][]string{},
+	}
 	a := New(f, func(fn func()) { fn() })
 	a.async = func(fn func()) { fn() }
 	a.ChooseFolder = func() (string, error) { return "/code/elsewhere", nil }
@@ -573,7 +702,10 @@ func TestArchivedSessionOffersToUnarchive(t *testing.T) {
 
 func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 	a, f := testApp()
-	a.apply(a.views["a"], agent.Event{Type: "state", State: &agent.State{ID: "a", Mode: "ask", Replying: true}})
+	a.apply(
+		a.views["a"],
+		agent.Event{Type: "state", State: &agent.State{ID: "a", Mode: "ask", Replying: true}},
+	)
 	tt := ui.NewTester(a.View, 1100, 700)
 
 	if err := tt.Click("Stop"); err != nil {
@@ -583,7 +715,8 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if f.modes != 1 || a.views["a"].t.State.Mode != "auto" || !reflect.DeepEqual(f.stopped, []string{"a"}) {
+	if f.modes != 1 || a.views["a"].t.State.Mode != "auto" ||
+		!reflect.DeepEqual(f.stopped, []string{"a"}) {
 		t.Errorf("modes %d, mode %q, stopped %v", f.modes, a.views["a"].t.State.Mode, f.stopped)
 	}
 }
@@ -608,30 +741,76 @@ func TestSnapshot(t *testing.T) {
 	a, fake := testApp()
 	view := a.views["a"]
 	for _, e := range []agent.Event{
-		{Type: "state", State: &agent.State{ID: "a", Root: "/code/web", Model: "deepseek/deepseek-flash", Mode: "ask", Thinking: "high", ThinkingLevels: []string{"off", "high"}, Replying: true, Tools: []string{"bash", "grep", "read", "edit", "ask_user"}, Commands: testCommands}},
+		{Type: "state", State: &agent.State{
+			ID:             "a",
+			Root:           "/code/web",
+			Model:          "deepseek/deepseek-flash",
+			Mode:           "ask",
+			Thinking:       "high",
+			ThinkingLevels: []string{"off", "high"},
+			Replying:       true,
+			Tools:          []string{"bash", "grep", "read", "edit", "ask_user"},
+			Commands:       testCommands,
+		}},
 		{Type: "user", Text: "The login form submits twice. Find out why and fix it."},
 		{Type: "thinking", Delta: "Probably a **double event binding**:\n\n- `onSubmit` on the form\n- `onClick` on the button\n\nLet me find where the form submits."},
 		{Type: "tool_start", ID: "1", Name: "grep", Args: "{\n  \"pattern\": \"onSubmit\"\n}"},
-		{Type: "tool_end", ID: "1", Name: "grep", OK: true, Output: "src/Login.tsx:14\nsrc/Form.tsx:31", MS: 41},
-		{Type: "tool_start", ID: "2", Name: "read", Args: "{\n  \"path\": \"/code/web/src/Login.tsx\"\n}"},
+		{
+			Type:   "tool_end",
+			ID:     "1",
+			Name:   "grep",
+			OK:     true,
+			Output: "src/Login.tsx:14\nsrc/Form.tsx:31",
+			MS:     41,
+		},
+		{
+			Type: "tool_start",
+			ID:   "2",
+			Name: "read",
+			Args: "{\n  \"path\": \"/code/web/src/Login.tsx\"\n}",
+		},
 		{Type: "tool_end", ID: "2", Name: "read", OK: true, Output: "export function Login() {\n  const submit = useSubmit()\n  return (\n    <form onSubmit={submit}>\n      <button onClick={submit}>Sign in</button>\n    </form>\n  )\n}", MS: 12},
-		{Type: "tool_start", ID: "3", Name: "read", Args: "{\n  \"path\": \"/code/web/src/Form.tsx\"\n}"},
+		{
+			Type: "tool_start",
+			ID:   "3",
+			Name: "read",
+			Args: "{\n  \"path\": \"/code/web/src/Form.tsx\"\n}",
+		},
 		{Type: "tool_end", ID: "3", Name: "read", OK: true, Output: "…", MS: 9},
-		{Type: "tool_start", ID: "4", Name: "bash", Args: "{\n  \"command\": \"pnpm test login\"\n}"},
+		{
+			Type: "tool_start",
+			ID:   "4",
+			Name: "bash",
+			Args: "{\n  \"command\": \"pnpm test login\"\n}",
+		},
 		{Type: "tool_end", ID: "4", Name: "bash", OK: false, Output: "FAIL src/Login.test.tsx\n  expected submit to be called 1 time, but it was called 2 times", MS: 2140},
 		{Type: "text", Delta: "`Login.tsx` binds `onSubmit` on the form and `onClick` on the button, so one press submits twice, as the failing test shows:\n\n```tsx\n<form onSubmit={submit}>\n  {/* both run on a press */}\n  <button onClick={submit}>Sign in</button>\n</form>\n```\n\nI'll keep the form's handler."},
 		{Type: "tool_start", ID: "5", Name: "edit", Args: "{\"path\":\"/code/web/src/Login.tsx\",\"edits\":[{\"old_text\":\"      <button onClick={submit}>Sign in</button>\\n\",\"new_text\":\"      <button type=\\\"submit\\\">Sign in</button>\\n\"}]}"},
 		{Type: "tool_end", ID: "5", Name: "edit", OK: true, Output: "Edited src/Login.tsx", MS: 6},
-		{Type: "tool_start", ID: "6", Name: "bash", Args: "{\n  \"command\": \"pnpm test login\"\n}"},
+		{
+			Type: "tool_start",
+			ID:   "6",
+			Name: "bash",
+			Args: "{\n  \"command\": \"pnpm test login\"\n}",
+		},
 		{Type: "tool_end", ID: "6", Name: "bash", OK: true, Output: "PASS src/Login.test.tsx\n  ✓ submits once (18 ms)\n\nTests  1 passed", MS: 1870},
 		{Type: "text", Delta: "Fixed: the button is now `type=\"submit\"`, so the form's handler runs once. The login test passes.\n\n### What changed\n\n1. **Login.tsx**: the button submits the form; its `onClick` is gone.\n2. *Login.test.tsx*: a test for a double click.\n\n> The other forms bind only `onSubmit`, as [React's guide](https://react.dev/reference/react-dom/components/form) does.\n\n| File | Lines |\n|---|--:|\n| src/Login.tsx | 1 |\n| src/Login.test.tsx | 4 |\n\n- [x] The login test passes\n- [ ] Check the signup form"},
 		{Type: "user", Text: "Also cover the double click in a test."},
 		{Type: "thinking", Delta: "A test that clicks twice quickly."},
-		{Type: "tool_start", ID: "7", Name: "edit", Args: "{\n  \"path\": \"src/Login.test.tsx\"\n}"},
+		{
+			Type: "tool_start",
+			ID:   "7",
+			Name: "edit",
+			Args: "{\n  \"path\": \"src/Login.test.tsx\"\n}",
+		},
 		{Type: "ask", ID: "4", Tool: "edit", Questions: []agent.Question{{
-			Title:   "Edit src/Login.test.tsx",
-			Detail:  "--- src/Login.test.tsx\n+++ src/Login.test.tsx\n+  it('submits once on a double click', async () => {\n+    await user.dblClick(button)\n+    expect(submit).toHaveBeenCalledTimes(1)\n+  })",
-			Options: []agent.Option{{Value: "yes", Label: "Yes"}, {Value: "auto", Label: "Yes, and approve the rest inside the folder"}, {Value: "no", Label: "No"}},
+			Title:  "Edit src/Login.test.tsx",
+			Detail: "--- src/Login.test.tsx\n+++ src/Login.test.tsx\n+  it('submits once on a double click', async () => {\n+    await user.dblClick(button)\n+    expect(submit).toHaveBeenCalledTimes(1)\n+  })",
+			Options: []agent.Option{
+				{Value: "yes", Label: "Yes"},
+				{Value: "auto", Label: "Yes, and approve the rest inside the folder"},
+				{Value: "no", Label: "No"},
+			},
 		}}},
 	} {
 		if os.Getenv("COMPACT") == "1" && e.Text == "Also cover the double click in a test." {
@@ -646,10 +825,24 @@ func TestSnapshot(t *testing.T) {
 	}
 	a.list.Sessions[0].Status = "asking"
 	a.list.Sessions[2].Status = "running"
-	view.t.State.Usage = agent.UsageReading{Cost: 0.0042, Input: 12400, Output: 830, Cache: 82, Speed: 61, Calls: 3}
+	view.t.State.Usage = agent.UsageReading{
+		Cost:   0.0042,
+		Input:  12400,
+		Output: 830,
+		Cache:  82,
+		Speed:  61,
+		Calls:  3,
+	}
 	view.t.State.Usage.Context = &agent.ContextSize{Tokens: 13230, Limit: 200000}
 	if os.Getenv("USAGE") == "1" {
-		view.t.State.Usage = agent.UsageReading{Cost: 0.6621, Input: 16_000_000, Output: 425_000, Cache: 99, Speed: 48, Calls: 120}
+		view.t.State.Usage = agent.UsageReading{
+			Cost:   0.6621,
+			Input:  16_000_000,
+			Output: 425_000,
+			Cache:  99,
+			Speed:  48,
+			Calls:  120,
+		}
 		view.t.State.Usage.Context = &agent.ContextSize{Tokens: 149_000, Limit: 200_000}
 		view.usageOpen = true
 	}
@@ -667,15 +860,31 @@ func TestSnapshot(t *testing.T) {
 	}
 	if os.Getenv("SETTINGS") == "1" {
 		a.settingsPage = os.Getenv("PAGE")
-		if os.Getenv("ADDING")+os.Getenv("ENDPOINT")+os.Getenv("REMOVING")+os.Getenv("OTHERS") != "" {
+		if os.Getenv(
+			"ADDING",
+		)+os.Getenv(
+			"ENDPOINT",
+		)+os.Getenv(
+			"REMOVING",
+		)+os.Getenv(
+			"OTHERS",
+		) != "" {
 			a.settingsPage = pageModels
 		}
 		a.OpenSettings()
 		a.othersOpen = os.Getenv("OTHERS") == "1"
 		if os.Getenv("ENDPOINT") == "1" {
 			fake.providers = append(append([]agent.Provider{}, testProviders...), agent.Provider{
-				ID: "ollama", Name: "Ollama", Detected: true, Source: "no key", APIKey: true, Models: 3,
-				Endpoint: &agent.Endpoint{BaseURL: "http://localhost:11434/v1", Models: []agent.EndpointModel{{ID: "qwen2.5-coder:14b"}}},
+				ID:       "ollama",
+				Name:     "Ollama",
+				Detected: true,
+				Source:   "no key",
+				APIKey:   true,
+				Models:   3,
+				Endpoint: &agent.Endpoint{
+					BaseURL: "http://localhost:11434/v1",
+					Models:  []agent.EndpointModel{{ID: "qwen2.5-coder:14b"}},
+				},
 			})
 			a.loadProviders()
 		}
@@ -686,9 +895,20 @@ func TestSnapshot(t *testing.T) {
 		case "key":
 			a.keyForm("openai")
 		case "endpoint":
-			a.openProviderForm(&providerForm{chosen: true, listed: true, name: "Ollama", baseURL: "http://localhost:11434/v1",
-				models:  []modelChoice{{"deepseek-r1:14b", true}, {"llama3.1:8b", false}, {"qwen2.5-coder:14b", true}},
-				problem: os.Getenv("PROBLEM")})
+			a.openProviderForm(
+				&providerForm{
+					chosen:  true,
+					listed:  true,
+					name:    "Ollama",
+					baseURL: "http://localhost:11434/v1",
+					models: []modelChoice{
+						{"deepseek-r1:14b", true},
+						{"llama3.1:8b", false},
+						{"qwen2.5-coder:14b", true},
+					},
+					problem: os.Getenv("PROBLEM"),
+				},
+			)
 		}
 	}
 	if os.Getenv("MODELS") == "1" {
@@ -775,8 +995,13 @@ func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 	tt.Move(along(98), y)
 	tt.Release(along(98), y)
 	tt.Frame()
-	if a.Settings.Transparency != transparencyClear || len(saved) == kept || saved[len(saved)-1].Transparency != transparencyClear {
-		t.Errorf("transparency %v, saved %v: let go at 98, clear is kept", a.Settings.Transparency, saved[kept:])
+	if a.Settings.Transparency != transparencyClear || len(saved) == kept ||
+		saved[len(saved)-1].Transparency != transparencyClear {
+		t.Errorf(
+			"transparency %v, saved %v: let go at 98, clear is kept",
+			a.Settings.Transparency,
+			saved[kept:],
+		)
 	}
 
 	tt.Key(0, ui.KeyLeft)
@@ -790,12 +1015,20 @@ func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 // was before it could be chosen, solid covers what is behind it, and in between it goes
 // straight from one detent to the next.
 func TestGlassesRampThroughTheDetents(t *testing.T) {
-	for name, r := range map[string]ramp{"sidebar": glasses.sidebar, "sidebar light": glasses.sidebarLight, "selection": glasses.selection, "bar": glasses.bar, "content": glasses.content, "content light": glasses.contentLight} {
+	for name, r := range map[string]ramp{
+		"sidebar":       glasses.sidebar,
+		"sidebar light": glasses.sidebarLight,
+		"selection":     glasses.selection,
+		"bar":           glasses.bar,
+		"content":       glasses.content,
+		"content light": glasses.contentLight,
+	} {
 		if r.clear > r.standard || r.standard > r.solid {
 			t.Errorf("%s: %v, a clearer glass covers more", name, r)
 		}
 	}
-	if glasses.sidebar.at(transparencyStandard) != 0.6 || glasses.bar.at(transparencyStandard) != scrollEdgeCover {
+	if glasses.sidebar.at(transparencyStandard) != 0.6 ||
+		glasses.bar.at(transparencyStandard) != scrollEdgeCover {
 		t.Error("standard is not the window as it was")
 	}
 	// The light material is washed pale already, so its veil is thinner
@@ -803,8 +1036,12 @@ func TestGlassesRampThroughTheDetents(t *testing.T) {
 	if glasses.sidebarLight.at(transparencyStandard) >= glasses.sidebar.at(transparencyStandard) {
 		t.Error("the light sidebar covers as much as the dark")
 	}
-	if glasses.sidebar.at(transparencySolid) != 1 || glasses.sidebarLight.at(transparencySolid) != 1 || glasses.bar.at(transparencySolid) != 1 || glasses.selection.at(transparencySolid) != 1 ||
-		glasses.content.at(transparencySolid) != 1 || glasses.contentLight.at(transparencySolid) != 1 {
+	if glasses.sidebar.at(transparencySolid) != 1 ||
+		glasses.sidebarLight.at(transparencySolid) != 1 ||
+		glasses.bar.at(transparencySolid) != 1 ||
+		glasses.selection.at(transparencySolid) != 1 ||
+		glasses.content.at(transparencySolid) != 1 ||
+		glasses.contentLight.at(transparencySolid) != 1 {
 		t.Error("solid lets something through")
 	}
 	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.3) > 1e-6 {
@@ -838,17 +1075,28 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 	}
 	tt.Frame()
 	if a.Settings.Appearance != components.Dark || !a.theme.Dark || !tt.HasText("Always dark") {
-		t.Errorf("appearance %q, dark %v: Dark makes the window dark while the system is light", a.Settings.Appearance, a.theme.Dark)
+		t.Errorf(
+			"appearance %q, dark %v: Dark makes the window dark while the system is light",
+			a.Settings.Appearance,
+			a.theme.Dark,
+		)
 	}
 
 	if err := tt.Click("Lagoon theme"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
-	if a.Settings.Theme != "Lagoon" || components.PaletteOf(a.theme).Primary != components.SchemeNamed("Lagoon").Dark.Primary {
+	if a.Settings.Theme != "Lagoon" ||
+		components.PaletteOf(a.theme).Primary != components.SchemeNamed("Lagoon").Dark.Primary {
 		t.Errorf("theme %q: Lagoon draws the window", a.Settings.Theme)
 	}
-	if want := (Settings{Appearance: components.Dark, Theme: "Lagoon", Transparency: transparencyStandard, ContentTransparency: transparencyStandard}); len(saved) == 0 || saved[len(saved)-1] != want {
+	want := Settings{
+		Appearance:          components.Dark,
+		Theme:               "Lagoon",
+		Transparency:        transparencyStandard,
+		ContentTransparency: transparencyStandard,
+	}
+	if len(saved) == 0 || saved[len(saved)-1] != want {
 		t.Errorf("saved %v, want last %v", saved, want)
 	}
 
@@ -868,7 +1116,10 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 		t.Errorf("the Approvals page shows %q", tt.Texts())
 	}
 	if _, ok := tt.Find("1 waiting"); !ok || tt.HasText("Fix the login form") {
-		t.Errorf("the settings' sidebar shows %q: the way back, with the session that asks counted", tt.Texts())
+		t.Errorf(
+			"the settings' sidebar shows %q: the way back, with the session that asks counted",
+			tt.Texts(),
+		)
 	}
 
 	if err := tt.Click("Back to the sessions"); err != nil {
@@ -876,7 +1127,11 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 	}
 	tt.Frame()
 	if a.settingsOpen || a.selected != "a" || !tt.HasText("Fix the login form") {
-		t.Errorf("open %v, selected %q: the way back shows the session as it was", a.settingsOpen, a.selected)
+		t.Errorf(
+			"open %v, selected %q: the way back shows the session as it was",
+			a.settingsOpen,
+			a.selected,
+		)
 	}
 	a.OpenSettings()
 	tt.Frame()
@@ -892,7 +1147,9 @@ func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
 	a.OpenSettings()
 	tt.Frame()
 
-	if !tt.HasText("None chosen: each session starts as the service does, in ask unless it was started with --yolo.") {
+	if !tt.HasText(
+		"None chosen: each session starts as the service does, in ask unless it was started with --yolo.",
+	) {
 		t.Errorf("no note while none is chosen in %q", tt.Texts())
 	}
 	if err := tt.Click("yolo"); err != nil {
@@ -900,7 +1157,11 @@ func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
 	}
 	tt.Frame()
 	if a.Settings.Approvals != "yolo" || !reflect.DeepEqual(f.everyMode, []string{"yolo"}) {
-		t.Errorf("approvals %q, set %v: choosing yolo sets every session to it", a.Settings.Approvals, f.everyMode)
+		t.Errorf(
+			"approvals %q, set %v: choosing yolo sets every session to it",
+			a.Settings.Approvals,
+			f.everyMode,
+		)
 	}
 	if !tt.HasText("Commands run and files change unseen, outside the folder too.") {
 		t.Errorf("yolo chosen says nothing of what it lets through in %q", tt.Texts())
@@ -920,7 +1181,10 @@ func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.views["a"].t.State.Mode != "ask" {
-		t.Errorf("mode %q: the status line takes a session out of yolo, back to ask", a.views["a"].t.State.Mode)
+		t.Errorf(
+			"mode %q: the status line takes a session out of yolo, back to ask",
+			a.views["a"].t.State.Mode,
+		)
 	}
 }
 
@@ -942,7 +1206,8 @@ func TestSchemesChangeAsTheyAreSaved(t *testing.T) {
 	}
 
 	a.SchemesChanged(nil, errors.New("schemes/forest.css: :root: missing --foreground"))
-	if a.toast == nil || !strings.Contains(a.toast.message, "missing --foreground") || len(components.Schemes) != 1 {
+	if a.toast == nil || !strings.Contains(a.toast.message, "missing --foreground") ||
+		len(components.Schemes) != 1 {
 		t.Errorf("toast %+v, schemes %d", a.toast, len(components.Schemes))
 	}
 }

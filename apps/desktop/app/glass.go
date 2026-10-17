@@ -25,7 +25,9 @@ const (
 type ramp struct{ solid, standard, clear float32 }
 
 func (r ramp) at(transparency float64) float32 {
-	t := float32(min(max(transparency, transparencySolid), transparencyClear) / transparencyStandard)
+	t := float32(
+		min(max(transparency, transparencySolid), transparencyClear) / transparencyStandard,
+	)
 	if t <= 1 {
 		return r.solid + (r.standard-r.solid)*t
 	}
@@ -36,13 +38,24 @@ func (r ramp) at(transparency float64) float32 {
 // and how much that blurs. A clearer bar blurs more, so that what scrolls
 // under it never reads as its title.
 var glasses = struct {
-	sidebar      ramp // of the scheme's sidebar color over the window's material, in the dark; clear shows the material alone
-	sidebarLight ramp // and in the light, whose material is already washed pale, so it lets as much through
-	selection    ramp // of the selection's color under the chosen session
-	bar          ramp // of the background over the content under a title bar
-	barBlur      ramp // of the content under a title bar, in DIPs
-	content      ramp // of the background over the window's material behind the content, in the dark
-	contentLight ramp // and in the light, as thin as the sidebar's for its material washed as pale, a little more for the text on it
+	// of the scheme's sidebar color over the window's material, in the dark;
+	// clear shows the material alone
+	sidebar ramp
+	// and in the light, whose material is already washed pale, so it lets as
+	// much through
+	sidebarLight ramp
+	// of the selection's color under the chosen session
+	selection ramp
+	// of the background over the content under a title bar
+	bar ramp
+	// of the content under a title bar, in DIPs
+	barBlur ramp
+	// of the background over the window's material behind the content, in
+	// the dark
+	content ramp
+	// and in the light, as thin as the sidebar's for its material washed as
+	// pale, a little more for the text on it
+	contentLight ramp
 }{
 	sidebar:      ramp{1, 0.6, 0.4},
 	sidebarLight: ramp{1, 0.35, 0.4},

@@ -56,16 +56,29 @@ func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
 		}
 		Centered(c, 16, func() {
 			if t.State.ID == "" {
-				Marker(c, func() { components.Spinner(c, "Opening", 16, ui.Color{}) }, "Opening the session…")
+				Marker(
+					c,
+					func() { components.Spinner(c, "Opening", 16, ui.Color{}) },
+					"Opening the session…",
+				)
 				return
 			}
 			ui.Column(c).Center().Gap(12).Padding(80, 0).Unselectable().Children(func() {
-				ui.Text(c, "What should we work on?").FontSize(components.TextLG(theme)).FontWeight(500).LetterSpacing(-0.4)
+				ui.Text(c, "What should we work on?").
+					FontSize(components.TextLG(theme)).
+					FontWeight(500).
+					LetterSpacing(-0.4)
 				ui.Row(c).Gap(16).Children(func() {
-					for _, hint := range [][2]string{{"↵", "to send"}, {"⇧↵", "for a new line"}, {"/", "for commands"}} {
+					for _, hint := range [][2]string{
+						{"↵", "to send"},
+						{"⇧↵", "for a new line"},
+						{"/", "for commands"},
+					} {
 						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 							components.Kbd(c, hint[0])
-							ui.Text(c, hint[1]).FontSize(components.TextXS(theme)).TextColor(p.MutedForeground)
+							ui.Text(c, hint[1]).
+								FontSize(components.TextXS(theme)).
+								TextColor(p.MutedForeground)
 						})
 					}
 				})
@@ -95,12 +108,22 @@ func item(c *ui.Context, item *Item) {
 	case KindUser:
 		// A raised panel at the end: the user's own words
 		ui.Row(c).Justify(ui.End).Children(func() {
-			ui.Column(c).MaxWidth(Width*0.8).Padding(8, 12).Radius(t.Radius).Background(p.Secondary).Border(1, p.Border).Gap(4).Children(func() {
-				ui.Text(c, item.Text).LineHeight(1.625)
-				if item.Steer {
-					ui.Text(c, "steer").FontSize(components.TextXS(t)).FontWeight(500).TextColor(p.MutedForeground)
-				}
-			})
+			ui.Column(c).
+				MaxWidth(Width*0.8).
+				Padding(8, 12).
+				Radius(t.Radius).
+				Background(p.Secondary).
+				Border(1, p.Border).
+				Gap(4).
+				Children(func() {
+					ui.Text(c, item.Text).LineHeight(1.625)
+					if item.Steer {
+						ui.Text(c, "steer").
+							FontSize(components.TextXS(t)).
+							FontWeight(500).
+							TextColor(p.MutedForeground)
+					}
+				})
 		})
 	case KindNotice:
 		icon, color, label := (*ui.SVG)(nil), p.MutedForeground, ""

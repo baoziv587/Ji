@@ -77,7 +77,9 @@ func LoadSchemes(dir fs.FS) ([]*Scheme, error) {
 // schemeName is a file's name as the settings show it: "ocean-mist.css"
 // is Ocean Mist.
 func schemeName(file string) string {
-	words := strings.Fields(strings.NewReplacer("-", " ", "_", " ").Replace(strings.TrimSuffix(file, ".css")))
+	words := strings.Fields(
+		strings.NewReplacer("-", " ", "_", " ").Replace(strings.TrimSuffix(file, ".css")),
+	)
 	for i, w := range words {
 		words[i] = strings.ToUpper(w[:1]) + w[1:]
 	}

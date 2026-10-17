@@ -36,16 +36,19 @@ func TestReplyStreamsAsMarkdown(t *testing.T) {
 	if code.lang != "go" || code.text != "func main() {\n\treturn\n}\n" {
 		t.Fatalf("code %+v", code)
 	}
-	if lines := code.block.Lines(); len(lines) != 4 || lines[1][1] != (syntax.Span{Text: "return", Kind: syntax.Keyword}) {
+	if lines := code.block.Lines(); len(lines) != 4 ||
+		lines[1][1] != (syntax.Span{Text: "return", Kind: syntax.Keyword}) {
 		t.Errorf("lines %+v", lines)
 	}
 
 	tr.Apply(agent.Event{Type: "text", Delta: "`\nDone."})
 	blocks = tr.Items[0].md.blocks
-	if len(blocks) != 3 || blocks[1].code != code || code.text != "func main() {\n\treturn\n}" || blocks[2].runs[0].text != "Done." {
+	if len(blocks) != 3 || blocks[1].code != code || code.text != "func main() {\n\treturn\n}" ||
+		blocks[2].runs[0].text != "Done." {
 		t.Fatalf("blocks once closed %+v, code %q", blocks, code.text)
 	}
-	if lines := code.block.Lines(); len(lines) != 3 || lines[2][0] != (syntax.Span{Text: "}", Kind: syntax.Punctuation}) {
+	if lines := code.block.Lines(); len(lines) != 3 ||
+		lines[2][0] != (syntax.Span{Text: "}", Kind: syntax.Punctuation}) {
 		t.Errorf("lines once closed %+v", lines)
 	}
 }
@@ -89,7 +92,11 @@ func TestALineIsHeldWhileItMayTurnOutABlock(t *testing.T) {
 	if blocks := blocksOf("Title\n---", false); len(blocks) != 1 || blocks[0].kind != mdParagraph {
 		t.Errorf("while written %+v", blocks)
 	}
-	if blocks := blocksOf("Title\n---", true); len(blocks) != 1 || blocks[0].kind != mdHeading || blocks[0].level != 2 {
+	if blocks := blocksOf(
+		"Title\n---",
+		true,
+	); len(blocks) != 1 || blocks[0].kind != mdHeading ||
+		blocks[0].level != 2 {
 		t.Errorf("done %+v", blocks)
 	}
 }
@@ -139,9 +146,22 @@ func TestListsAndQuotesComeOutFlat(t *testing.T) {
 func TestInlineRunsKeepTheirStyles(t *testing.T) {
 	blocks := blocksOf("**b** *i* `c` [l](http://x) ~~s~~ a\\*b &amp; <https://y>\nnext", true)
 	want := []mdRun{
-		{"b", styleStrong, ""}, {" ", 0, ""}, {"i", styleEmphasis, ""}, {" ", 0, ""}, {"c", styleCode, ""}, {" ", 0, ""},
-		{"l", styleLink, "http://x"}, {" ", 0, ""}, {"s", styleStrike, ""}, {" a*b & ", 0, ""},
-		{"https://y", styleLink, "https://y"}, {"\nnext", 0, ""},
+		{
+			"b",
+			styleStrong,
+			"",
+		},
+		{" ", 0, ""},
+		{"i", styleEmphasis, ""},
+		{" ", 0, ""},
+		{"c", styleCode, ""},
+		{" ", 0, ""},
+		{"l", styleLink, "http://x"},
+		{" ", 0, ""},
+		{"s", styleStrike, ""},
+		{" a*b & ", 0, ""},
+		{"https://y", styleLink, "https://y"},
+		{"\nnext", 0, ""},
 	}
 	if len(blocks) != 1 || !reflect.DeepEqual(blocks[0].runs, want) {
 		t.Errorf("runs\n got %+v\nwant %+v", blocks[0].runs, want)
@@ -165,7 +185,8 @@ func TestALongParagraphIsCutIntoPieces(t *testing.T) {
 		t.Errorf("the pieces do not make the paragraph")
 	}
 	more := blocksOf(text+strings.Repeat(line, 10), false)
-	if more[0].runs[0].text != blocks[0].runs[0].text || more[1].runs[0].text != blocks[1].runs[0].text {
+	if more[0].runs[0].text != blocks[0].runs[0].text ||
+		more[1].runs[0].text != blocks[1].runs[0].text {
 		t.Errorf("the pieces cut moved")
 	}
 }
@@ -212,7 +233,8 @@ func TestTablesKeepTheirCells(t *testing.T) {
 		t.Fatalf("blocks %+v", blocks)
 	}
 	rows := blocks[0].table.rows
-	if len(rows) != 2 || rows[0][1][0] != (mdRun{"b", styleStrong, ""}) || rows[1][1][0].text != "2" {
+	if len(rows) != 2 || rows[0][1][0] != (mdRun{"b", styleStrong, ""}) ||
+		rows[1][1][0].text != "2" {
 		t.Errorf("rows %+v", rows)
 	}
 }
@@ -229,7 +251,11 @@ func TestACallsLinesAreWorkedOutOnceWhileItRuns(t *testing.T) {
 		t.Errorf("worked out again while it runs")
 	}
 	tr.Apply(agent.Event{Type: "tool_end", ID: "1", Name: "bash", OK: true, Output: "a"})
-	if done := inspectLines(&tr, call); &done[0] == &first[0] || done[len(done)-1].kind != inspectCode {
+	if done := inspectLines(
+		&tr,
+		call,
+	); &done[0] == &first[0] ||
+		done[len(done)-1].kind != inspectCode {
 		t.Errorf("not worked out again as it ended: %+v", done)
 	}
 }
@@ -249,7 +275,8 @@ func TestOnlyTheCallInspectedKeepsItsLines(t *testing.T) {
 		t.Fatalf("lines kept: %v and %v", one.lines != nil, two.lines != nil)
 	}
 	again := inspectLines(&tr, one)
-	if two.lines != nil || len(again) != len(want) || again[len(again)-1].line.Code.Lines()[0][0].Text != "out 1" {
+	if two.lines != nil || len(again) != len(want) ||
+		again[len(again)-1].line.Code.Lines()[0][0].Text != "out 1" {
 		t.Errorf("inspected again %+v", again)
 	}
 }
@@ -280,12 +307,26 @@ func TestAStreamedReplyShowsAsItsWholeParse(t *testing.T) {
 		var m markdown
 		for i := range len(doc) + 1 {
 			m.update(doc[:i], false)
-			if got, want := shapes(m.blocks), shapes(wholeParse(doc[:i], false)); !reflect.DeepEqual(got, want) {
+			if got, want := shapes(
+				m.blocks,
+			), shapes(
+				wholeParse(doc[:i], false),
+			); !reflect.DeepEqual(
+				got,
+				want,
+			) {
 				t.Fatalf("after %q:\n got %+v\nwant %+v", doc[:i], got, want)
 			}
 		}
 		m.update(doc, true)
-		if got, want := shapes(m.blocks), shapes(wholeParse(doc, true)); !reflect.DeepEqual(got, want) {
+		if got, want := shapes(
+			m.blocks,
+		), shapes(
+			wholeParse(doc, true),
+		); !reflect.DeepEqual(
+			got,
+			want,
+		) {
 			t.Fatalf("done %q:\n got %+v\nwant %+v", doc, got, want)
 		}
 	}

@@ -60,7 +60,14 @@ func TestAnOpenWorkBuildsTheStepsInSight(t *testing.T) {
 	tr.Apply(agent.Event{Type: "user", Text: "go on"})
 	for i := range 400 {
 		id := fmt.Sprint("c", i)
-		tr.Apply(agent.Event{Type: "tool_start", ID: id, Name: "bash", Args: fmt.Sprintf(`{"command":"step %d"}`, i)})
+		tr.Apply(
+			agent.Event{
+				Type: "tool_start",
+				ID:   id,
+				Name: "bash",
+				Args: fmt.Sprintf(`{"command":"step %d"}`, i),
+			},
+		)
 		tr.Apply(agent.Event{Type: "tool_end", ID: id, Name: "bash", OK: true})
 	}
 	tr.Apply(agent.Event{Type: "reply_end", Outcome: "done"})
@@ -79,7 +86,11 @@ func TestAnOpenWorkBuildsTheStepsInSight(t *testing.T) {
 		tt.Scroll(450, 300, 0, -500)
 	}
 	if !tt.HasText("step 0") || built(tt, "step ") > 120 {
-		t.Errorf("at the top, %d steps built, the first among them: %v", built(tt, "step "), tt.HasText("step 0"))
+		t.Errorf(
+			"at the top, %d steps built, the first among them: %v",
+			built(tt, "step "),
+			tt.HasText("step 0"),
+		)
 	}
 	r, _ := tt.Find("step 0")
 	if r.Y < 0 || r.Y > 600 {
@@ -94,7 +105,15 @@ func BenchmarkStreamingALongReply(b *testing.B) {
 	tt := viewTester(&tr)
 	tr.Apply(agent.Event{Type: "user", Text: "go on"})
 	for i := range 400 {
-		tr.Apply(agent.Event{Type: "text", Delta: fmt.Sprintf("Paragraph %d says a thing or two about **this** and `that`, as a reply does.\n\n", i)})
+		tr.Apply(
+			agent.Event{
+				Type: "text",
+				Delta: fmt.Sprintf(
+					"Paragraph %d says a thing or two about **this** and `that`, as a reply does.\n\n",
+					i,
+				),
+			},
+		)
 	}
 	tt.Frame()
 	b.ReportAllocs()

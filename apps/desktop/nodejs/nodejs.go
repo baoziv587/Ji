@@ -101,8 +101,16 @@ func systemNodes() []string {
 	}
 
 	home, _ := os.UserHomeDir()
-	candidates := []string{"/opt/homebrew/bin/node", "/usr/local/bin/node", filepath.Join(home, ".volta/bin/node")}
-	if matches, _ := filepath.Glob(filepath.Join(home, ".nvm/versions/node/*/bin/node")); len(matches) > 0 {
+	candidates := []string{
+		"/opt/homebrew/bin/node",
+		"/usr/local/bin/node",
+		filepath.Join(home, ".volta/bin/node"),
+	}
+	if matches, _ := filepath.Glob(
+		filepath.Join(home, ".nvm/versions/node/*/bin/node"),
+	); len(
+		matches,
+	) > 0 {
 		candidates = append(candidates, matches[len(matches)-1])
 	}
 
@@ -197,7 +205,11 @@ func download(ctx context.Context, url, path, sum string, progress func(done, to
 		return fmt.Errorf("downloading Node.js: %w", err)
 	}
 	if got := hex.EncodeToString(hash.Sum(nil)); got != sum {
-		return fmt.Errorf("the Node.js downloaded is not the one expected (SHA-256 %s, not %s)", got, sum)
+		return fmt.Errorf(
+			"the Node.js downloaded is not the one expected (SHA-256 %s, not %s)",
+			got,
+			sum,
+		)
 	}
 	return f.Close()
 }

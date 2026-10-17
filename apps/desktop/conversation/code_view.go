@@ -20,20 +20,44 @@ const chunk = 32
 func fencedWell(c *ui.Context, code *fenced) {
 	th := c.Theme()
 	p := components.PaletteOf(th)
-	ui.Column(c).Background(p.Muted).Border(1, p.Border).Radius(th.Radius).Padding(0, 0, 10).Children(func() {
-		ui.Row(c).Height(32).Padding(0, 4, 0, 12).AlignItems(ui.Center).Unselectable().Children(func() {
-			ui.Text(c, code.lang).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.MutedForeground).Grow(1)
-			style := components.ButtonStyle{Variant: components.Ghost, Size: components.SizeIconSmall}
-			b := code.copied.Button(c, style, func() string { return strings.TrimSuffix(code.text, "\n") }).Tooltip("Copy the code")
-			if !code.copied.Recent() {
-				b.TextColor(p.MutedForeground)
+	ui.Column(c).
+		Background(p.Muted).
+		Border(1, p.Border).
+		Radius(th.Radius).
+		Padding(0, 0, 10).
+		Children(func() {
+			ui.Row(c).
+				Height(32).
+				Padding(0, 4, 0, 12).
+				AlignItems(ui.Center).
+				Unselectable().
+				Children(func() {
+					ui.Text(c, code.lang).
+						Font("monospace").
+						FontSize(components.TextXS(th)).
+						TextColor(p.MutedForeground).
+						Grow(1)
+					style := components.ButtonStyle{
+						Variant: components.Ghost,
+						Size:    components.SizeIconSmall,
+					}
+					b := code.copied.Button(c, style, func() string {
+						return strings.TrimSuffix(code.text, "\n")
+					}).
+						Tooltip("Copy the code")
+					if !code.copied.Recent() {
+						b.TextColor(p.MutedForeground)
+					}
+				})
+
+			for i, spans := range code.chunks(p) {
+				ui.RichText(c.Key(i), spans...).
+					Font("monospace").
+					FontSize(components.TextCode(th)).
+					LineHeight(1.5).
+					Padding(0, 12)
 			}
 		})
-
-		for i, spans := range code.chunks(p) {
-			ui.RichText(c.Key(i), spans...).Font("monospace").FontSize(components.TextCode(th)).LineHeight(1.5).Padding(0, 12)
-		}
-	})
 }
 
 // chunks are the block's lines in spans, chunk lines to a text: made again
@@ -61,7 +85,8 @@ func (code *fenced) chunks(p *components.Palette) [][]ui.Span {
 	// The last chunk keeps the spans of its lines before from, as a block
 	// that streams in changes only its last line or two
 	start := min(from/chunk, len(code.spans)) * chunk
-	if keep := from - start; start/chunk == len(code.spans)-1 && keep > 0 && keep <= len(code.ends) {
+	if keep := from - start; start/chunk == len(code.spans)-1 && keep > 0 &&
+		keep <= len(code.ends) {
 		last := len(code.spans) - 1
 		code.spans[last] = code.spans[last][:code.ends[keep-1]]
 		code.ends = code.ends[:keep]
@@ -96,7 +121,13 @@ func sameLine(a, b syntax.Line) bool {
 
 // appendCode puts a line of code's spans in their colors at the end of
 // spans; the part changed, if any, on mark.
-func appendCode(spans []ui.Span, p *components.Palette, line syntax.Line, changed [2]int, mark ui.Color) []ui.Span {
+func appendCode(
+	spans []ui.Span,
+	p *components.Palette,
+	line syntax.Line,
+	changed [2]int,
+	mark ui.Color,
+) []ui.Span {
 	if changed == [2]int{} {
 		for _, s := range line {
 			spans = append(spans, ui.Span{Text: s.Text, Color: codeColor(p, s.Kind)})
@@ -153,7 +184,10 @@ func codeLine(c *ui.Context, line DiffLine) ui.Element {
 	p := components.PaletteOf(th)
 	color, band := diffColors(th, line.Kind)
 	if line.Code == nil {
-		return ui.Text(c, line.Text).Font("monospace").FontSize(components.TextXS(th)).TextColor(color)
+		return ui.Text(c, line.Text).
+			Font("monospace").
+			FontSize(components.TextXS(th)).
+			TextColor(color)
 	}
 
 	var spans []ui.Span
@@ -161,12 +195,22 @@ func codeLine(c *ui.Context, line DiffLine) ui.Element {
 		spans = append(spans, ui.Span{Text: line.Text[:1], Color: color})
 	}
 	spans = appendCode(spans, p, line.Code.Lines()[line.At], line.Changed, band.Alpha(2.5))
-	return ui.RichText(c, spans...).Font("monospace").FontSize(components.TextXS(th)).TextColor(p.Foreground)
+	return ui.RichText(c, spans...).
+		Font("monospace").
+		FontSize(components.TextXS(th)).
+		TextColor(p.Foreground)
 }
 
 // lineNumber is a line's number in the gutter of a well.
 func lineNumber(c *ui.Context, n, digits int) {
 	th := c.Theme()
-	ui.Text(c, fmt.Sprint(n)).Font("monospace").FontSize(components.TextXS(th)).TextColor(components.PaletteOf(th).MutedForeground.Alpha(0.6)).
-		FontFeatures("tnum").MinWidth(float32(digits) * 7).TextAlign(ui.End).Shrink(0).Unselectable()
+	ui.Text(c, fmt.Sprint(n)).
+		Font("monospace").
+		FontSize(components.TextXS(th)).
+		TextColor(components.PaletteOf(th).MutedForeground.Alpha(0.6)).
+		FontFeatures("tnum").
+		MinWidth(float32(digits) * 7).
+		TextAlign(ui.End).
+		Shrink(0).
+		Unselectable()
 }
