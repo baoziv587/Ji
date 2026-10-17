@@ -18,7 +18,7 @@ import { createPlugins } from '../agent/agent.ts'
 import { createAuthFeature } from '../features/auth.ts'
 import { Permissions } from '../features/permissions.ts'
 import { createSkillsFeature } from '../features/skills.ts'
-import { historyOf, stateOf } from './history.ts'
+import { historyOf } from './history.ts'
 import { AgentService } from './service.ts'
 
 export interface SessionOpenerOptions {
@@ -58,7 +58,6 @@ export class SessionOpener implements Opener {
         lock: () => store.lock(id),
         unlock: () => store.unlock(id),
         unread: () => store.unread(id),
-        history: () => stateOf(store.records(id)),
       },
     })
   }

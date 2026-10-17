@@ -27,9 +27,11 @@
     "@ji.dev/plugin-truncate-tool-results": "workspace:*",
     "@ji.dev/tui": "workspace:*",
     "@ji.dev/utils": "workspace:*",
-    "chokidar": "^5.0.0"
+    "chokidar": "^5.0.0",
+    "write-file-atomic": "^8.0.0"
   },
   "devDependencies": {
-    "@ji.dev/testing": "workspace:*"
+    "@ji.dev/testing": "workspace:*",
+    "@types/write-file-atomic": "^4.0.3"
   }
 }

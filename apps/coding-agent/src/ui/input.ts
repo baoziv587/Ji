@@ -2,7 +2,7 @@
 // the reply, clears the line or quits, and the rest edit it. A reply is followed to its end from here, so one that
 // does not finish can put what it was sent back in the line.
 
-import type { AgentState, Run } from '@ji.dev/llm'
+import type { Run } from '@ji.dev/llm'
 import type { Editing, Keypress, Screen } from '@ji.dev/tui'
 import type { Conversation } from '../agent/conversation.ts'
 import type { Answering } from './answering.ts'
@@ -25,7 +25,7 @@ export interface InputContext {
   /** The session as the desktop app shares it: what a message sent tells it, and when its reply ends. */
   shared?: {
     used: (text: string) => void
-    whenFree: () => Promise<AgentState | undefined>
+    whenFree: () => Promise<boolean>
   }
 }
 
@@ -159,18 +159,17 @@ export class Input {
     }
   }
 
-  /** Once the desktop app's reply ends, the conversation goes on from it. */
+  /** Once the desktop app's reply ends, shows what it wrote: the next reply goes on from it. */
   private async waitForTurn(): Promise<void> {
-    const { shared, conversation, screen } = this.context
+    const { shared, screen } = this.context
     if (shared === undefined || this.waiting) {
       return
     }
 
     this.waiting = true
-    const state = await shared.whenFree()
+    const wrote = await shared.whenFree()
     this.waiting = false
-    if (state !== undefined && !conversation.replying) {
-      conversation.resume(state)
+    if (wrote) {
       log.success('Synced the desktop app’s new messages.')
     }
     screen.draw()

@@ -14,7 +14,7 @@
 // Every event has a sequence number; the log keeps them all, those read back from the session's history first, so a
 // client that connects late or comes back after a drop reads what it missed.
 
-import type { Agent, AgentState, AuthInteraction, Plugin, Run } from '@ji.dev/llm'
+import type { Agent, AuthInteraction, Plugin, Run } from '@ji.dev/llm'
 import type { Questions, Reply } from '@ji.dev/plugin-choices'
 import type { StartOptions } from '../agent/agent.ts'
 import type { Command, Say } from '../agent/commands.ts'
@@ -30,7 +30,7 @@ import { createCommands, runCommand } from '../agent/commands.ts'
 import { Conversation } from '../agent/conversation.ts'
 import { UsageMeter } from '../agent/meter.ts'
 import { EventLog, eventOf, spentOf, viewOf } from './events.ts'
-import { replay } from './history.ts'
+import { replay, stateOf } from './history.ts'
 import { loginInteraction } from './login.ts'
 import { PendingQuestions } from './questions.ts'
 
@@ -58,8 +58,6 @@ export interface SharedLog {
   unlock: () => void
   /** What the terminal appended to the log since it was last read. */
   unread: () => LogRecord[]
-  /** The history, the whole log read again. */
-  history: () => AgentState
 }
 
 /** Where a feature's commands talk to the client: what they say, what a login asks, and that the commands changed. */
@@ -88,8 +86,8 @@ export class AgentService {
   /** How the last reply ended; none before the first. */
   private outcome: Outcome | undefined
   private heldBy: Writer | undefined
-  /** The terminal wrote to the log since the conversation was read from it: the next reply reads it again. */
-  private behind = false
+  /** What the terminal appended to the log since the conversation went on from it: the next reply goes on from it. */
+  private unsynced: LogRecord[] = []
   private replying: Promise<void> = Promise.resolve()
 
   constructor(options: AgentServiceOptions) {
@@ -168,7 +166,7 @@ export class AgentService {
       return
     }
 
-    this.behind = true
+    this.unsynced = this.unsynced.concat(records)
     this.outcome = replay(records, this.meter, event => this.log.push(event)) ?? this.outcome
     this.emitState()
   }
@@ -313,14 +311,15 @@ export class AgentService {
   /** Each reply takes the lock, after what the terminal wrote since: the history goes on from it. */
   private lockOf(shared: SharedLog): ReplyLock {
     return {
-      claim: () => {
+      claim: state => {
         shared.lock()
         this.written(shared.unread())
-        if (!this.behind) {
+        if (this.unsynced.length === 0) {
           return undefined
         }
-        this.behind = false
-        return shared.history()
+        const next = stateOf(this.unsynced, state)
+        this.unsynced = []
+        return next
       },
       release: shared.unlock,
     }
