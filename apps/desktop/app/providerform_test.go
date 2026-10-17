@@ -36,7 +36,7 @@ func TestAKeyAddedInTheSettingsIsStored(t *testing.T) {
 
 	click(t, tt, "Not detected (2)")
 	// The section opens on the clock: its rows take clicks once it is open
-	time.Sleep(400 * time.Millisecond)
+	tt.Advance(400 * time.Millisecond)
 	tt.Frame()
 	click(t, tt, "Add a key for OpenAI")
 	if !tt.HasText("OpenAI API key") {
@@ -128,7 +128,7 @@ func TestAnEndpointsContextWindowIsANumber(t *testing.T) {
 	tt.Type("gpt-oss")
 	click(t, tt, "Add the model id")
 	click(t, tt, "Context window and thinking")
-	time.Sleep(400 * time.Millisecond)
+	tt.Advance(400 * time.Millisecond)
 	tt.Frame()
 	click(t, tt, "Context window in tokens")
 	tt.Type("lots")

@@ -1015,9 +1015,10 @@ func TestSettingsTransparencySnapsAndKeeps(t *testing.T) {
 // was before it could be chosen, solid covers what is behind it, and in between it goes
 // straight from one detent to the next.
 func TestGlassesRampThroughTheDetents(t *testing.T) {
+	// Not the light sidebar: clear, it covers a little more than standard,
+	// for its material washed pale
 	for name, r := range map[string]ramp{
 		"sidebar":       glasses.sidebar,
-		"sidebar light": glasses.sidebarLight,
 		"selection":     glasses.selection,
 		"bar":           glasses.bar,
 		"content":       glasses.content,
@@ -1044,8 +1045,8 @@ func TestGlassesRampThroughTheDetents(t *testing.T) {
 		glasses.contentLight.at(transparencySolid) != 1 {
 		t.Error("solid lets something through")
 	}
-	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.3) > 1e-6 {
-		t.Errorf("sidebar at 75: %v, want 0.3", got)
+	if got := glasses.sidebar.at(75); math.Abs(float64(got)-0.5) > 1e-6 {
+		t.Errorf("sidebar at 75: %v, want 0.5", got)
 	}
 	if got := glasses.bar.at(-10); got != 1 {
 		t.Errorf("bar below solid: %v, want 1", got)

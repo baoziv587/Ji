@@ -114,7 +114,7 @@ func TestSettingsListProvidersAndLogIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The section opens on the clock: its rows take clicks once it is open
-	time.Sleep(400 * time.Millisecond)
+	tt.Advance(400 * time.Millisecond)
 	tt.Frame()
 	if !tt.HasText("Amazon Bedrock") || !tt.HasText("Set up in the environment") {
 		t.Fatalf("opened: %q", tt.Texts())
