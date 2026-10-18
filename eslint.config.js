@@ -29,6 +29,10 @@ export default antfu(
     // carries the coding agent's server bundled (pnpm desktop:bundle-agent), into the apps it builds too
     ignores: ['eval/**', 'apps/desktop/{build,.mygo,resources/agent-server}/**'],
   },
+  {
+    // oxfmt writes hex digits lowercase; this rule wants them uppercase, so the two would undo each other
+    rules: { 'unicorn/number-literal-case': 'off' },
+  },
   ...createSlopConfig({
     cwd: import.meta.dirname,
   }),
