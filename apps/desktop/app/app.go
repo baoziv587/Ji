@@ -229,9 +229,9 @@ func (a *App) busy(id string) bool {
 }
 
 // isBusy is whether a session with this status is in the middle of a
-// reply, here or in the terminal.
+// reply.
 func isBusy(status string) bool {
-	return status == "running" || status == "asking" || status == "terminal"
+	return status == "running" || status == "asking"
 }
 
 // open follows a session's events until it is closed.

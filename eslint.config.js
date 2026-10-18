@@ -105,8 +105,14 @@ export default antfu(
     },
   },
   {
-    // The demo, examples, coding agent and replay CLI are run directly by node, so the entry uses top-level await
-    files: ['apps/replay/src/cli.ts', 'apps/demo/src/**', 'apps/examples/src/**', 'apps/coding-agent/src/main.ts'],
+    // The demo, examples, coding agent, its service and replay CLI are run directly by node, so the entry uses top-level await
+    files: [
+      'apps/replay/src/cli.ts',
+      'apps/demo/src/**',
+      'apps/examples/src/**',
+      'apps/coding-agent/src/main.ts',
+      'apps/coding-agent/src/server.ts',
+    ],
     rules: { 'antfu/no-top-level-await': 'off' },
   },
 )

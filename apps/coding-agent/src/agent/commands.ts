@@ -1,5 +1,5 @@
-// The coding agent's commands, the same wherever it runs: in the terminal (ui/commands.ts) and in a session of the
-// service (server/service.ts). /model switches the model, /think the thinking level, /fast the priority tier of OpenAI's models, /compact
+// The coding agent's commands, run in a session of the service (server/service.ts) for whichever client it has: the
+// terminal lists them in its menu (ui/menu.ts), the desktop app in its own. /model switches the model, /think the thinking level, /fast the priority tier of OpenAI's models, /compact
 // summarizes the conversation so far, /help lists the commands, the keys by when they work, the mode and the tools,
 // /exit quits; the features add theirs after them. What a command has to say goes through `say`: the log in the
 // terminal, events for the service's client.
@@ -31,6 +31,9 @@ export interface Say {
   error: (text: string) => void
 }
 
+/** The title of /help's part on the mode: a client's keys go before it. */
+export const MODE_SECTION = 'Mode'
+
 /** A part of /help: rows of a key and what it does, or a line of text. */
 export interface HelpSection {
   title: string
@@ -47,10 +50,8 @@ export interface CommandOptions {
   send: (message: string) => void
   quit: () => void
   say: Say
-  /** Shows what /help lists. */
+  /** Shows what /help lists: a client adds its keys before the mode. */
   help: (sections: HelpSection[]) => void
-  /** The keys, by when they work, for /help: they are the screen's own. */
-  keys?: HelpSection[]
   /** The features' commands, after the built-in ones; read every time, as they can change. */
   extra?: () => Command[]
   /** The agent on another model, 'provider/id' (agent.ts' startOn); without it, no /model. */
@@ -59,7 +60,7 @@ export interface CommandOptions {
 
 /** The commands, built-in ones first; read every time, as the features' can change. */
 export function createCommands(options: CommandOptions): () => Command[] {
-  const { conversation, tools, mode, send, quit, say, help, keys = [], extra = () => [], startOn } = options
+  const { conversation, tools, mode, send, quit, say, help, extra = () => [], startOn } = options
   const levels = (): string[] => [...conversation.agent.model.thinkingLevels]
   const switching: Command[] =
     startOn === undefined
@@ -90,7 +91,7 @@ export function createCommands(options: CommandOptions): () => Command[] {
       run: arg => fast(conversation, arg, say),
     },
     { name: '/compact', hint: 'summarizes the conversation so far', run: () => compact(conversation, send, say) },
-    { name: '/help', hint: 'lists keys, commands and tools', run: () => help(helpOf(commands(), keys, tools, mode())) },
+    { name: '/help', hint: 'lists keys, commands and tools', run: () => help(helpOf(commands(), tools, mode())) },
     { name: '/exit', hint: 'quits', run: quit },
     ...extra(),
   ]
@@ -195,8 +196,8 @@ function compact(conversation: Conversation, send: (message: string) => void, sa
   send(COMPACT_COMMAND)
 }
 
-/** The commands without a group with their hints, the others by group; then the keys, the mode and the tools. */
-function helpOf(commands: readonly Command[], keys: HelpSection[], tools: string[], mode: string): HelpSection[] {
+/** The commands without a group with their hints, the others by group; then the mode and the tools. */
+function helpOf(commands: readonly Command[], tools: string[], mode: string): HelpSection[] {
   const groups = new Map<string, string[]>()
   for (const { name, group } of commands) {
     if (group !== undefined) {
@@ -207,13 +208,12 @@ function helpOf(commands: readonly Command[], keys: HelpSection[], tools: string
   return [
     { title: 'Commands', rows: commands.filter(c => c.group === undefined).map(hintOf) },
     ...[...groups].map(([group, names]) => ({ title: `${group} (${names.length})`, rows: names.join(', ') })),
-    ...keys,
-    { title: 'Mode', rows: mode },
+    { title: MODE_SECTION, rows: mode },
     { title: `Tools (${tools.length})`, rows: tools.join(', ') },
   ]
 }
 
 /** The name alone in the key column, so a long argument hint does not push every column out; the hint comes after it. */
-export function hintOf({ name, arg, hint }: Command): [string, string] {
+export function hintOf({ name, arg, hint }: Pick<Command, 'name' | 'arg' | 'hint'>): [string, string] {
   return [name, arg === undefined ? hint : `${arg}  ${hint}`]
 }

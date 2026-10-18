@@ -56,6 +56,8 @@ node /path/to/pi-rsi/apps/coding-agent/src/main.ts --model openai-codex/gpt-6.1-
 
 Interactive sessions currently have no command to save and resume a conversation. Headless JSONL logs record run events.
 
+**The terminal and the desktop app share one session service.** Each session runs in the coding agent's service, and the terminal is a view of it: the first terminal starts the service in the background on `127.0.0.1:4317` (its log is `~/.ji/server.log`), and the desktop app and every other terminal use the same one. A session started in the terminal shows in the desktop app as it happens, and either can send, approve or stop. Commands run with the environment of the terminal that started the session, and an API key exported there reaches the model. The service ends 30 seconds after nothing uses it. Set `JI_SERVER` to use another service.
+
 ## Approve, guide, and stop work
 
 ### Choose what needs approval

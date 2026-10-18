@@ -1,6 +1,5 @@
 // The conversation: a message starts a reply, or steers the one in progress; a reply that does not finish takes the
-// conversation back to before it was sent, and says what it was sent, so nothing typed is lost. A conversation the
-// terminal and the service share takes a lock for each reply, and goes on from what the other wrote before it.
+// conversation back to before it was sent, and says what it was sent, so nothing typed is lost.
 
 import type { Agent, AgentState, Run, Session, ThinkingLevel } from '@ji.dev/llm'
 import { createSession, RunError } from '@ji.dev/llm'
@@ -21,32 +20,6 @@ export const STOPPED_MESSAGE = 'stopped by user'
 /** The run rejects with this when the person stops a reply. */
 const STOPPED = new Error(STOPPED_MESSAGE)
 
-/** A conversation kept where another process can write to it too: one reply at a time, from either. */
-export interface ReplyLock {
-  /**
-   * Takes the conversation for a reply: the history to go on from, `state` with what the other process wrote since;
-   * none when it wrote nothing. Throws SessionBusyError while the other writes a reply.
-   */
-  claim: (state: AgentState) => AgentState | undefined
-  release: () => void
-}
-
-/** Who writes a reply to a shared conversation: the terminal, or the service a window talks to. */
-export type Writer = 'terminal' | 'desktop'
-
-const WRITER_NAMES: Record<Writer, string> = { terminal: 'The terminal', desktop: 'The desktop app' }
-
-/** Another process writes a reply to the conversation: `by` says which. */
-export class SessionBusyError extends Error {
-  readonly by: Writer
-
-  constructor(by: Writer) {
-    super(`${WRITER_NAMES[by]} is replying in this session.`)
-    this.name = 'SessionBusyError'
-    this.by = by
-  }
-}
-
 export class Conversation {
   private current: Agent
   private session: Session
@@ -56,13 +29,11 @@ export class Conversation {
   private before: AgentState | undefined
   private sent: string[] = []
   private fastMode = false
-  private readonly lock: ReplyLock | undefined
 
   /** `resume` picks up a conversation kept elsewhere: its id, and its history. */
-  constructor(agent: Agent, resume: { id?: string; state?: AgentState } = {}, lock?: ReplyLock) {
+  constructor(agent: Agent, resume: { id?: string; state?: AgentState } = {}) {
     this.current = agent
     this.session = createSession(agent, resume)
-    this.lock = lock
   }
 
   /** Stays the same when a reply that did not finish takes the conversation back. */
@@ -98,23 +69,8 @@ export class Conversation {
    * next step boundary: at once when idle, after the step in progress otherwise.
    */
   send(message: string): Run | undefined {
-    const starting = this.reply === undefined
-    let before: AgentState
-    let run: Run
-    try {
-      const newer = starting ? this.lock?.claim(this.session.state) : undefined
-      if (newer !== undefined) {
-        this.session = createSession(this.current, { id: this.session.id, state: newer })
-      }
-      before = this.session.state
-      run = this.session.send(message, { when: 'step' })
-    } catch (error) {
-      // The lock is only given back by the process that has it: a refused claim leaves the other's as it is
-      if (starting) {
-        this.lock?.release()
-      }
-      throw error
-    }
+    const before = this.session.state
+    const run = this.session.send(message, { when: 'step' })
     if (run === this.reply) {
       this.sent.push(message)
       return undefined
@@ -171,7 +127,6 @@ export class Conversation {
       return { stopped, error, sent: this.sent }
     } finally {
       this.reply = undefined
-      this.lock?.release()
     }
   }
 }

@@ -1,6 +1,10 @@
 // The sessions over HTTP: JSON for what a client asks and does, and Server-Sent Events for what happens, so a client
 // needs nothing but an HTTP library.
 //
+//   GET  /api/service                               {pid, version}: which service this is, and of which code
+//   POST /api/service/stop                          ends it, unless a client is connected or a session is replying
+//                                                   (409)
+//
 //   GET  /api/events                                the list of sessions, at once and again whenever it changes
 //   POST /api/mode                    {mode}        every session's mode, those opened later included: ask, auto or
 //                                                   yolo
@@ -16,14 +20,16 @@
 //   POST /api/endpoints/probe         {baseUrl, key?, id?}  {models}: the ids the server lists, asked with the key,
 //                                                   or else the stored key of endpoint id
 //
-//   GET  /api/sessions                              {sessions, defaultRoot}, those the terminal made since included
-//   POST /api/sessions                {root?, model?}  a new session, working in root (default: defaultRoot), on
-//                                                   model, 'provider/id' (default: the service's --model)
+//   GET  /api/sessions                              {sessions, defaultRoot}
+//   POST /api/sessions                {root?, model?, env?}  a new session, working in root (default: defaultRoot),
+//                                                   on model, 'provider/id' (default: the service's --model), its
+//                                                   commands run with env, {name: value} (default: the service's)
 //   POST /api/sessions/:id/archive    {archived}    out of the list's way, or back
 //
 //   GET  /api/sessions/:id/state                    a session's state, as in its 'state' event
 //   GET  /api/sessions/:id/events                   its events: those after Last-Event-ID (or ?after=n), then each as
-//                                                   it happens
+//                                                   it happens; with ?run=1, each run event besides, whole, as
+//                                                   {type: 'run', event} with no id, for a client that draws the run
 //   POST /api/sessions/:id/messages   {text}        starts a reply, or steers the one in progress
 //   POST /api/sessions/:id/commands   {line}        runs the command the line names, as the terminal does: {result:
 //                                                   'ran'}, or a skill's sent as a message ('started' | 'steered')
@@ -35,20 +41,22 @@
 //   POST /api/sessions/:id/model      {model}       'provider/id': the model of the next reply, and of the session
 //                                                   when it opens again; not while it replies
 //
-// An error is {error: message} with a 4xx status: 409 for a message sent while the terminal replies in the session.
+// An error is {error: message} with a 4xx status.
 
 import type { Reply } from '@ji.dev/plugin-choices'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { Mode } from '../features/permissions.ts'
-import type { ServiceEvent } from './events.ts'
+import type { LiveEvent, ServiceEvent } from './events.ts'
 import type { EndpointInput } from './providers.ts'
-import type { SessionHub, SessionSummary } from './sessions.ts'
+import type { AgentService } from './service.ts'
+import type { Environment, SessionHub, SessionSummary } from './sessions.ts'
+import type { ServiceInfo } from './shared.ts'
 import { Buffer } from 'node:buffer'
 import { createServer } from 'node:http'
+import process from 'node:process'
 import { models } from '@ji.dev/llm'
 import { DISMISSED } from '@ji.dev/plugin-choices'
 import { errorMessage } from '@ji.dev/utils'
-import { SessionBusyError } from '../agent/conversation.ts'
 import { MODES } from '../features/permissions.ts'
 import {
   dropEndpoint,
@@ -73,11 +81,18 @@ export interface AgentHttpOptions {
   defaultRoot: string
   /** Where the endpoints are kept, ~/.ji; without it, none can be added. */
   auth?: string
+  /** Which code this is, for a client to tell an old service from its own (default: none). */
+  version?: string
+  /** Ends the service, for POST /api/service/stop; without it, it cannot be stopped that way. */
+  stop?: () => void
+  /** Told whether the service is in use, a client connected or a session replying, each time that may have changed. */
+  inUse?: (inUse: boolean) => void
 }
 
 export function createAgentHttpServer(options: AgentHttpOptions): Server {
+  const use = new ServiceUse(options.hub, options.inUse)
   return createServer((req, res) => {
-    route(options, req, res).catch((error: unknown) => {
+    route(options, use, req, res).catch((error: unknown) => {
       if (res.headersSent) {
         res.end()
         return
@@ -88,7 +103,8 @@ export function createAgentHttpServer(options: AgentHttpOptions): Server {
 }
 
 async function route(
-  { hub, defaultRoot, auth }: AgentHttpOptions,
+  { hub, defaultRoot, auth, version, stop }: AgentHttpOptions,
+  use: ServiceUse,
   req: IncomingMessage,
   res: ServerResponse,
 ): Promise<void> {
@@ -100,8 +116,22 @@ async function route(
     throw noRoute()
   }
 
+  if (collection === 'service') {
+    if (method === 'GET' && id === undefined) {
+      return sendJson(res, 200, { pid: process.pid, version } satisfies ServiceInfo)
+    }
+    if (method === 'POST' && id === 'stop' && stop !== undefined) {
+      if (use.inUse) {
+        throw new HttpError(409, 'the service is in use')
+      }
+      // Once the answer is out: stopping closes every connection
+      res.once('finish', stop)
+      return sendJson(res, 200, { ok: true })
+    }
+    throw noRoute()
+  }
   if (collection === 'events' && method === 'GET') {
-    return streamList(hub, defaultRoot, req, res)
+    return streamList(hub, defaultRoot, use, req, res)
   }
   if (collection === 'mode' && method === 'POST') {
     const mode = (await RequestBody.read(req)).mode()
@@ -120,11 +150,10 @@ async function route(
 
   if (id === undefined) {
     if (method === 'GET') {
-      hub.refresh()
       return sendJson(res, 200, { sessions: hub.list(), defaultRoot })
     }
     const body = await RequestBody.read(req)
-    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot), body.optional('model')))
+    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot), body.optional('model'), body.env()))
   }
 
   const sessionId = decodeURIComponent(id)
@@ -133,7 +162,8 @@ async function route(
   }
   if (method === 'GET' && action === 'events') {
     const after = Number(req.headers['last-event-id'] ?? url.searchParams.get('after') ?? 0)
-    return streamSession(hub, sessionId, Number.isFinite(after) ? after : 0, req, res)
+    const from = { after: Number.isFinite(after) ? after : 0, run: url.searchParams.get('run') === '1' }
+    return streamSession(hub.session(sessionId), from, use, req, res)
   }
   if (method !== 'POST') {
     throw noRoute()
@@ -254,22 +284,71 @@ async function sendProviders(res: ServerResponse, auth: string | undefined): Pro
 }
 
 /** The list, then the list again whenever it changes, until the client hangs up. */
-function streamList(hub: SessionHub, defaultRoot: string, req: IncomingMessage, res: ServerResponse): void {
+function streamList(
+  hub: SessionHub,
+  defaultRoot: string,
+  use: ServiceUse,
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
   const stream = new EventStream(res)
   const send = (sessions: SessionSummary[]): void => stream.send({ type: 'sessions', sessions, defaultRoot })
 
   send(hub.list())
-  stream.keepOpen(req, hub.subscribe(send))
+  stream.keepOpen(req, [hub.subscribe(send), use.opened()])
 }
 
-/** The events the client missed, then each as it happens, until it hangs up. */
-function streamSession(hub: SessionHub, id: string, after: number, req: IncomingMessage, res: ServerResponse): void {
-  const service = hub.session(id)
+/** The events the client missed, then each as it happens, the run events too when it asks, until it hangs up. */
+function streamSession(
+  service: AgentService,
+  { after, run }: { after: number; run: boolean },
+  use: ServiceUse,
+  req: IncomingMessage,
+  res: ServerResponse,
+): void {
   const stream = new EventStream(res)
   const send = (e: ServiceEvent): void => stream.send(e, e.seq)
 
   service.eventsAfter(after).forEach(send)
-  stream.keepOpen(req, service.subscribe(send))
+  const stops = [service.subscribe(send), use.opened()]
+  if (run) {
+    stops.push(service.watch((event: LiveEvent) => stream.send({ type: 'run', event })))
+  }
+  stream.keepOpen(req, stops)
+}
+
+/** Whether the service is in use: a client connected, by an event stream, or a session replying. */
+class ServiceUse {
+  private streams = 0
+  private readonly hub: SessionHub
+  private readonly told: ((inUse: boolean) => void) | undefined
+
+  constructor(hub: SessionHub, told?: (inUse: boolean) => void) {
+    this.hub = hub
+    this.told = told
+    if (told !== undefined) {
+      // A reply that starts or ends
+      hub.subscribe(() => this.tell())
+    }
+  }
+
+  get inUse(): boolean {
+    return this.streams > 0 || this.hub.replying()
+  }
+
+  /** One more stream is open; returns what closes it. */
+  opened(): () => void {
+    this.streams++
+    this.tell()
+    return () => {
+      this.streams--
+      this.tell()
+    }
+  }
+
+  private tell(): void {
+    this.told?.(this.inUse)
+  }
 }
 
 class HttpError extends Error {
@@ -287,9 +366,6 @@ function statusOf(error: unknown): number {
   }
   if (error instanceof SessionNotFoundError) {
     return 404
-  }
-  if (error instanceof SessionBusyError) {
-    return 409
   }
   return 400
 }
@@ -369,6 +445,18 @@ class RequestBody {
     }
   }
 
+  /** The variables a session's commands run with; none when the field is missing. */
+  env(): Environment | undefined {
+    const { env } = this.fields
+    if (env === undefined) {
+      return undefined
+    }
+    if (!isRecord(env) || !Object.values(env).every(v => typeof v === 'string')) {
+      throw new HttpError(400, '"env" must be {name: value}, every value a string')
+    }
+    return env as Environment
+  }
+
   mode(): Mode {
     const mode = MODES.find(m => m === this.fields.mode)
     if (mode === undefined) {
@@ -407,17 +495,25 @@ class EventStream {
   /** `id` is what the client sends back as Last-Event-ID when it connects again. */
   send(data: unknown, id?: number): void {
     const head = id === undefined ? '' : `id: ${id}\n`
-    this.res.write(`${head}data: ${JSON.stringify(data)}\n\n`)
+    this.res.write(`${head}data: ${JSON.stringify(data, jsonSafe)}\n\n`)
   }
 
-  /** Beats while the client is connected; once it hangs up, stops what `unsubscribe` stops. */
-  keepOpen(req: IncomingMessage, unsubscribe: () => void): void {
+  /** Beats while the client is connected; once it hangs up, calls `stops`. */
+  keepOpen(req: IncomingMessage, stops: (() => void)[]): void {
     const heartbeat = setInterval(() => this.res.write(': ping\n\n'), HEARTBEAT_MS)
     req.on('close', () => {
       clearInterval(heartbeat)
-      unsubscribe()
+      stops.forEach(stop => stop())
     })
   }
+}
+
+/** An error as a client reads it, as a log keeps it: its name, its message, and its kind when it has one. */
+function jsonSafe(_key: string, value: unknown): unknown {
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, ...('kind' in value ? { kind: value.kind } : {}) }
+  }
+  return value
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

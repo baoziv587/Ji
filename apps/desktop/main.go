@@ -104,6 +104,9 @@ func main() {
 		"go through the onboarding as if there were no Node.js",
 	)
 	flag.Parse()
+	// The machine's one service, the terminal's too, unless the sessions are
+	// kept somewhere of their own
+	service.Shared = service.Sessions == ""
 
 	// The folder after the flags, whose sessions the window shows; with one
 	// running already, it goes to that one, which shows them instead
@@ -214,7 +217,11 @@ func main() {
 			update(func() { started = s })
 			return s.URL, nil
 		}
-		ob.Open = func() { open(agent.NewPendingClient()) }
+		ob.Open = func() {
+			c := agent.NewPendingClient()
+			c.Root = service.Root
+			open(c)
+		}
 		ob.Close = func() {
 			stopApp()
 			a = nil

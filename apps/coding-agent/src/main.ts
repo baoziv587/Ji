@@ -1,33 +1,23 @@
-import type { Agent, ThinkingLevel } from '@ji.dev/llm'
 import type { Element } from '@ji.dev/tui'
-import type { StartOptions } from './agent/agent.ts'
-import type { Feature } from './features/feature.ts'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import type { ClientEvent } from './client/session.ts'
+import type { ServiceState } from './server/events.ts'
 import process from 'node:process'
 import { parseArgs } from 'node:util'
 import { cancel, log, outro } from '@clack/prompts'
-import { UnknownModelError, UnsupportedThinkingError } from '@ji.dev/llm'
-import { choices } from '@ji.dev/plugin-choices'
-import { localWorkspace } from '@ji.dev/plugin-files'
-import { jsonl } from '@ji.dev/plugin-jsonl'
-import { createLocalExecutor } from '@ji.dev/plugin-shell'
+import { files, localWorkspace } from '@ji.dev/plugin-files'
 import { abbreviateHomePath, dimText, formatKeyHint, Screen, Status } from '@ji.dev/tui'
-import { contextLimitOf, createPlugins, startAgent, startOn, toolNamesOf } from './agent/agent.ts'
-import { Conversation } from './agent/conversation.ts'
-import { createAuthFeature } from './features/auth.ts'
-import { Permissions } from './features/permissions.ts'
-import { createSkillsFeature } from './features/skills.ts'
-import { SessionStore } from './server/store.ts'
+import { errorMessage } from '@ji.dev/utils'
+import { startService } from './client/launch.ts'
+import { SessionClient } from './client/session.ts'
 import { Answering } from './ui/answering.ts'
 import { viewOf } from './ui/bars.ts'
-import { createCommandMenu } from './ui/commands.ts'
-import { Input, missingKey } from './ui/input.ts'
-import { createLoginInteraction } from './ui/login.ts'
-import { SharedSession } from './ui/shared.ts'
-import { Meter } from './ui/usage.ts'
+import { showHelp } from './ui/commands.ts'
+import { Input } from './ui/input.ts'
+import { CommandMenu } from './ui/menu.ts'
+import { describeUsage, summarizeUsage } from './ui/usage.ts'
 
-// The parts
+// The terminal is a client of the coding agent's service (server.ts): the session runs there, with its tools, its
+// approvals and its log, and the desktop app shows the same one as it happens. Closing the terminal leaves it there.
 
 /** Where the command was run from: pnpm --filter starts the script in the package's own directory. */
 const ROOT = process.env.INIT_CWD ?? process.cwd()
@@ -35,180 +25,151 @@ const ROOT = process.env.INIT_CWD ?? process.cwd()
 /** The root as the top bar shows it. */
 const WORKSPACE = abbreviateHomePath(ROOT)
 
-/** Where skills are kept, the same place Claude Code reads them from. */
-const SKILLS = join(homedir(), '.agents', 'skills')
-
-/** Where the credentials /login keeps are, and the installation id; headless reads the same file. */
-const AUTH = join(homedir(), '.ji')
-
-/** Where the service keeps its sessions: the desktop app lists the terminal's too, and can go on with them. */
-const SESSIONS = join(AUTH, 'sessions')
-
 /**
- * `--model provider/id` picks any model of pi-ai's catalog; without it, DeepSeek. `--yolo`: nothing waits for a yes,
- * for the whole session, for a sandbox or a throwaway checkout.
+ * `--model provider/id` picks any model of pi-ai's catalog; without it, DEEPSEEK_MODEL of DeepSeek's, and the level
+ * DEEPSEEK_THINKING. `--yolo`: nothing waits for a yes, for the whole session, for a sandbox or a throwaway checkout.
  */
 const { values: ARGS } = parseArgs({
   options: { model: { type: 'string' }, yolo: { type: 'boolean', default: false } },
 })
-
-const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
-
-/** The local machine: files anywhere on it, the permissions say which are asked about, and commands run in the root. */
-const workspace = localWorkspace(ROOT, { allow: () => true })
-const executor = createLocalExecutor({ cwd: ROOT })
-
-const plugins = createPlugins(workspace, executor)
-
-/** What waits for a yes; Shift+Tab switches its mode, at the prompt or at a question. Nothing does in yolo. */
-const permissions = new Permissions(workspace, plugins.files, plugins.shell, { mode: ARGS.yolo ? 'yolo' : 'ask' })
-
-/** The bars around the conversation, built by buildView; stdout is the conversation between them. */
-const screen = new Screen(buildView)
-
-/** What the session has spent, on the line above the status. */
-const meter = new Meter()
-
-const status = new Status(() => screen.draw())
-
-const answering = new Answering(screen, status, permissions)
-
-/** Read in the background: the screen comes up first, and the menu has them a moment later. */
-const skills = createSkillsFeature(SKILLS)
-
-/** /login and /logout; its questions go on the screen like any other. */
-const auth = createAuthFeature(AUTH, createLoginInteraction(answering))
-
-const store = new SessionStore(SESSIONS, 'terminal')
-
-/** The session's line in the desktop app's list, and the lock each reply takes. */
-const shared = new SharedSession({
-  store,
-  root: ROOT,
-  // eslint-disable-next-line ts/no-use-before-define -- read as a message is sent, once the conversation exists
-  id: () => conversation.id,
-  // eslint-disable-next-line ts/no-use-before-define -- as above
-  model: () => `${conversation.agent.model.provider}/${conversation.agent.model.id}`,
-})
-
-/**
- * What the agent runs with: each plugin, and what the terminal asks before its calls. The shell's before the files
- * plugin: a command runs after the edits the model wrote before it. grep is read-only, so never asked about. The
- * skills are commands, one per folder, and a hook that hands the model their instructions.
- */
-const features: Feature[] = [
-  { plugin: plugins.shell, approve: permissions.commandCalls },
-  { plugin: plugins.search },
-  { plugin: plugins.files, approve: permissions.fileCalls },
-  skills,
-  auth,
-  // eslint-disable-next-line ts/no-use-before-define -- written to as a reply runs, once the conversation exists
-  { plugin: jsonl(line => store.append(conversation.id, line)) },
-]
-
-/**
- * The model asks with ask_user; permissions say which calls wait for a yes (RFC-0007 §5). None of them knows about the
- * terminal: `answer` puts every question to the person.
- */
-const asking = choices({ answer: answering.answer, approve: features.flatMap(f => f.approve ?? []) })
-
-/**
- * The model comes from --model, or DEEPSEEK_MODEL, and the level from DEEPSEEK_THINKING; /model switches to another,
- * the rest as it is.
- */
-const started: StartOptions = {
-  root: ROOT,
-  model: ARGS.model ?? `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-flash'}`,
-  thinking: (process.env.DEEPSEEK_THINKING ?? 'high') as ThinkingLevel,
-  features,
-  asking,
-}
-
-const conversation = new Conversation(startAgentOrQuit(), {}, shared)
-
-const TOOLS = toolNamesOf(features, asking)
-
-const commands = createCommandMenu({
-  conversation,
-  tools: TOOLS,
-  mode: () => permissions.describeMode(),
-  // eslint-disable-next-line ts/no-use-before-define -- runs on a keypress, once the input below exists
-  send: message => input.send(message),
-  quit,
-  extra: () => features.flatMap(f => f.commands ?? []),
-  startOn: spec => startOn(spec, { ...started, thinking: conversation.agent.thinking }),
-})
-
-/** The input line and its keys; a reply shows on the stage, the conversation's part of the screen. */
-const input = new Input({
-  screen,
-  conversation,
-  answering,
-  commands,
-  quit,
-  shared,
-  stage: {
-    screen,
-    status,
-    meter,
-    answered: () => answering.answered(),
-    fileTools: new Set(plugins.files.tools?.map(t => t.name)),
-  },
-})
-
-// The screen
-
-function buildView(): Element {
-  const { model, thinking } = conversation.agent
-  return viewOf(
-    {
-      model: `${model.provider}/${model.id}`,
-      thinking,
-      fast: conversation.fast,
-      root: WORKSPACE,
-      editing: input.editing,
-      menu: input.menu,
-      replying: conversation.replying,
-      asking: answering.open,
-      queued: conversation.queued,
-      usage: meter.parts(contextLimitOf(model)),
-      status: status.describe(),
-      view: screen.view,
-      below: screen.below,
-      mode: permissions.mode,
-      auto: permissions.mode !== 'ask',
-      allowed: permissions.describeAllowed(),
-    },
-    screen.content,
-  )
-}
-
-// Starting and quitting
-
-/** A typo in the model or the level stops the coding agent before the first prompt, with the choices listed. */
-function startAgentOrQuit(): Agent {
-  try {
-    return startAgent(started)
-  } catch (error) {
-    if (error instanceof UnknownModelError || error instanceof UnsupportedThinkingError) {
-      cancel(error.message)
-      process.exit(1)
-    }
-    throw error
-  }
-}
 
 if (!Screen.isSupported()) {
   cancel('The coding agent draws a bar at the bottom of a terminal: run it in one.')
   process.exit(1)
 }
 
+/**
+ * The session, made in the root with the terminal's environment: its commands run with it, and a key exported in it
+ * reaches the model. A typo in the model or the level stops the coding agent before the first prompt.
+ */
+const { session, started } = await openSessionOrQuit()
+
+/** The tools that read and change files, as the session's files plugin has them: a reply that does not finish names
+ * the files they changed. */
+const FILE_TOOLS: ReadonlySet<string> = new Set(files(localWorkspace(ROOT)).tools?.map(t => t.name))
+
+/** The session as its last 'state' event left it. */
+let state: ServiceState = started
+
+const { promise: quitting, resolve: quit } = Promise.withResolvers<void>()
+
+/** The bars around the conversation, built by buildView; stdout is the conversation between them. */
+const screen = new Screen(buildView)
+
+const status = new Status(() => screen.draw())
+
+const answering = new Answering({
+  screen,
+  status,
+  state: () => state,
+  answer: (id, reply) => session.answer(id, reply),
+  switchMode: () => {
+    session.setMode().catch((error: unknown) => log.error(errorMessage(error)))
+  },
+  // eslint-disable-next-line ts/no-use-before-define -- asked once a question comes, once the input below exists
+  drawn: () => input.drawn(),
+})
+
+/** The input line and its keys; a reply shows on the stage, the conversation's part of the screen. */
+const input = new Input({
+  screen,
+  session,
+  state: () => state,
+  answering,
+  commands: new CommandMenu(() => state.commands),
+  quit,
+  stage: { screen, status, answered: () => answering.answered(), fileTools: FILE_TOOLS },
+})
+
+// The screen
+
+function buildView(): Element {
+  return viewOf(
+    {
+      model: state.model,
+      thinking: state.thinking,
+      fast: state.fast,
+      root: WORKSPACE,
+      editing: input.editing,
+      menu: input.menu,
+      replying: state.replying,
+      asking: answering.open,
+      queued: state.queued,
+      usage: describeUsage(state.usage),
+      status: status.describe(),
+      view: screen.view,
+      below: screen.below,
+      mode: state.mode,
+      auto: state.mode !== 'ask',
+      allowed: state.allowed,
+    },
+    screen.content,
+  )
+}
+
+// What the session does
+
+/** Its events: a reply drawn as it streams, the questions asked, what its commands say, and its state. */
+function take(e: ClientEvent): void {
+  switch (e.type) {
+    case 'run':
+      input.take(e.event)
+      return
+    case 'reply_end':
+      input.ended(e)
+      return
+    case 'ask':
+      answering.ask(e)
+      return
+    case 'ask_closed':
+      answering.closed(e.id)
+      return
+    case 'state': {
+      const switched = e.state.mode !== state.mode
+      state = e.state
+      if (switched) {
+        answering.modeChanged()
+      }
+      screen.draw()
+      return
+    }
+    case 'notice':
+      // After what the reply showed before it
+      void input.drawn().then(() => log[e.level](e.text))
+      return
+    case 'help':
+      void input.drawn().then(() => showHelp(e.sections))
+  }
+}
+
+// Starting and quitting
+
+async function openSessionOrQuit(): Promise<{ session: SessionClient; started: ServiceState }> {
+  try {
+    const session = await SessionClient.create(await startService(), {
+      root: ROOT,
+      model: ARGS.model ?? `deepseek/${process.env.DEEPSEEK_MODEL ?? 'deepseek-flash'}`,
+      env: process.env,
+    })
+    // The service's mode is for every session, the desktop app's: the terminal's is its own
+    let started = await session.setMode(ARGS.yolo ? 'yolo' : 'ask')
+    const level = process.env.DEEPSEEK_THINKING
+    if (level !== undefined && level !== '') {
+      started = await session.think(level)
+    }
+    return { session, started }
+  } catch (error) {
+    cancel(errorMessage(error))
+    process.exit(1)
+  }
+}
+
 // Ctrl+C reaches the keypress listener as a key; the SIGINT comes from a question's prompt, which passes it on
 process.on('SIGINT', () => {
-  if (!conversation.replying) {
+  if (!state.replying) {
     process.exit(130)
   }
-  conversation.stop()
+  session.stop().catch((error: unknown) => log.error(errorMessage(error)))
 })
 
 // Added before any question's listener, so the question redraws after a mode switch and shows the new mode
@@ -216,27 +177,26 @@ screen.keys.on('keypress', input.onKey)
 
 screen.start()
 
-// The menu reads the commands as it draws: once the skills are in, a draw shows them
-skills.plugin.loading.then(
-  () => screen.draw(),
-  (error: unknown) => log.warn(`Skills: ${error instanceof Error ? error.message : String(error)}`),
-)
-
-const toolCount = TOOLS.length === 1 ? '1 tool' : `${TOOLS.length} tools`
+const toolCount = state.tools.length === 1 ? '1 tool' : `${state.tools.length} tools`
 const welcome = `${dimText(`${toolCount} ·`)} ${formatKeyHint('/help', 'lists keys, commands and tools')}`
 log.message(welcome, { spacing: 0 })
 
-// The key is only needed to send, so its absence is pointed out without blocking anything else
-if (!(await conversation.agent.model.hasKey())) {
-  log.warn(missingKey(conversation.agent.model.provider))
-}
+const listening = new AbortController()
+const listened = session.listen(take, listening.signal, {
+  dropped: error => log.warn(`Lost the connection to the service (${errorMessage(error)}): connecting again…`),
+  restored: () => log.success('Connected to the service again.'),
+})
 
 await quitting
-conversation.stop()
+if (state.replying) {
+  await session.stop().catch(() => {})
+}
+listening.abort()
+await listened
+input.close()
 await input.settled()
-store.close()
 
 await screen.settled()
 screen.stop()
-log.message(`Session: ${conversation.id}\n${meter.summary()}`)
+log.message(`Session: ${session.id}\n${summarizeUsage(state.usage)}`)
 outro('Bye')

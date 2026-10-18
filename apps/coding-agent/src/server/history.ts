@@ -21,69 +21,42 @@ export interface History {
   meter: UsageMeter
 }
 
-const EMPTY_STATE: AgentState = { messages: [], plugins: {} }
-
 export function historyOf(records: readonly LogRecord[]): History {
-  const events: Unnumbered[] = []
-  const meter = new UsageMeter()
-  const outcome = replay(records, meter, event => events.push(event))
-  return { state: stateOf(records), events, outcome, meter }
-}
-
-/**
- * The history to go on from: `state`, the history up to the first of `records`, with the steps of the runs among them
- * that ended done.
- */
-export function stateOf(records: readonly LogRecord[], state: AgentState = EMPTY_STATE): AgentState {
   const turns = new Map<string, Turn[]>()
   const done = new Set<string>()
+  const events: Unnumbered[] = []
+  const meter = new UsageMeter()
+  let outcome: Outcome | undefined
+
   for (const record of records) {
+    meter.take(record, false)
+
     if (!turns.has(record.run)) {
       turns.set(record.run, [])
     }
     if (record.type === 'step_end') {
       turns.get(record.run)!.push(record.turn)
     }
-    if (record.type === 'run_end' && outcomeOf(record).outcome === 'done') {
-      done.add(record.run)
+    if (record.type === 'run_end') {
+      const ended = outcomeOf(record)
+      outcome = ended.outcome
+      if (ended.outcome === 'done') {
+        done.add(record.run)
+      }
+      events.push({ type: 'reply_end', ...ended, usage: spentOf(record) })
+      continue
+    }
+    const event = eventOf(record)
+    if (event !== undefined) {
+      events.push(event)
     }
   }
 
+  let state: AgentState = { messages: [], plugins: {} }
   for (const [run, steps] of turns) {
     if (done.has(run)) {
       state = steps.reduce(applyTurn, state)
     }
   }
-  return state
-}
-
-/**
- * Lines of the log as a client is shown them: their events go to `push`, what they spent to `meter`. Returns how the
- * last run among them ended; none when none did.
- */
-export function replay(
-  records: readonly LogRecord[],
-  meter: UsageMeter,
-  push: (event: Unnumbered) => void,
-): Outcome | undefined {
-  let outcome: Outcome | undefined
-  for (const record of records) {
-    meter.take(record, false)
-    if (record.type === 'run_end') {
-      outcome = outcomeOf(record).outcome
-    }
-    const event = clientEventOf(record)
-    if (event !== undefined) {
-      push(event)
-    }
-  }
-  return outcome
-}
-
-/** What a client shows of a line of the log: a run's end is the reply's, with what it spent. */
-export function clientEventOf(record: LogRecord): Unnumbered | undefined {
-  if (record.type === 'run_end') {
-    return { type: 'reply_end', ...outcomeOf(record), usage: spentOf(record) }
-  }
-  return eventOf(record)
+  return { state, events, outcome, meter }
 }
