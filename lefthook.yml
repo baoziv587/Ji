@@ -33,9 +33,10 @@ pre-push:
           printf 'Go files need formatting:\n%s\n' "$unformatted"
           exit 1
         fi
+    - name: lint
+      run: '{quiet} pnpm exec eslint .'
     - name: go-lint
-      root: apps/desktop/
-      run: '{quiet} go vet ./...'
+      run: '{quiet} pnpm lint:go'
     - name: knip
       run: '{quiet} pnpm knip'
     - name: typecheck
