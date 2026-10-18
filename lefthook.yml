@@ -1,5 +1,18 @@
 # git hooks：pnpm install 时由 lefthook 的 postinstall 自动安装
 
+# 每个 job 结束时打印它的标题和输出，最后是 summary
+output:
+  - execution
+  - execution_out
+  - failure
+  - summary
+# 运行 hook 时不再自动同步安装（postinstall 已经装过）；设了全局 core.hooksPath 时，这一步每次都会打印一大段警告
+no_auto_install: true
+
+templates:
+  # 加在命令前面：成功时不出声，失败时才打印全部输出
+  quiet: sh "$(git rev-parse --show-toplevel)/scripts/quiet.sh"
+
 # 只格式化暂存的文件，格式化后自动重新 git add
 pre-commit:
   jobs:
@@ -11,7 +24,7 @@ pre-push:
   parallel: true
   jobs:
     - name: format
-      run: pnpm format:check
+      run: '{quiet} pnpm format:check'
     - name: go-format
       root: apps/desktop/
       run: |
@@ -22,10 +35,10 @@ pre-push:
         fi
     - name: go-lint
       root: apps/desktop/
-      run: go vet ./...
+      run: '{quiet} go vet ./...'
     - name: knip
-      run: pnpm knip
+      run: '{quiet} pnpm knip'
     - name: typecheck
-      run: pnpm typecheck
+      run: '{quiet} pnpm typecheck'
     - name: test
-      run: pnpm test
+      run: '{quiet} pnpm test'
