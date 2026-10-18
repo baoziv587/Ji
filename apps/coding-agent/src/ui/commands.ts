@@ -30,7 +30,7 @@ const KEYS: HelpSection[] = [
 ]
 
 /** What /help lists, with the terminal's keys before the mode. */
-export function withKeys(sections: readonly HelpSection[]): HelpSection[] {
+function withKeys(sections: readonly HelpSection[]): HelpSection[] {
   const at = sections.findIndex(s => s.title === MODE_SECTION)
   const before = at === -1 ? sections.length : at
   return [...sections.slice(0, before), ...KEYS, ...sections.slice(before)]
