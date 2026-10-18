@@ -105,6 +105,26 @@ export default antfu(
     },
   },
   {
+    // The terminal and the service share the code but not the process: outside the service, server/ is its protocol
+    // (types only), plus shared.ts and version.ts to find a running service and check that it is of the same code
+    files: ['apps/coding-agent/src/**'],
+    ignores: ['apps/coding-agent/src/server/**', 'apps/coding-agent/src/server.ts'],
+    rules: {
+      'ts/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)server/(?!(shared|version)\\.ts$)',
+              allowTypeImports: true,
+              message: 'Only the service runs server/: import its types with `import type`.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // The demo, examples, coding agent, its service and replay CLI are run directly by node, so the entry uses top-level await
     files: [
       'apps/replay/src/cli.ts',
