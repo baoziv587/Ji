@@ -246,12 +246,6 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 			components.Tag(c, "Approval", p.Waiting)
 		case "running":
 			components.Spinner(c, "Running", 16, p.Primary)
-		case "terminal":
-			ui.Icon(c, icons.SquareTerminal).
-				FontSize(14).
-				TextColor(p.Primary).
-				Label("Replying in the terminal").
-				Tooltip("Replying in the terminal")
 		case "failed":
 			components.Tag(c, "Failed", p.Destructive)
 		default:
@@ -278,20 +272,14 @@ func (a *App) row(c *ui.Context, s agent.Session) {
 }
 
 // status is what a session is doing: the live state of one the window
-// follows, the list's otherwise; "terminal" while the terminal replies in
-// it.
+// follows, the list's otherwise.
 func (a *App) status(s agent.Session) string {
 	view := a.views[s.ID]
 	if view == nil || view.t.State.ID == "" {
-		if s.HeldBy != "" {
-			return "terminal"
-		}
 		return s.Status
 	}
 	st := view.t.State
 	switch {
-	case st.HeldBy != "":
-		return "terminal"
 	case len(st.Asking) > 0 || view.t.Asking != nil:
 		return "asking"
 	case st.Replying:

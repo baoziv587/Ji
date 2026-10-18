@@ -1,7 +1,10 @@
 // Package server starts the coding agent's HTTP service, when no address
 // of a running one is given: node runs apps/coding-agent/src/server.ts, or the
-// bundle of it an installed app carries, on a free port, and the line it
-// prints once it listens says where.
+// bundle of it an installed app carries, and the line it prints once it
+// listens says where. Shared, it is this machine's one service, the
+// terminal's too: one already running is used, and one started here outlives
+// the app, ending once nothing has used it for a while. Otherwise it is the
+// app's own, on a free port, and ends with it.
 package server
 
 import (
@@ -36,12 +39,17 @@ type Options struct {
 	Model    string
 	Thinking string
 	Yolo     bool
+	// Shared is the machine's one service, on its port: the terminal's
+	// sessions show as they happen, and it is not the app's to end.
+	Shared bool
 }
 
-// Server is a service this app started; Stop ends it.
+// Server is a service this app started, or the shared one it found; Stop
+// ends one of its own.
 type Server struct {
-	URL string
-	cmd *exec.Cmd
+	URL    string
+	cmd    *exec.Cmd
+	shared bool
 }
 
 func Start(o Options) (*Server, error) {
@@ -58,7 +66,12 @@ func Start(o Options) (*Server, error) {
 		node = "node"
 	}
 
-	args := []string{script, "--port", "0", "--root", o.Root}
+	args := []string{script, "--root", o.Root}
+	if o.Shared {
+		args = append(args, "--shared")
+	} else {
+		args = append(args, "--port", "0")
+	}
 	if o.Sessions != "" {
 		args = append(args, "--sessions", o.Sessions)
 	}
@@ -74,6 +87,15 @@ func Start(o Options) (*Server, error) {
 	cmd := exec.Command(node, args...)
 	cmd.Dir = filepath.Dir(script)
 	cmd.Stderr = os.Stderr
+	if o.Shared {
+		// Its own process group, so the app's quitting does not end it, and
+		// what it says goes where the terminal's start of it writes too
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		if log, err := openLog(); err == nil {
+			defer log.Close()
+			cmd.Stderr = log
+		}
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -83,6 +105,7 @@ func Start(o Options) (*Server, error) {
 	}
 
 	found := make(chan string, 1)
+	exited := make(chan error, 1)
 	go func() {
 		lines := bufio.NewScanner(stdout)
 		for lines.Scan() {
@@ -91,16 +114,28 @@ func Start(o Options) (*Server, error) {
 				break
 			}
 		}
-		// Whatever it prints later is not ours to read, but must not block it
-		_, _ = io.Copy(io.Discard, stdout)
+		if o.Shared {
+			// It outlives the app: what it prints later is dropped, and it
+			// knows to drop it
+			_ = stdout.Close()
+		} else {
+			// Whatever it prints later is not ours to read, but must not block it
+			_, _ = io.Copy(io.Discard, stdout)
+		}
+		// Once its output is read: one that found the shared service
+		// running says where and ends
+		exited <- cmd.Wait()
 	}()
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
 
 	select {
 	case url := <-found:
-		return &Server{URL: url, cmd: cmd}, nil
+		return &Server{URL: url, cmd: cmd, shared: o.Shared}, nil
 	case err := <-exited:
+		select {
+		case url := <-found:
+			return &Server{URL: url, cmd: cmd, shared: o.Shared}, nil
+		default:
+		}
 		return nil, fmt.Errorf("the agent exited before it listened: %v", err)
 	case <-time.After(30 * time.Second):
 		_ = cmd.Process.Kill()
@@ -109,8 +144,10 @@ func Start(o Options) (*Server, error) {
 }
 
 // Stop asks the service to end, and kills it if it has not after a while.
+// The shared one is left running: the terminal may use it, and it ends of
+// itself once nothing does.
 func (s *Server) Stop() {
-	if s == nil || s.cmd.Process == nil {
+	if s == nil || s.shared || s.cmd.Process == nil {
 		return
 	}
 	_ = s.cmd.Process.Signal(syscall.SIGTERM)
@@ -124,6 +161,19 @@ func (s *Server) Stop() {
 	case <-time.After(3 * time.Second):
 		_ = s.cmd.Process.Kill()
 	}
+}
+
+// openLog is ~/.ji/server.log, for what the shared service says.
+func openLog() (*os.File, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(home, ".ji")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	return os.OpenFile(filepath.Join(dir, "server.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 }
 
 // findScript looks for server.ts above the working directory and the

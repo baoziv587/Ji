@@ -19,8 +19,6 @@ type Session struct {
 	Archived bool  `json:"archived"`
 	// idle, running, asking or failed.
 	Status string `json:"status"`
-	// Who else writes a reply to it now: "terminal", or none.
-	HeldBy string `json:"heldBy,omitempty"`
 }
 
 // Sessions is the list, and where a session goes when no folder is named.
@@ -49,9 +47,6 @@ type State struct {
 	Commands []Command `json:"commands"`
 	// What the session has spent so far, and how much the history holds.
 	Usage UsageReading `json:"usage"`
-	// Who else writes a reply to it now: "terminal", or none. Nothing can
-	// be sent until it ends.
-	HeldBy string `json:"heldBy,omitempty"`
 }
 
 // Command is one of the commands typed after a `/`, as in the terminal.
@@ -244,8 +239,7 @@ type Agent interface {
 	// until ctx ends, connecting again after a drop; status reports each
 	// connection and drop.
 	FollowSessions(ctx context.Context, fn func(Sessions), status func(error))
-	// Sessions is the list as it is now, those the terminal made since
-	// included.
+	// Sessions is the list as it is now.
 	Sessions(ctx context.Context) (Sessions, error)
 	// CreateSession starts a session in root, on model, "provider/id"; the
 	// service's default folder and model for those left empty.

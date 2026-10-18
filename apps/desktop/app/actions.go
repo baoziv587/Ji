@@ -53,8 +53,7 @@ func (a *App) NewSessionInFolder() {
 
 // OpenFolder shows a folder's sessions, as `ji app` asks: its section
 // first and open, its most recent session chosen, or a new one in it when
-// it has none. The list is read again first, for the sessions the
-// terminal made since.
+// it has none. The list is read again first, for the sessions made since.
 func (a *App) OpenFolder(root string) {
 	a.settingsOpen = false
 	a.request(func(ctx context.Context) {
@@ -155,7 +154,7 @@ func (a *App) neighbour(id string) string {
 // send sends what is typed: a message, or the command it names.
 func (a *App) send(view *sessionView) {
 	text := strings.TrimSpace(view.draft)
-	if text == "" || view.t.State.HeldBy != "" {
+	if text == "" {
 		return
 	}
 	if strings.HasPrefix(text, "/") {

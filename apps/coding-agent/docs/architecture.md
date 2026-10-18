@@ -14,9 +14,13 @@ Built on [`@ji.dev/llm`](../../../packages/llm), drawn with [`@ji.dev/tui`](../.
 | [`permissions.ts`](../src/plugins/permissions.ts) | Which calls wait for a yes: ask/auto modes, the shortcuts in a question, the commands and folders a yes allowed. Policy only, not how it is shown |
 | **`ui/`**                                         | **What the conversation shows**                                                                                                                   |
 | [`bars.ts`](../src/ui/bars.ts)                    | What the bars say: the model and its thinking, the usage, the status, the mode, the keys that matter now. Pure functions                          |
-| [`usage.ts`](../src/ui/usage.ts)                  | Adds up the session's usage                                                                                                                       |
+| [`usage.ts`](../src/ui/usage.ts)                  | The session's usage as the service counted it, in short under the input and in full on exit                                                       |
 | [`answering.ts`](../src/ui/answering.ts)          | Puts a question to the person: the approval's title, mode and shortcuts; draws it again when the mode switches                                    |
 | [`reply/render.ts`](../src/ui/reply/render.ts)    | Turns a run's events into rows in the two views, and into the status                                                                              |
+| [`reply/feed.ts`](../src/ui/reply/feed.ts)        | A reply's run events as they come from the service, waiting in order until they are drawn                                                         |
+| **`client/`**                                     | **The terminal as a client of the service**                                                                                                       |
+| [`launch.ts`](../src/client/launch.ts)            | The shared service on this machine, started in the background when none of this code runs                                                         |
+| [`session.ts`](../src/client/session.ts)          | A session's actions as requests, and its events, the run's whole, as a stream read again after a drop                                             |
 | [`reply/gutter.ts`](../src/ui/reply/gutter.ts)    | A reply's thinking and text beside the rail: the text as Markdown, the thinking dim, and a line for it in brief once it ends                      |
 | [`reply/calls.ts`](../src/ui/reply/calls.ts)      | A call and its result in the two views; a call being written or run, and its last lines of output                                                 |
 

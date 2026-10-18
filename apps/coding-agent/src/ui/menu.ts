@@ -1,18 +1,20 @@
-// The commands typed after a `/`, and the menu of them that opens as one is typed: the ones whose name or hint has
-// what is typed, one chosen. ↑↓ choose, Tab completes, Enter runs the chosen one, or completes one that takes
-// something, and Esc closes. Enter on a whole line runs the command it names.
+// The commands typed after a `/`, as the session lists them, and the menu of them that opens as one is typed: the ones
+// whose name or hint has what is typed, one chosen. ↑↓ choose, Tab completes, Enter runs the chosen one, or completes
+// one that takes something, and Esc closes. Enter on a whole line runs the command it names.
 //
 // What is typed is looked for in the name first, then in the hint, case aside: the names that start with it come first,
 // then the names that have it, then the hints that do. Where it was found is underlined, in the name and the hint
 // alike, so a match by the hint shows why it is there.
 
 import type { Editing, KeyHint } from '@ji.dev/tui'
-import type { Command } from '../agent/commands.ts'
+import type { CommandView } from '../server/events.ts'
 import type { Menu } from './bars.ts'
 import { styleText } from 'node:util'
-import { log } from '@clack/prompts'
 import { editingText, EMPTY_EDITING } from '@ji.dev/tui'
-import { hintOf, runCommand } from '../agent/commands.ts'
+import { hintOf } from '../agent/commands.ts'
+
+/** What the menu shows of a command. */
+type Command = Pick<CommandView, 'name' | 'arg' | 'hint'>
 
 /** What a key of the menu's did: the input after it, and whether what is in it is to be sent. */
 export interface MenuKey {
@@ -29,7 +31,7 @@ const NAME = 1
 const HINT = 2
 
 export class CommandMenu {
-  /** Read every time: a feature's commands can change while the coding agent runs. */
+  /** Read every time: the session's commands can change while it runs. */
   private readonly commands: () => readonly Command[]
   /** The command chosen, by its place among the ones that match; the first again as the text changes. */
   private selected = 0
@@ -81,14 +83,6 @@ export class CommandMenu {
     }
 
     return undefined
-  }
-
-  /**
-   * Runs the command `message` names, with what follows it; false when the message is not a command, or names one that
-   * has nothing to run here, so the message is sent as it is.
-   */
-  run(message: string): boolean {
-    return runCommand(this.commands(), message, text => log.warn(text)) === 'ran'
   }
 
   /** The commands with what is typed in their name or hint, best matches first, while a command is being typed. */

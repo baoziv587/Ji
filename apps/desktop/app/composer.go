@@ -59,12 +59,8 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 				Transition(components.ColorTransition)
 			pane.Children(func() {
 				a.statusLine(c, s, view, entries)
-				held := st.HeldBy != ""
 				placeholder := "Ask anything, or type / for commands"
-				switch {
-				case held:
-					placeholder = "The terminal is replying. You can go on once it ends."
-				case st.Replying:
+				if st.Replying {
 					placeholder = "Steer the reply: it reads this after the step in progress"
 				}
 				// The menu's keys, Enter and Shift+Tab, before the text area takes
@@ -73,7 +69,6 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					Lines(2, 8).
 					Placeholder(placeholder).
 					Label("Message").
-					Disabled(held).
 					AutoFocus().
 					Padding(4, 4, 0).
 					HandleInput(func(ev ui.InputEvent) bool { return a.composerKey(s, view, ev) })
@@ -104,7 +99,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					if st.Replying {
 						label = "Steer"
 					}
-					if components.Button(c, "", components.ButtonStyle{Size: components.SizeIconExtraSmall, Icon: icons.ArrowUp, Disabled: held || strings.TrimSpace(view.draft) == ""}).
+					if components.Button(c, "", components.ButtonStyle{Size: components.SizeIconExtraSmall, Icon: icons.ArrowUp, Disabled: strings.TrimSpace(view.draft) == ""}).
 						Radius(999).
 						Label(label).
 						Tooltip(label + " (↵)").

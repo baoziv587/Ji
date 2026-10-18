@@ -680,33 +680,6 @@ func TestOpenFolderStartsASessionInAnEmptyOne(t *testing.T) {
 	}
 }
 
-func TestSessionTheTerminalRepliesInWaits(t *testing.T) {
-	a, f := testApp()
-	tt := ui.NewTester(a.View, 1100, 700)
-	f.live["a"](agent.Event{Type: "state", State: &agent.State{
-		ID: "a", Root: "/code/web", Mode: "ask", HeldBy: "terminal", Commands: testCommands,
-	}})
-	f.live["a"](agent.Event{Type: "user", Text: "from the terminal"})
-	tt.Frame()
-
-	if err := tt.Click("Message"); err == nil {
-		tt.Type("explain")
-		tt.Key(0, ui.KeyEnter)
-	}
-
-	if len(f.sent["a"]) != 0 {
-		t.Errorf("sent %q while the terminal replies", f.sent["a"])
-	}
-	for _, text := range []string{"Replying in the terminal", "from the terminal"} {
-		if !tt.HasText(text) {
-			t.Errorf("no %q in %q", text, tt.Texts())
-		}
-	}
-	if s, _ := a.session("a"); a.status(s) != "terminal" {
-		t.Errorf("status %q", a.status(s))
-	}
-}
-
 func TestNewSessionStartsInTheChosenFolder(t *testing.T) {
 	a, f := testApp()
 	tt := ui.NewTester(a.View, 1100, 700)

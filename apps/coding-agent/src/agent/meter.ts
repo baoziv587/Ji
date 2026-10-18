@@ -1,6 +1,6 @@
 // How much the history holds now, against where it is compacted; then what the session has spent so far: cost, tokens
-// in and out, cache hits and speed. Counted from a reply's events, the same in the terminal (ui/usage.ts shows it) and
-// in a session of the service, which sends it to its client.
+// in and out, cache hits and speed. Counted from a reply's events in a session of the service, which sends what it
+// counted to its clients (ui/usage.ts shows it in the terminal).
 
 import type { RunEvent, Usage, UsageTotals } from '@ji.dev/llm'
 
@@ -30,17 +30,17 @@ export interface UsageReading {
  * since the provider bills them all. Speed counts only the calls timed with start(): the main model's, which stream.
  */
 export class UsageMeter {
-  protected totals: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }
-  protected calls = 0
+  private totals: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }
+  private calls = 0
 
   /** Output tokens and the time they took, from each call's first streamed token (or its start, if none streams). */
-  protected timed = { tokens: 0, ms: 0 }
+  private timed = { tokens: 0, ms: 0 }
   /** When the call being timed started, or streamed its first token; undefined while none is. */
   private from: number | undefined
   private streamed = false
 
   /** The history's tokens; undefined until the main model has answered once. */
-  protected context: ContextSize | undefined
+  private context: ContextSize | undefined
 
   /**
    * Counts what a reply's event says it spent. `timed` false for events read back from a log, which happened at
@@ -138,24 +138,6 @@ export class UsageMeter {
     }
   }
 
-  /** The whole session for the exit, every token counted: `48,213 in (86% cached) · 3,104 out · 12 model calls · …`. */
-  summary(): string {
-    if (this.calls === 0) {
-      return 'No model calls'
-    }
-
-    const { output, cost } = this.totals
-    const calls = this.calls === 1 ? '1 model call' : `${this.calls} model calls`
-    const parts = [`${exact(this.sent())} in (${this.hits()}% cached)`, `${exact(output)} out`, calls]
-
-    if (this.timed.ms > 0) {
-      parts.push(`${this.speed()} tok/s`)
-    }
-
-    parts.push(`$${cost.toFixed(4)}`)
-    return `Tokens: ${parts.join(' · ')}`
-  }
-
   private add(usage: Usage): void {
     this.calls++
     this.totals = {
@@ -168,23 +150,18 @@ export class UsageMeter {
   }
 
   /** pi-ai's input excludes cache hits, so what the model was sent is all three. */
-  protected sent(): number {
+  private sent(): number {
     const { input, cacheRead, cacheWrite } = this.totals
     return input + cacheRead + cacheWrite
   }
 
   /** The share of what was sent that came from the cache, in percent. */
-  protected hits(): number {
+  private hits(): number {
     const sent = this.sent()
     return sent === 0 ? 0 : Math.round((this.totals.cacheRead / sent) * 100)
   }
 
-  protected speed(): number {
+  private speed(): number {
     return Math.round((this.timed.tokens / this.timed.ms) * 1000)
   }
-}
-
-/** Every digit, grouped by thousands: `48,213`. */
-function exact(n: number): string {
-  return n.toLocaleString('en-US')
 }

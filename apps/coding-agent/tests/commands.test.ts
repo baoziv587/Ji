@@ -1,19 +1,20 @@
 // The built-in commands: /compact sends the compaction plugin's command, once there is something to compact; /fast
 // switches the priority tier, for OpenAI's models only; /model switches the model, fast mode with it where it can
 import type { Agent, Api, Model, Run } from '@ji.dev/llm'
+import type { CommandOptions } from '../src/agent/commands.ts'
 import { createAgent } from '@ji.dev/llm'
 import { COMPACT_COMMAND } from '@ji.dev/plugin-compaction'
 import { assistantMessage, createFakeModel } from '@ji.dev/testing'
 import { describe, expect, it, onTestFinished } from 'vitest'
+import { createCommands, runCommand } from '../src/agent/commands.ts'
 import { Conversation } from '../src/agent/conversation.ts'
-import { createCommandMenu } from '../src/ui/commands.ts'
 
 describe('/compact', () => {
   it('should send nothing before the first reply, and the compaction command after it', async () => {
     // Arrange
     const conversation = new Conversation(createAgent({ model: faux() }))
     const sent: string[] = []
-    const menu = createCommandMenu({ conversation, tools: [], mode: () => '', send: m => sent.push(m), quit: () => {} })
+    const menu = commandsOf({ conversation, send: m => sent.push(m) })
 
     // Act
     menu.run('/compact')
@@ -31,7 +32,7 @@ describe('/fast', () => {
   it('should switch on and off as told, and the other way round without a word', () => {
     // Arrange
     const conversation = new Conversation(createAgent({ model: { ...faux(), provider: 'openai' } }))
-    const menu = createCommandMenu({ conversation, tools: [], mode: () => '', send: () => {}, quit: () => {} })
+    const menu = commandsOf({ conversation })
     const seen: boolean[] = []
 
     // Act
@@ -47,7 +48,7 @@ describe('/fast', () => {
   it('should stay off for a model without the priority tier', () => {
     // Arrange
     const conversation = new Conversation(createAgent({ model: faux() }))
-    const menu = createCommandMenu({ conversation, tools: [], mode: () => '', send: () => {}, quit: () => {} })
+    const menu = commandsOf({ conversation })
 
     // Act
     menu.run('/fast on')
@@ -64,7 +65,7 @@ describe('/model', () => {
     const other = faux()
     const conversation = new Conversation(createAgent({ model: openai }))
     const startOn = (spec: string): Agent => createAgent({ model: spec === 'openai' ? openai : other })
-    const menu = createCommandMenu({ conversation, tools: [], mode: () => '', send: () => {}, quit: () => {}, startOn })
+    const menu = commandsOf({ conversation, startOn })
     menu.run('/fast on')
     const seen: [string, boolean][] = []
 
@@ -88,7 +89,7 @@ describe('/model', () => {
     const startOn = (): Agent => {
       throw new Error('Unknown model')
     }
-    const menu = createCommandMenu({ conversation, tools: [], mode: () => '', send: () => {}, quit: () => {}, startOn })
+    const menu = commandsOf({ conversation, startOn })
 
     // Act
     menu.run('/model nope/nothing')
@@ -97,6 +98,24 @@ describe('/model', () => {
     expect(conversation.agent).toBe(before)
   })
 })
+
+const SILENT = { info: () => {}, success: () => {}, warn: () => {}, error: () => {} }
+
+/** The commands of a conversation, run as typed. */
+function commandsOf(options: Pick<CommandOptions, 'conversation'> & Partial<CommandOptions>): {
+  run: (line: string) => void
+} {
+  const commands = createCommands({
+    tools: [],
+    mode: () => '',
+    send: () => {},
+    quit: () => {},
+    say: SILENT,
+    help: () => {},
+    ...options,
+  })
+  return { run: line => runCommand(commands(), line, () => {}) }
+}
 
 async function replied(run: Run): Promise<void> {
   await run.result

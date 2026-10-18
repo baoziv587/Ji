@@ -1,8 +1,8 @@
 // A reply as it streams in: the run's events as lines in the two views, and as the status in the bar.
 
-import type { Run, ToolCall } from '@ji.dev/llm'
+import type { ToolCall } from '@ji.dev/llm'
 import type { LiveRows, Screen, Status } from '@ji.dev/tui'
-import type { Meter } from '../usage.ts'
+import type { LiveEvent } from '../../server/events.ts'
 import { styleText } from 'node:util'
 import { log } from '@clack/prompts'
 import { dimText, formatCount, OutputTail, paintRail } from '@ji.dev/tui'
@@ -34,11 +34,10 @@ interface Running {
   output: OutputTail
 }
 
-/** Where a reply shows, and what it counts toward. */
+/** Where a reply shows. */
 export interface Stage {
   screen: Screen
   status: Status
-  meter: Meter
   /** Resolves once no question is on screen, so nothing is drawn over one. */
   answered: () => Promise<void>
   /** The tools that read and change files. */
@@ -73,8 +72,8 @@ export interface Stage {
  * is in the bar, timed from tool_start, so it never counts time the model was writing. A file a call changed goes in
  * `changed`: the conversation can go back, the file cannot.
  */
-export async function render(r: Run, stage: Stage, changed: Set<string>): Promise<void> {
-  const { screen, status, meter } = stage
+export async function render(r: AsyncIterable<LiveEvent>, stage: Stage, changed: Set<string>): Promise<void> {
+  const { screen, status } = stage
   const out = new Gutter(screen)
   const writing = new Map<string, Writing>()
   const running = new Map<string, Running>()
@@ -124,7 +123,6 @@ export async function render(r: Run, stage: Stage, changed: Set<string>): Promis
   try {
     for await (const e of r) {
       await stage.answered()
-      meter.take(e)
       switch (e.type) {
         case 'step_end':
           if (e.turn.kind === 'input') {

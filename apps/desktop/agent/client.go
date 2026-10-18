@@ -20,6 +20,10 @@ import (
 
 // Client is an Agent over HTTP.
 type Client struct {
+	// Root is where a new session goes when the window names no folder, in
+	// place of the service's: the shared one's is that of whichever client
+	// started it. The service's when empty.
+	Root  string
 	base  string
 	ready chan struct{}
 	http  *http.Client
@@ -65,14 +69,23 @@ func (c *Client) FollowSessions(ctx context.Context, fn func(Sessions), status f
 	c.reconnect(ctx, "/api/events", nil, func(e json.RawMessage) {
 		var s Sessions
 		if json.Unmarshal(e, &s) == nil {
-			fn(s)
+			fn(c.withRoot(s))
 		}
 	}, status)
 }
 
 func (c *Client) Sessions(ctx context.Context) (Sessions, error) {
 	var s Sessions
-	return s, c.do(ctx, http.MethodGet, "/api/sessions", nil, &s)
+	err := c.do(ctx, http.MethodGet, "/api/sessions", nil, &s)
+	return c.withRoot(s), err
+}
+
+// withRoot is the list with Root where a new session goes, if there is one.
+func (c *Client) withRoot(s Sessions) Sessions {
+	if c.Root != "" {
+		s.DefaultRoot = c.Root
+	}
+	return s
 }
 
 func (c *Client) CreateSession(ctx context.Context, root, model string) (Session, error) {

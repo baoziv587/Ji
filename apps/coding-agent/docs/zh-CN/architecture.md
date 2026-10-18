@@ -14,9 +14,13 @@
 | [`permissions.ts`](../../src/plugins/permissions.ts) | 哪些调用要等确认：ask/auto 模式、确认里的快捷选项、一次批准后放行的命令和目录。只管策略，不管怎么显示 |
 | **`ui/`**                                            | **对话里显示什么**                                                                                    |
 | [`bars.ts`](../../src/ui/bars.ts)                    | 上下两条栏说什么：模型和思考档位、用量、状态、模式、当下有用的按键。纯函数                            |
-| [`usage.ts`](../../src/ui/usage.ts)                  | 会话用量的累计                                                                                        |
+| [`usage.ts`](../../src/ui/usage.ts)                  | 服务统计的会话用量：输入行下方的简要版和退出时的完整版                                                |
 | [`answering.ts`](../../src/ui/answering.ts)          | 把问题交给人：确认的标题、模式、快捷选项，切换模式时重画问题                                          |
 | [`reply/render.ts`](../../src/ui/reply/render.ts)    | 把 run 的事件画成两个视图里的行，和状态栏里的状态                                                     |
+| [`reply/feed.ts`](../../src/ui/reply/feed.ts)        | 从服务传来的一次回复的 run 事件，按顺序排队等着被画出来                                               |
+| **`client/`**                                        | **终端作为服务的客户端**                                                                              |
+| [`launch.ts`](../../src/client/launch.ts)            | 本机共享的服务：没有同版本代码在跑时在后台启动它                                                      |
+| [`session.ts`](../../src/client/session.ts)          | 会话的操作发成请求，事件（含完整的 run 事件）作为流读入，断线后接着读                                 |
 | [`reply/gutter.ts`](../../src/ui/reply/gutter.ts)    | 回答的思考和正文写在竖线右边：正文按 Markdown，思考暗色，结束后在简洁视图里留一行                     |
 | [`reply/calls.ts`](../../src/ui/reply/calls.ts)      | 工具调用和结果在两个视图里的样子；正在写、正在跑的调用那一行和它最后几行输出                          |
 

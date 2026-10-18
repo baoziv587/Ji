@@ -7,8 +7,9 @@ import type { Plugins, StartOptions } from '../agent/agent.ts'
 import type { Feature } from '../features/feature.ts'
 import type { Mode } from '../features/permissions.ts'
 import type { CommandClient } from './service.ts'
-import type { Opener } from './sessions.ts'
+import type { Environment, Opener } from './sessions.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
+import process from 'node:process'
 import { findModel, nearestThinking } from '@ji.dev/llm'
 import { localWorkspace } from '@ji.dev/plugin-files'
 import { jsonl } from '@ji.dev/plugin-jsonl'
@@ -39,12 +40,18 @@ export class SessionOpener implements Opener {
     this.options = options
   }
 
-  /** Opens a session in a mode: what waits for a yes in it from the start. */
-  open(meta: SessionMeta, mode: Mode): AgentService {
+  /**
+   * Opens a session in a mode: what waits for a yes in it from the start. Its commands run with `env` when given, and
+   * the keys in it stand for the models' too where this process has none.
+   */
+  open(meta: SessionMeta, mode: Mode, env?: Environment): AgentService {
     const { id, root } = meta
     const { store } = this.options
+    if (env !== undefined) {
+      adoptCredentials(env)
+    }
     const workspace = localWorkspace(root, { allow: () => true })
-    const plugins = createPlugins(workspace, createLocalExecutor({ cwd: root }))
+    const plugins = createPlugins(workspace, createLocalExecutor({ cwd: root, env }))
     const permissions = new Permissions(workspace, plugins.files, plugins.shell, { mode })
 
     return new AgentService({
@@ -54,11 +61,6 @@ export class SessionOpener implements Opener {
       features: client => this.featuresOf(id, plugins, permissions, client),
       start: (asking, features) => ({ root, features, asking, ...this.modelOf(meta) }),
       history: historyOf(store.records(id)),
-      shared: {
-        lock: () => store.lock(id),
-        unlock: () => store.unlock(id),
-        unread: () => store.unread(id),
-      },
     })
   }
 
@@ -102,5 +104,20 @@ export class SessionOpener implements Opener {
 
     features.push({ plugin: jsonl(line => store.append(id, line)) })
     return features
+  }
+}
+
+/** The variables a provider's key or token is read from, by their names. */
+const CREDENTIAL = /_API_KEY$|_TOKEN$|^AWS_/
+
+/**
+ * The keys in a terminal's environment that this process has none of, taken as its own: a model reads its key from
+ * this process's environment, and the terminal's is where a person exports one. A key this process has stays.
+ */
+function adoptCredentials(env: Environment): void {
+  for (const [name, value] of Object.entries(env)) {
+    if (CREDENTIAL.test(name) && value !== undefined && process.env[name] === undefined) {
+      process.env[name] = value
+    }
   }
 }

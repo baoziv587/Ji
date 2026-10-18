@@ -4,9 +4,14 @@
 import type { Reply } from '@ji.dev/plugin-choices'
 import type { QuestionView, Unnumbered } from './events.ts'
 
-/** What a question asked is about: the tool whose call waits for a yes, and whether it reaches outside the folder. */
+/**
+ * What a question asked is about: the tool whose call waits for a yes, whether it is a command or a change of the file
+ * at a path, and whether it reaches outside the folder.
+ */
 export interface Asked {
   tool?: string
+  command?: boolean
+  path?: string
   outside: boolean
 }
 
