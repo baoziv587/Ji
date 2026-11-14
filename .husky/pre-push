@@ -1,11 +1,18 @@
-# 并行跑所有检查，每个检查一结束就打印它的标题和输出，最后是 summary
+# 并行跑所有检查，每个检查一结束就打印它的标题，失败时连同全部输出，最后是 summary
 cd "$(git rev-parse --show-toplevel)"
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
 started=$(date +%s)
 
-# 成功时不出声，失败时才打印全部输出
-quiet() { sh scripts/quiet.sh "$@"; }
+# 检查的输出写进日志文件，工具会以为不在终端里而关掉颜色：输出到终端时强制打开。
+# Node 的工具认 FORCE_COLOR，golangci-lint 只认 --color
+color=never
+green='' red='' reset=''
+if [ -t 2 ] && [ -z "${NO_COLOR-}" ]; then
+  color=always
+  export FORCE_COLOR=1
+  green=$(printf '\033[32m') red=$(printf '\033[31m') reset=$(printf '\033[0m')
+fi
 
 go_format() {
   unformatted=$(cd apps/desktop && gofmt -l .) || return $?
@@ -15,24 +22,33 @@ go_format() {
   fi
 }
 
+# 即 pnpm lint:go，多一个 --color
+go_lint() {
+  cd apps/desktop &&
+    go tool -modfile=golangci-lint.mod golangci-lint run --color "$color" &&
+    go tool mygo vet
+}
+
 jobs="format go-format lint go-lint knip typecheck test"
 job() {
   case $1 in
-    format) quiet pnpm format:check ;;
+    format) pnpm format:check ;;
     go-format) go_format ;;
-    lint) quiet pnpm exec eslint . ;;
-    go-lint) quiet pnpm lint:go ;;
-    knip) quiet pnpm knip ;;
-    typecheck) quiet pnpm typecheck ;;
-    test) quiet pnpm test ;;
+    lint) pnpm exec eslint . ;;
+    go-lint) go_lint ;;
+    knip) pnpm knip ;;
+    typecheck) pnpm typecheck ;;
+    test) pnpm test ;;
   esac
 }
 
-# 同时结束的检查轮流打印，输出不会交错在一起
+# 同时结束的检查轮流打印，输出不会交错在一起；成功时不出声，失败时才打印全部输出
 report() {
   until mkdir "$out/lock" 2>/dev/null; do sleep 0.05; done
   echo "┃ $1"
-  cat "$out/$1.log"
+  if [ "$(cat "$out/$1.code")" != 0 ]; then
+    cat "$out/$1.log"
+  fi
   rmdir "$out/lock"
 }
 
@@ -50,9 +66,9 @@ printf '\nsummary: (done in %s seconds)\n' "$(($(date +%s) - started))"
 failed=0
 for name in $jobs; do
   if [ "$(cat "$out/$name.code")" = 0 ]; then
-    echo "✔ $name"
+    echo "${green}✔${reset} $name"
   else
-    echo "✘ $name"
+    echo "${red}✘${reset} $name"
     failed=1
   fi
 done
