@@ -25,6 +25,7 @@
 //                                                   on model, 'provider/id' (default: the service's --model), its
 //                                                   commands run with env, {name: value} (default: the service's)
 //   POST /api/sessions/:id/archive    {archived}    out of the list's way, or back
+//   DELETE /api/sessions/:id                        removes it and its log from the disk; not while it replies
 //   POST /api/sessions/:id/root       {root}        the folder it works in from now on, its history kept: opened
 //                                                   again there if it was open; not while it replies
 //
@@ -167,6 +168,10 @@ async function route(
     const after = Number(req.headers['last-event-id'] ?? url.searchParams.get('after') ?? 0)
     const from = { after: Number.isFinite(after) ? after : 0, run: url.searchParams.get('run') === '1' }
     return streamSession(hub.session(sessionId), from, use, req, res)
+  }
+  if (method === 'DELETE' && action === undefined) {
+    hub.delete(sessionId)
+    return sendJson(res, 200, { ok: true })
   }
   if (method !== 'POST') {
     throw noRoute()

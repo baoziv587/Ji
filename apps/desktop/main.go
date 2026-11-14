@@ -198,6 +198,19 @@ func main() {
 				return paths[0], nil
 			}
 
+			a.ConfirmDelete = func(title string) bool {
+				r, err := mygo.Dialog.Message(mygo.MessageOptions{
+					Parent:             win,
+					Type:               mygo.MessageWarning,
+					Message:            "Delete “" + title + "”?",
+					Detail:             "Its conversation is deleted for good. Settle it instead to keep it.",
+					Buttons:            []string{"Delete", "Cancel"},
+					CancelButton:       1,
+					DestructiveButtons: []int{0},
+				})
+				return err == nil && r.Button == 0
+			}
+
 			a.ChooseFiles = func() ([]string, error) {
 				return mygo.Dialog.Open(mygo.OpenDialogOptions{
 					Parent:      win,

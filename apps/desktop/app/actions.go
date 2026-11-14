@@ -1,11 +1,12 @@
 package app
 
-// What the controls do to sessions: start, archive, send, answer.
+// What the controls do to sessions: start, archive, delete, send, answer.
 
 import (
 	"context"
 	"slices"
 	"strings"
+	"time"
 
 	"desktop/agent"
 )
@@ -256,6 +257,46 @@ func (a *App) answer(view *sessionView, answers [][]string) {
 	a.call(
 		func(ctx context.Context) error { return a.agent.Answer(ctx, view.id, asking.ID, answers) },
 	)
+}
+
+// remove deletes a session for good once the person says so: the window
+// shows the one beside it, and it leaves the list and the pins.
+func (a *App) remove(s agent.Session) {
+	confirm, title := a.ConfirmDelete, titleOf(s)
+	a.async(func() {
+		if !confirm(title) {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := a.agent.Delete(ctx, s.ID)
+		a.update(func() {
+			if err != nil {
+				a.toast = &toast{message: "Could not delete “" + title + "”: " + err.Error()}
+				return
+			}
+			a.forget(s.ID)
+			a.toast = &toast{message: "Deleted “" + title + "”"}
+		})
+	})
+}
+
+// forget lets go of a session deleted.
+func (a *App) forget(id string) {
+	next := a.neighbour(id)
+	a.list.Sessions = slices.DeleteFunc(
+		a.list.Sessions,
+		func(s agent.Session) bool { return s.ID == id },
+	)
+	a.regroup()
+	if a.isPinned(id) {
+		a.pin(id, false)
+	}
+	if a.selected == id {
+		a.selected = ""
+		a.show(next)
+	}
+	a.close(id)
 }
 
 // pin keeps a session over the folders, or puts it back under its own.

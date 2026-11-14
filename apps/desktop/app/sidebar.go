@@ -495,29 +495,44 @@ func statusMark(c *ui.Context, p *components.Palette, status string) bool {
 
 func (a *App) rowMenu(s agent.Session, status string) func(m *ui.Menu) {
 	return func(m *ui.Menu) {
+		icon := menuIcons()
 		if !s.Archived {
 			if a.isPinned(s.ID) {
-				if m.Item("Unpin").Chosen() {
+				if m.Item("Unpin").Icon(icon.unpin).Chosen() {
 					a.pin(s.ID, false)
 				}
-			} else if m.Item("Pin").Chosen() {
+			} else if m.Item("Pin").Icon(icon.pin).Chosen() {
 				a.pin(s.ID, true)
 			}
 		}
 		live := a.liveFolder(s.Root)
-		if m.Item("New Session in This Project").Disabled(live == "").Chosen() {
+		if m.Item("New Session in This Project").
+			Icon(icon.newSession).
+			Disabled(live == "").
+			Chosen() {
 			a.NewSession(live)
 		}
-		if m.Item("Edit Project…").Chosen() {
+		if m.Item("Edit Project…").Icon(icon.editProject).Chosen() {
 			a.EditProject(a.groupKeyOf(s.Root))
 		}
 		m.Separator()
 		if s.Archived {
-			if m.Item("Reopen").Chosen() {
+			if m.Item("Reopen").Icon(icon.reopen).Chosen() {
 				a.unarchive(s.ID)
 			}
-		} else if m.Item("Settle").Disabled(isBusy(status)).Chosen() {
+		} else if m.Item("Settle").Icon(icon.settle).Disabled(isBusy(status)).Chosen() {
 			a.archive(s.ID, true)
+		}
+		if a.ConfirmDelete == nil {
+			return
+		}
+		m.Separator()
+		if m.Item("Delete…").
+			Icon(icon.remove).
+			Danger().
+			Disabled(isBusy(status)).
+			Chosen() {
+			a.remove(s)
 		}
 	}
 }

@@ -110,6 +110,10 @@ func (c *Client) Archive(ctx context.Context, id string, archived bool) (Session
 	)
 }
 
+func (c *Client) Delete(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodDelete, "/api/sessions/"+url.PathEscape(id), nil, nil)
+}
+
 func (c *Client) SetRoot(ctx context.Context, id, root string) (Session, error) {
 	var s Session
 	return s, c.do(

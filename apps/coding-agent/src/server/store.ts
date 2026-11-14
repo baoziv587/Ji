@@ -4,12 +4,22 @@
 //                and the model it runs on
 //   <id>.jsonl   its log, one run event a line, as @ji.dev/plugin-jsonl writes it: what it is read back from
 //
-// Nothing is ever deleted: an archived session keeps both files.
+// An archived session keeps both files; only deleting it removes them.
 
 import type { LogRecord } from './history.ts'
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, writeSync } from 'node:fs'
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { compact } from '@ji.dev/plugin-jsonl'
 import writeFileAtomic from 'write-file-atomic'
@@ -83,6 +93,17 @@ export class SessionStore {
       this.logs.set(id, fd)
     }
     writeSync(fd, `${line}\n`)
+  }
+
+  /** Removes the session's two files, its log closed first if it is open. */
+  delete(id: string): void {
+    const fd = this.logs.get(id)
+    if (fd !== undefined) {
+      closeSync(fd)
+      this.logs.delete(id)
+    }
+    rmSync(this.metaPath(id), { force: true })
+    rmSync(this.logPath(id), { force: true })
   }
 
   /** Closes the logs open for appending. */

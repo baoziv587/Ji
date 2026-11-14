@@ -45,6 +45,9 @@ type App struct {
 	// SaveProjects keeps them once changed, nil for this run only.
 	Projects     []Project
 	SaveProjects func([]Project) error
+	// ConfirmDelete asks whether to delete the session of title for good.
+	// Nil leaves deleting out.
+	ConfirmDelete func(title string) bool
 	// OpenInEditor opens a folder in VS Code. Nil, with no VS Code, leaves
 	// the button out.
 	OpenInEditor func(root string) error

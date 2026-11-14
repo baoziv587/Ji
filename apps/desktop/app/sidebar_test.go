@@ -138,3 +138,54 @@ func TestBranchOf(t *testing.T) {
 		}
 	}
 }
+
+func TestASessionIsDeletedFromItsMenuOnceConfirmed(t *testing.T) {
+	a, f := testApp()
+	tt := ui.NewTester(a.View, 1100, 700)
+	if err := tt.RightClick("Upgrade React"); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(tt.Menu(), "Delete…") {
+		t.Error("deletes with nothing to confirm it")
+	}
+	tt.CloseMenu()
+
+	var asked []string
+	sure := false
+	a.ConfirmDelete = func(title string) bool {
+		asked = append(asked, title)
+		return sure
+	}
+	a.pin("c", true)
+	a.Select("c")
+	tt.Frame()
+	if err := tt.RightClick("Upgrade React"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Delete…"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Menu())
+	}
+	tt.Frame()
+	if len(f.deleted) != 0 || !tt.HasText("Upgrade React") {
+		t.Fatalf("deleted %v though the person said no", f.deleted)
+	}
+
+	sure = true
+	if err := tt.RightClick("Upgrade React"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Delete…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !slices.Equal(f.deleted, []string{"c"}) ||
+		!slices.Equal(asked, []string{"Upgrade React", "Upgrade React"}) {
+		t.Errorf("deleted %v, asked %v", f.deleted, asked)
+	}
+	if _, ok := a.session("c"); ok || a.isPinned("c") || a.selected == "c" || a.selected == "" {
+		t.Errorf("the session stays: selected %q, pins %v", a.selected, a.Pins)
+	}
+	if !tt.HasText("Deleted “Upgrade React”") {
+		t.Errorf("texts %q", tt.Texts())
+	}
+}

@@ -6,6 +6,7 @@
 //             terminal that made it
 //   session   one session's service, opened if need be
 //   archive   out of the list's way, or back in it: nothing is deleted
+//   delete    gone for good, its files with it
 //   setRoot   the folder it works in, as when the folder was renamed or moved
 //   setMode   what waits for a yes in every session, those opened later included
 
@@ -126,6 +127,22 @@ export class SessionHub {
     return this.summaryOf(meta)
   }
 
+  /** Removes the session and its log from the disk. Throws while it is replying. */
+  delete(id: string): void {
+    this.metaOf(id)
+    const service = this.opened.get(id)
+    if (service?.replying === true) {
+      throw new Error('the session is replying: stop it before deleting it')
+    }
+
+    service?.stop()
+    this.opened.delete(id)
+    this.envs.delete(id)
+    this.metas.delete(id)
+    this.store.delete(id)
+    this.changed()
+  }
+
   /**
    * The session works in `folder` from now on, opened again there if it was open; its history stays. Throws when
    * `folder` is not a folder, and while the session is replying.
@@ -161,7 +178,7 @@ export class SessionHub {
     return [...this.opened.values()].some(service => service.replying)
   }
 
-  /** Called with the list whenever a session is added, archived, or starts or stops doing something. */
+  /** Called with the list whenever a session is added, archived, deleted, or starts or stops doing something. */
   subscribe(listener: (sessions: SessionSummary[]) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)

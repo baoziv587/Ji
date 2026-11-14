@@ -210,6 +210,28 @@ describe('agent HTTP service', () => {
     expect(JSON.parse(readFileSync(join(sessions, `${id}.json`), 'utf8'))).toMatchObject({ archived: false })
   })
 
+  it('should delete a session and its log from the disk', async () => {
+    // Arrange
+    const sessions = scratch()
+    const { url } = await serve([assistantMessage('hi')], sessions)
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+    await post(url, `/api/sessions/${id}/messages`, { text: 'hello' })
+    await events.until(e => e.type === 'reply_end')
+
+    // Act
+    const deleted = await send(url, 'DELETE', `/api/sessions/${id}`)
+    const again = await send(url, 'DELETE', `/api/sessions/${id}`)
+    const { sessions: listed } = (await send(url, 'GET', '/api/sessions')) as { sessions: SessionSummary[] }
+
+    // Assert
+    expect(deleted).toEqual({ ok: true })
+    expect(again).toMatchObject({ error: expect.any(String) })
+    expect(listed.map(s => s.id)).not.toContain(id)
+    expect(existsSync(join(sessions, `${id}.json`))).toBe(false)
+    expect(existsSync(join(sessions, `${id}.jsonl`))).toBe(false)
+  })
+
   it('should go on in the folder a session is given, its history kept, after a restart too', async () => {
     // Arrange
     const sessions = scratch()

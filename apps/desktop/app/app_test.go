@@ -34,6 +34,7 @@ type fakeAgent struct {
 	commands  map[string][]string
 	answers   map[string][][]string
 	archived  []string
+	deleted   []string
 	// Each folder a session was given, "id > root"
 	roots   []string
 	stopped []string
@@ -78,6 +79,11 @@ func (f *fakeAgent) SetRoot(_ context.Context, id, root string) (agent.Session, 
 func (f *fakeAgent) Archive(_ context.Context, id string, archived bool) (agent.Session, error) {
 	f.archived = append(f.archived, id+map[bool]string{true: ":on", false: ":off"}[archived])
 	return agent.Session{ID: id, Root: "/code/" + id, Title: "Title " + id, Archived: archived}, nil
+}
+
+func (f *fakeAgent) Delete(_ context.Context, id string) error {
+	f.deleted = append(f.deleted, id)
+	return nil
 }
 
 func (f *fakeAgent) State(

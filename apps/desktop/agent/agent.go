@@ -246,6 +246,9 @@ type Agent interface {
 	// service's default folder and model for those left empty.
 	CreateSession(ctx context.Context, root, model string) (Session, error)
 	Archive(ctx context.Context, id string, archived bool) (Session, error)
+	// Delete removes a session and its history for good; refused while it
+	// replies.
+	Delete(ctx context.Context, id string) error
 	// SetRoot gives a session the folder it works in from now on, its
 	// history kept; refused while it replies.
 	SetRoot(ctx context.Context, id, root string) (Session, error)
