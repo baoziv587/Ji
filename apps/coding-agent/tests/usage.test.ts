@@ -1,10 +1,16 @@
 // What the line above the status says: how much the history holds, then what the session has spent
 import type { Usage } from '@ji.dev/llm'
+import { stripVTControlCharacters } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { UsageMeter } from '../src/agent/meter.ts'
-import { describeUsage, summarizeUsage } from '../src/ui/usage.ts'
+import { describeUsage as styledUsage, summarizeUsage } from '../src/ui/usage.ts'
 
 const LIMIT = 200_000
+
+/** The usage line as it reads, without the terminal's styles, which depend on where the tests run. */
+function describeUsage(...args: Parameters<typeof styledUsage>): string[] {
+  return styledUsage(...args).map(part => stripVTControlCharacters(part))
+}
 
 function usage(input: number, output: number, cacheRead: number, cost: number): Usage {
   const totals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: cost }
