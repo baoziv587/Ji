@@ -46,15 +46,20 @@ func (a *App) NewSession(root string) {
 // start makes the draft a session of the service's, in its folder, on the
 // model, at the thinking level and in the mode picked for it, with the
 // message or command sent first; then shows it in the draft's place, its
-// panel with it.
+// panel and the files left attached with it. A command leaves the files
+// for the next message, as in a session.
 func (a *App) start(view *sessionView, text string) {
 	if view.starting {
 		return
 	}
 	view.starting = true
 	st, approvals := view.t.State, a.Settings.Approvals
-	attached := view.files
-	view.draft, view.files = "", nil
+	command := strings.HasPrefix(text, "/")
+	var attached []attachment
+	if !command {
+		attached, view.files = view.files, nil
+	}
+	view.draft = ""
 	a.failure = ""
 	a.request(func(ctx context.Context) {
 		s, err := a.agent.CreateSession(ctx, agent.NewSession{
@@ -74,7 +79,7 @@ func (a *App) start(view *sessionView, text string) {
 			_, err = a.agent.SetMode(ctx, s.ID, st.Mode)
 		}
 		if err == nil {
-			if strings.HasPrefix(text, "/") {
+			if command {
 				_, err = a.agent.Command(ctx, s.ID, text)
 			} else {
 				_, err = a.agent.Send(ctx, s.ID, text, pathsOf(attached))
@@ -92,7 +97,7 @@ func (a *App) start(view *sessionView, text string) {
 				a.open(s.ID)
 			}
 			started := a.views[s.ID]
-			started.panel = view.panel
+			started.panel, started.files = view.panel, view.files
 			if err != nil {
 				started.restoreMessage(text, attached)
 				a.failure = err.Error()

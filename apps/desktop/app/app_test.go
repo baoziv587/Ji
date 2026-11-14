@@ -751,6 +751,33 @@ func sendDraft(a *App, text string) {
 	a.send(view)
 }
 
+// A command sent first makes the session as a message does, and leaves
+// the files attached for the message after it.
+func TestADraftsCommandKeepsItsFiles(t *testing.T) {
+	a, f := testApp()
+	a.NewSession("/code/web")
+	a.views[draftID].files = []attachment{{path: "/code/web/notes.md", size: -1}}
+
+	sendDraft(a, "/compact")
+
+	view := a.views["new"]
+	if !reflect.DeepEqual(f.commands["new"], []string{"/compact"}) || len(f.files) != 0 {
+		t.Fatalf("commands %v, files sent %v", f.commands["new"], f.files)
+	}
+	if view == nil {
+		t.Fatal("no view of the session made")
+	}
+	if len(view.files) != 1 || view.files[0].path != "/code/web/notes.md" {
+		t.Fatalf("files left attached: %v", pathsOf(view.files))
+	}
+
+	view.draft = "read it"
+	a.send(view)
+	if !reflect.DeepEqual(f.files, []string{"/code/web/notes.md"}) || len(view.files) != 0 {
+		t.Errorf("files sent %v, left %v", f.files, view.files)
+	}
+}
+
 // New Session shows a draft in the chosen session's folder, which the
 // service makes a session of only as its first message is sent.
 func TestNewSessionStartsInTheChosenFolderOnItsFirstMessage(t *testing.T) {
