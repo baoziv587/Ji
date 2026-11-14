@@ -46,9 +46,12 @@ var ColorTransition = ui.ElementTransition{Duration: 150 * time.Millisecond, Col
 // ButtonStyle is how a button looks: the zero value is shadcn/ui's
 // default, in the primary color at the default size.
 type ButtonStyle struct {
-	Variant  Variant
-	Size     Size
-	Icon     *ui.SVG
+	Variant Variant
+	Size    Size
+	Icon    *ui.SVG
+	// Logo is drawn in its own colors in place of Icon, as another
+	// product's is.
+	Logo     *ui.SVG
 	Disabled bool
 }
 
@@ -71,7 +74,7 @@ func Button(c *ui.Context, label string, style ButtonStyle) ui.Element {
 	switch {
 	case label == "":
 		b.Width(m.height)
-	case icon != nil:
+	case icon != nil || style.Logo != nil:
 		b.Padding(0, m.iconPadding)
 	default:
 		b.Padding(0, m.padding)
@@ -107,7 +110,10 @@ func Button(c *ui.Context, label string, style ButtonStyle) ui.Element {
 	}
 	FocusRing(b, p, 0)
 	b.Children(func() {
-		if icon != nil {
+		switch {
+		case style.Logo != nil:
+			ui.Image(c, style.Logo).Size(m.icon, m.icon).Shrink(0)
+		case icon != nil:
 			ui.Icon(c, icon).FontSize(m.icon).TextColor(text)
 		}
 		if label != "" {

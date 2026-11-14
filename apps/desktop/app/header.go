@@ -47,7 +47,7 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 				if components.Button(c, "Open in VS Code", components.ButtonStyle{
 					Variant: components.Ghost,
 					Size:    components.SizeSmall,
-					Icon:    icons.SquareArrowOutUpRight,
+					Logo:    icons.VSCode,
 				}).
 					Tooltip("Open " + format.ShortPath(s.Root) + " in VS Code").
 					Shrink(0).
