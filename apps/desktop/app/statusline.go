@@ -13,66 +13,63 @@ import (
 	"desktop/ui/icons"
 )
 
-// statusLine is the terminal's status line: what the reply does and for
-// how long, the mode, what a yes allowed, the steers not yet delivered,
-// which entry of the menu is chosen, then the keys that work now.
-func (a *App) statusLine(
-	c *ui.Context,
-	s agent.Session,
-	view *sessionView,
-	entries []commands.Entry,
-) {
+// statusLine is the terminal's status line: what went wrong, what the
+// reply does and for how long, what a yes allowed, the steers not yet
+// delivered, which entry of the menu is chosen, then the keys that work
+// now. Nothing at all while there is none of that.
+func (a *App) statusLine(c *ui.Context, view *sessionView, entries []commands.Entry) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	st := view.t.State
 	small := func(text string, color ui.Color) ui.Element { return barText(c, text, color) }
-	ui.Row(c).Height(20).Gap(6).Padding(0, 4).AlignItems(ui.Center).Children(func() {
-		var parts []func()
-		switch {
-		case a.link.problem != "":
-			parts = append(parts, func() { small(a.link.problem, p.Destructive).Shrink(1) })
-		case a.failure != "":
-			parts = append(parts, func() { small(a.failure, p.Destructive).Selectable().Shrink(1) })
-		}
-		if label := view.t.Activity; label != "" && (st.Replying || view.t.Asking != nil) {
-			parts = append(parts, func() {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(1).Children(func() {
-					spin := p.Primary
-					if view.t.Asking != nil {
-						spin = p.Waiting
-					}
-					components.Spinner(c, label, 12, spin)
-					small(label, p.Foreground).Shrink(1)
-					elapsed := time.Since(view.t.Since)
-					figures(c, fmt.Sprintf("%ds", int(elapsed.Seconds())), p.MutedForeground)
-					// The spinner turns without building the view, so the count asks
-					// for its next second
-					c.After(time.Second - elapsed%time.Second)
-				})
+	var parts []func()
+	switch {
+	case a.link.problem != "":
+		parts = append(parts, func() { small(a.link.problem, p.Destructive).Shrink(1) })
+	case a.failure != "":
+		parts = append(parts, func() { small(a.failure, p.Destructive).Selectable().Shrink(1) })
+	}
+	if label := view.t.Activity; label != "" && (st.Replying || view.t.Asking != nil) {
+		parts = append(parts, func() {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Shrink(1).Children(func() {
+				spin := p.Primary
+				if view.t.Asking != nil {
+					spin = p.Waiting
+				}
+				components.Spinner(c, label, 12, spin)
+				small(label, p.Foreground).Shrink(1)
+				elapsed := time.Since(view.t.Since)
+				figures(c, fmt.Sprintf("%ds", int(elapsed.Seconds())), p.MutedForeground)
+				// The spinner turns without building the view, so the count asks
+				// for its next second
+				c.After(time.Second - elapsed%time.Second)
 			})
-		}
-		if st.Mode != "" {
-			parts = append(parts, func() { a.modeButton(c, s, view, false) })
-		}
-		if st.Allowed != "" {
-			parts = append(parts, func() { small(st.Allowed, p.Warning).Shrink(1) })
-		}
-		if st.Queued > 0 {
-			parts = append(
-				parts,
-				func() { figures(c, fmt.Sprintf("%d queued", st.Queued), p.Info) },
-			)
-		}
-		if len(entries) > 0 {
-			parts = append(
-				parts,
-				func() {
-					position := fmt.Sprintf("%d of %d", view.menu.Selected+1, len(entries))
-					figures(c, position, p.MutedForeground)
-				},
-			)
-		}
+		})
+	}
+	if st.Allowed != "" {
+		parts = append(parts, func() { small(st.Allowed, p.Warning).Shrink(1) })
+	}
+	if st.Queued > 0 {
+		parts = append(
+			parts,
+			func() { figures(c, fmt.Sprintf("%d queued", st.Queued), p.Info) },
+		)
+	}
+	if len(entries) > 0 {
+		parts = append(
+			parts,
+			func() {
+				position := fmt.Sprintf("%d of %d", view.menu.Selected+1, len(entries))
+				figures(c, position, p.MutedForeground)
+			},
+		)
+	}
 
+	keys := keysOf(st, view, entries)
+	if len(parts) == 0 && len(keys) == 0 {
+		return
+	}
+	ui.Row(c).Height(20).Gap(6).Padding(0, 4).AlignItems(ui.Center).Children(func() {
 		for i, part := range parts {
 			if i > 0 {
 				small("·", p.MutedForeground)
@@ -81,7 +78,7 @@ func (a *App) statusLine(
 		}
 
 		ui.Box(c).Grow(1)
-		for _, key := range keysOf(st, view, entries) {
+		for _, key := range keys {
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Shrink(0).Children(func() {
 				components.Kbd(c, key[0])
 				small(key[1], p.MutedForeground)
@@ -90,10 +87,10 @@ func (a *App) statusLine(
 	})
 }
 
-// modeButton is the session's mode, a menu of the three to choose among;
-// marked, it shows the shield of how much waits for a yes. ⇧⇥ switches
-// between ask and auto as in the terminal.
-func (a *App) modeButton(c *ui.Context, s agent.Session, view *sessionView, marked bool) {
+// modeButton is the session's mode after the shield of how much waits for
+// a yes, a menu of the three to choose among. ⇧⇥ switches between ask and
+// auto as in the terminal.
+func (a *App) modeButton(c *ui.Context, s agent.Session, view *sessionView) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	st := view.t.State
@@ -122,9 +119,7 @@ func (a *App) modeButton(c *ui.Context, s agent.Session, view *sessionView, mark
 	}
 	components.FocusRing(mode, p, 0)
 	mode.Children(func() {
-		if marked {
-			ui.Icon(c, current.icon).FontSize(12).TextColor(color)
-		}
+		ui.Icon(c, current.icon).FontSize(12).TextColor(color)
 		barText(c, current.name, color).FontWeight(500)
 	})
 	switch st.Mode {
@@ -191,11 +186,8 @@ func keysOf(st agent.State, view *sessionView, entries []commands.Entry) [][2]st
 		return [][2]string{{"esc", "stops"}}
 	case st.Replying:
 		return [][2]string{{"↵", "steers"}, {"esc", "stops"}}
-	case st.Mode != "":
-		return [][2]string{{"⇧⇥", "switches"}, {"/", "commands"}}
-	default:
-		return [][2]string{{"/", "commands"}}
 	}
+	return nil
 }
 
 // usageGauge is the terminal's usage line, folded into how full the

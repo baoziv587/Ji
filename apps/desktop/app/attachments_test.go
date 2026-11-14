@@ -131,16 +131,23 @@ func TestSentFilesShowInTheMessage(t *testing.T) {
 	}
 }
 
-func TestANewSessionShowsItsModeUnderTheInput(t *testing.T) {
+func TestTheModeShowsUnderTheInputWithoutTheKeys(t *testing.T) {
 	a, _ := testApp()
-	a.Select("c")
 	tt := ui.NewTester(a.View, 1100, 700)
 
-	if !tt.HasText("What should we build in web?") || !tt.HasText("Ask") {
-		t.Fatalf("texts %q", tt.Texts())
+	for _, id := range []string{"a", "c"} {
+		a.Select(id)
+		tt.Frame()
+		mode := modeNamed(a.views[id].t.State.Mode).name
+		if !tt.HasText(mode) {
+			t.Errorf("session %s does not show its mode, %s: %q", id, mode, tt.Texts())
+		}
+		if tt.HasText("switches") || tt.HasText("commands") {
+			t.Errorf("session %s lists the keys while idle: %q", id, tt.Texts())
+		}
 	}
-	if tt.HasText("switches") {
-		t.Error("a session not yet begun lists the keys")
+	if !tt.HasText("What should we build in web?") {
+		t.Errorf("texts %q", tt.Texts())
 	}
 }
 

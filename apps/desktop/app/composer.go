@@ -16,12 +16,11 @@ import (
 )
 
 // composer is where the next message is typed, under the terminal's status
-// line: what the reply does, the mode and the keys that work now. The two
-// share one pane of glass, the files attached over the text area, the
-// gauge of the usage and the buttons that attach, send and stop under it.
-// The menu of commands opens over the conversation as a `/` is typed. A
-// session not yet begun has no status line, but for the menu's keys and
-// what went wrong: its mode is under the pane, with its folder and branch.
+// line, shown while the reply works, the menu is open or something went
+// wrong. The two share one pane of glass, the files attached over the text
+// area, the gauge of the usage and the buttons that attach, send and stop
+// under it. The menu of commands opens over the conversation as a `/` is
+// typed. The session's folder, branch and mode are under the pane.
 func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView, empty bool) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
@@ -59,20 +58,16 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView, empty 
 			// through it: the status line, the input, the usage
 			pane := ui.Column(c).
 				Gap(4).
-				Padding(8).
+				Padding(12, 12, 8).
 				Radius(16).
 				Border(1, p.Input).
 				Material(glass.Blur{Radius: 12}).
 				Transition(components.ColorTransition)
 			if empty {
-				pane.Padding(12, 12, 8).Background(p.Card.Alpha(0.6))
+				pane.Background(p.Card.Alpha(0.6))
 			}
-			// Before the session begins, only for the menu's keys and what went wrong
-			statusShown := !empty || len(entries) > 0 || a.link.problem != "" || a.failure != ""
 			pane.Children(func() {
-				if statusShown {
-					a.statusLine(c, s, view, entries)
-				}
+				a.statusLine(c, view, entries)
 				a.attachments(c, view)
 				placeholder := "Ask anything, or type / for commands"
 				switch {
@@ -148,7 +143,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView, empty 
 			if pane.FocusWithin() || view.dropping {
 				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))
 			}
-			a.composerMeta(c, s, view, empty)
+			a.composerMeta(c, s, view)
 
 			// Esc closes the menu and the inspector first
 			if st.Replying && len(entries) == 0 && view.t.Inspected == nil &&
@@ -238,8 +233,8 @@ func (a *App) modelControls(c *ui.Context, s agent.Session, view *sessionView) {
 }
 
 // composerMeta is where the session works, under the input: its folder,
-// the branch checked out there and, before the session begins, its mode.
-func (a *App) composerMeta(c *ui.Context, s agent.Session, view *sessionView, empty bool) {
+// the branch checked out there and its mode.
+func (a *App) composerMeta(c *ui.Context, s agent.Session, view *sessionView) {
 	ui.Row(c).Height(20).Padding(0, 12).Gap(16).AlignItems(ui.Center).Children(func() {
 		metaLine(c, icons.Folder, format.ShortPath(s.Root)).MinWidth(0).Shrink(1).Tooltip(s.Root)
 		ui.Box(c).Grow(1)
@@ -249,8 +244,8 @@ func (a *App) composerMeta(c *ui.Context, s agent.Session, view *sessionView, em
 				Shrink(0).
 				Tooltip("The branch checked out in the folder")
 		}
-		if empty && view.t.State.Mode != "" {
-			a.modeButton(c, s, view, true)
+		if view.t.State.Mode != "" {
+			a.modeButton(c, s, view)
 		}
 	})
 }
