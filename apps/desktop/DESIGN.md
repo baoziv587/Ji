@@ -297,7 +297,7 @@ Flat by default. Depth is conveyed by three tonal steps (ground, sidebar panel, 
 
 ## Shapes
 
-Gently curved rectangles. The base radius is 8px (buttons, inputs, panels, code wells, popovers); 6px for items inside popovers and the inline select trigger; 4px for small marks (tags, Kbd, disclosure and mode triggers); 10px for toasts and the empty-state tile; full pills only for badges, the send button and status dots. Outlines are always 1px.
+Gently curved rectangles. The base radius is 8px (buttons, inputs, panels, code wells, popovers); 6px for items inside popovers and the inline select trigger; 4px for small marks (tags, Kbd, disclosure and mode triggers); 10px for toasts and the empty-state tile; full pills only for badges, the send button and status dots. Outlines are always 1px. Icons are Lucide's, stroked 1.5 wide on their 24 grid rather than shadcn/ui's 2, about a pixel at 16px, to sit with the 1px outlines and the text's weight.
 
 ## Components
 

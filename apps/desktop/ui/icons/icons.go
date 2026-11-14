@@ -1,5 +1,6 @@
 // Package icons holds Lucide's icons, which shadcn/ui draws with: 24 by
-// 24, stroked 2 wide, in the color of the text.
+// 24, stroked 1.5 wide (shadcn/ui draws them at 2: finer here), in the
+// color of the text.
 package icons
 
 import "github.com/egoist/mygo/ui"
@@ -113,7 +114,7 @@ var (
 func lucide(shapes string) *ui.SVG {
 	return ui.MustParseSVG(
 		[]byte(
-			`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` + shapes + `</svg>`,
+			`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">` + shapes + `</svg>`,
 		),
 	)
 }
