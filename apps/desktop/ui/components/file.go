@@ -1,6 +1,6 @@
 package components
 
-// A file a message carries: a mark of its kind, read off its extension.
+// A file a message carries: a mark of its kind, read off its name.
 
 import (
 	"path/filepath"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"desktop/ui/icons"
+	"desktop/ui/fileicons"
 )
 
 // FileExt is the file's extension as its mark shows it: "PDF", "" for none.
@@ -16,51 +16,20 @@ func FileExt(name string) string {
 	return strings.ToUpper(strings.TrimPrefix(filepath.Ext(name), "."))
 }
 
-// fileColor tells kinds of files apart by the palette's hues.
-func fileColor(p *Palette, ext string) ui.Color {
-	switch ext {
-	case "PNG", "JPG", "JPEG", "GIF", "WEBP", "SVG", "HEIC", "BMP":
-		return p.Info
-	case "PDF":
-		return p.Destructive
-	case "MD", "TXT", "RTF", "DOC", "DOCX":
-		return p.CodeString
-	case "JSON", "YAML", "YML", "TOML", "CSV", "XML", "SQL":
-		return p.CodeNumber
-	case "ZIP", "TAR", "GZ", "TGZ", "7Z", "RAR":
-		return p.Warning
-	case "GO", "TS", "TSX", "JS", "JSX", "PY", "RS", "RB", "JAVA", "C", "H",
-		"CPP", "SWIFT", "KT", "SH", "CSS", "HTML":
-		return p.CodeType
-	}
-	return p.MutedForeground
-}
-
-// FileMark is the file's extension in the color of its kind, on a tile of
-// it; a file without one, or with a long one, is a page.
+// FileMark is the file's icon, as Symbols draws its kind, on a quiet
+// tile.
 func FileMark(c *ui.Context, name string, size float32) ui.Element {
 	p := PaletteOf(c.Theme())
-	ext := FileExt(name)
-	color := fileColor(p, ext)
-	tile := ui.Box(c).
+	return ui.Box(c).
 		Size(size, size).
 		Shrink(0).
 		Center().
 		Radius(size/4).
-		Background(color.Alpha(0.14)).
-		Border(1, color.Alpha(0.3))
-	return tile.Children(func() {
-		if ext == "" || len(ext) > 4 {
-			ui.Icon(c, icons.File).FontSize(size / 2).TextColor(color)
-			return
-		}
-		ui.Text(c, ext).
-			FontSize(max(size*0.28, 9)).
-			FontWeight(700).
-			LetterSpacing(0.2).
-			TextColor(color).
-			SingleLine()
-	})
+		Background(p.Background).
+		Border(1, p.Border).
+		Children(func() {
+			ui.Image(c, fileicons.For(name)).Size(size*0.6, size*0.6)
+		})
 }
 
 // FileChip is a file by its mark and its name, with detail under the name

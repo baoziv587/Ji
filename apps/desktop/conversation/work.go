@@ -93,6 +93,9 @@ type args struct {
 	} `json:"edits"`
 }
 
+// fileTools are the tools whose path is a file, not a folder.
+var fileTools = map[string]bool{"read": true, "edit": true, "write": true}
+
 // describe reads a call's arguments once, as it starts: what it worked
 // on, and the lines an edit adds and removes.
 func describe(call *ToolCall) {
@@ -106,6 +109,8 @@ func describe(call *ToolCall) {
 		call.Target = a.Command
 	case a.Pattern != "":
 		call.Target = a.Pattern
+	default:
+		call.File = a.Path != "" && fileTools[call.Name]
 	}
 	if call.Name != "edit" {
 		return

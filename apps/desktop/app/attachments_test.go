@@ -126,7 +126,7 @@ func TestSentFilesShowInTheMessage(t *testing.T) {
 	a.views["a"].t.Apply(agent.Event{Type: "user", Text: "why?", Files: []string{"/tmp/trace.log"}})
 	tt := ui.NewTester(a.View, 1100, 700)
 
-	if !tt.HasText("trace.log") || !tt.HasText("LOG") || !tt.HasText("why?") {
+	if !tt.HasText("trace.log") || !tt.HasText("why?") {
 		t.Errorf("texts %q", tt.Texts())
 	}
 }

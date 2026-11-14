@@ -25,6 +25,8 @@ type inspectLine struct {
 	n, digits int
 	// Whether it starts or ends its well.
 	first, last bool
+	// Whether the subject is a file, shown after its icon.
+	file bool
 }
 
 type inspectKind int
@@ -82,7 +84,11 @@ func inspectLines(t *Transcript, call *ToolCall) []inspectLine {
 	}
 	var out []inspectLine
 	if call.Target != "" {
-		subject := inspectLine{kind: inspectSubject, text: relative(call.Target, t.State.Root)}
+		subject := inspectLine{
+			kind: inspectSubject,
+			text: relative(call.Target, t.State.Root),
+			file: call.File,
+		}
 		if call.Name == "bash" {
 			subject.line = DiffLine{Code: syntax.NewBlock(syntax.Language("bash"), subject.text)}
 		}
@@ -201,6 +207,21 @@ func inspectRow(c *ui.Context, t *Transcript, line inspectLine) {
 			TextColor(p.MutedForeground).
 			Padding(20, 16, 8)
 	case inspectSubject:
+		if line.file {
+			// The icon on the path's first line, should it wrap
+			ui.Row(c).Gap(8).AlignItems(ui.Start).Padding(16, 16, 0).Children(func() {
+				ui.Box(c).Height(th.FontSize * 1.5).Center().Shrink(0).Children(func() {
+					fileIcon(c, line.text, 16)
+				})
+				ui.Text(c, line.text).
+					Font("monospace").
+					TextColor(p.Foreground).
+					LineHeight(1.5).
+					Shrink(1).
+					MinWidth(0)
+			})
+			break
+		}
 		var subject ui.Element
 		if line.line.Code != nil {
 			var spans []ui.Span

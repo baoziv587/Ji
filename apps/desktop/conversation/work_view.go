@@ -7,6 +7,7 @@ import (
 
 	"desktop/format"
 	"desktop/ui/components"
+	"desktop/ui/fileicons"
 	"desktop/ui/icons"
 )
 
@@ -228,6 +229,9 @@ func step(c *ui.Context, t *Transcript, s *Item, move ui.ElementTransition, last
 		if target == "" {
 			target = call.Summary
 		}
+		if call.File {
+			fileIcon(c, target, 14)
+		}
 		ui.Text(c, relative(target, t.State.Root)).
 			Font("monospace").
 			FontSize(components.TextXS(th)).
@@ -346,9 +350,7 @@ func fileLine(c *ui.Context, t *Transcript, f *FileChange) {
 	th := c.Theme()
 	p := components.PaletteOf(th)
 	stepButton(c, t, f.Last).Height(24).Children(func() {
-		ui.Row(c).Size(16, 16).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, icons.Pencil).FontSize(13).TextColor(p.MutedForeground)
-		})
+		fileIcon(c, f.Path, 16)
 		ui.Text(c, f.Path).
 			Font("monospace").
 			FontSize(components.TextXS(th)).
@@ -359,6 +361,11 @@ func fileLine(c *ui.Context, t *Transcript, f *FileChange) {
 		lineCounts(c, f.Added, f.Removed)
 		ui.Box(c).Grow(1)
 	})
+}
+
+// fileIcon is the icon of the file at path, in its own colors.
+func fileIcon(c *ui.Context, path string, size float32) ui.Element {
+	return ui.Image(c, fileicons.For(path)).Size(size, size).Shrink(0)
 }
 
 // failedLine is a call that failed, in sight while the work is closed:

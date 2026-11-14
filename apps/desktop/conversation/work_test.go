@@ -155,3 +155,23 @@ func TestPhraseSaysOneByNameAndManyByCount(t *testing.T) {
 		}
 	}
 }
+
+func TestOnlyCallsOnAFileShowItsIcon(t *testing.T) {
+	for _, c := range []struct {
+		name, args string
+		file       bool
+	}{
+		{"read", `{"path":"/code/web/main.go"}`, true},
+		{"edit", `{"path":"/code/web/main.go","edits":[]}`, true},
+		{"write", `{"path":"/code/web/main.go","content":"x"}`, true},
+		{"grep", `{"pattern":"x","path":"/code/web"}`, false},
+		{"bash", `{"command":"ls"}`, false},
+		{"ls", `{"path":"/code/web"}`, false},
+	} {
+		call := &ToolCall{Name: c.name, Args: c.args}
+		describe(call)
+		if call.File != c.file {
+			t.Errorf("%s %s: file %v", c.name, c.args, call.File)
+		}
+	}
+}

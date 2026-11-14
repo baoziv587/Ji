@@ -20,6 +20,7 @@ import (
 
 	"desktop/agent"
 	"desktop/ui/components"
+	"desktop/ui/fileicons"
 	"desktop/ui/icons"
 )
 
@@ -256,7 +257,7 @@ func (a *App) diffView(c *ui.Context, s agent.Session, view *sessionView, d *dif
 	editor.DiffView(c.Key("diff:"+f.name), d.state).Grow(1).MinHeight(0).FillWidth()
 }
 
-// changedFileRow is a file of the list: its name and folder,
+// changedFileRow is a file of the list: its icon, name and folder,
 // and the lines it added and deleted; the one chosen is shown below.
 func (a *App) changedFileRow(c *ui.Context, d *diffSurface, i int) {
 	t := c.Theme()
@@ -279,7 +280,7 @@ func (a *App) changedFileRow(c *ui.Context, d *diffSurface, i int) {
 		row.Background(p.Accent.Alpha(0.5))
 	}
 	row.Children(func() {
-		ui.Icon(c, icons.File).FontSize(14).TextColor(p.MutedForeground).Shrink(0)
+		ui.Image(c, fileicons.For(f.name)).Size(16, 16).Shrink(0)
 		dir, base := filepath.Split(f.name)
 		ui.Row(c).Gap(6).AlignItems(ui.Center).Grow(1).Shrink(1).MinWidth(0).Children(func() {
 			ui.Text(c, base).SingleLine().Shrink(0).MaxWidth(240)

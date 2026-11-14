@@ -69,6 +69,8 @@ type ToolCall struct {
 	// the line a read starts at.
 	Target string
 	Offset int
+	// Whether Target is a file: what a read, an edit or a write works on.
+	File bool
 	// An edit's lines added and removed, and its diff, read from its
 	// arguments as it starts.
 	Edit           bool
