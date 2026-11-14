@@ -112,9 +112,10 @@ func pageOf(id string) settingsPage {
 }
 
 // OpenSettings shows the settings on the page shown last, the providers
-// read afresh whichever it is.
+// read afresh whichever it is; the servers give way to them.
 func (a *App) OpenSettings() {
 	a.settingsOpen = true
+	a.servers.open = false
 	if a.settingsPage == "" {
 		a.settingsPage = pageAppearance
 	}

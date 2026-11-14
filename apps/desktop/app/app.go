@@ -54,6 +54,8 @@ type App struct {
 	// NewTerminal starts a terminal for the panel: MyGo's, in Ghostty's
 	// emulator.
 	NewTerminal func(terminal.Options) (*terminal.Terminal, error)
+	// SSHConfig is the ssh config whose hosts the sidebar lists as servers.
+	SSHConfig string
 
 	ctx      context.Context
 	list     agent.Sessions
@@ -114,6 +116,8 @@ type App struct {
 	removing     string
 	removingBusy bool
 	providerNote providerNote
+	// The servers the sidebar lists in place of the sessions, while it does.
+	servers serversState
 }
 
 // link is whether the service answers, and what is wrong while it does not.
@@ -184,6 +188,7 @@ func New(service agent.Agent, update func(func())) *App {
 		missing:     map[string]bool{},
 		isDir:       isDir,
 		NewTerminal: terminal.New,
+		SSHConfig:   sshConfig(),
 		Layout:      DefaultLayout,
 		Settings:    DefaultSettings,
 	}

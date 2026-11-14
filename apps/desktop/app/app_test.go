@@ -1108,6 +1108,15 @@ func TestSnapshot(t *testing.T) {
 		v := a.views[a.selected]
 		a.toggleModels(&v.models, v.t.State.Model)
 	}
+	if config := os.Getenv("SERVERS"); config != "" {
+		a.SSHConfig = config
+		a.toggleServers()
+	}
+	if config := os.Getenv("HOSTS"); config != "" {
+		a.SSHConfig = config
+		v := a.views[a.selected]
+		a.openSurface(agent.Session{}, v, surfaceSSH)
+	}
 	if v, err := strconv.ParseFloat(os.Getenv("TRANSPARENCY"), 64); err == nil {
 		a.Settings.Transparency = v
 	}

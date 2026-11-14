@@ -40,9 +40,12 @@ func (a *App) sidebar(c *ui.Context) {
 		BorderWidth(0, 1, 0, 0).
 		BorderColor(p.SidebarBorder).
 		Children(func() {
-			if a.settingsOpen {
+			switch {
+			case a.settingsOpen:
 				a.settingsNav(c)
-			} else {
+			case a.servers.open:
+				a.serversNav(c)
+			default:
 				a.sessionsNav(c)
 			}
 
@@ -64,6 +67,17 @@ func (a *App) sidebar(c *ui.Context) {
 					} else {
 						a.OpenSettings()
 					}
+				}
+				// Beside the gear, as it puts another list in the sessions' place
+				gearStyle.Icon = icons.Machine
+				servers := components.Button(c, "", gearStyle).
+					Label("Servers").
+					Tooltip("SSH servers")
+				if a.servers.open {
+					servers.Background(p.SidebarAccent)
+				}
+				if servers.Clicked() {
+					a.toggleServers()
 				}
 				ui.Box(c).Grow(1)
 				dot := p.Destructive
@@ -147,13 +161,19 @@ func (a *App) sidebarToggle(c *ui.Context) {
 	}
 }
 
-// searchRow is the search over the sessions' titles and folders (⌘F), with
-// the buttons that start one beside it.
+// searchRow is the search over the sessions' titles and folders (⌘F), or
+// over the servers while they show, with the buttons that start a session
+// beside it.
 func (a *App) searchRow(c *ui.Context) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	if c.Shortcut(ui.Cmd, ui.KeyF) {
 		a.focusSearch = true
+	}
+	sv := &a.servers
+	search, placeholder, label := &a.search, "Search", "Search sessions"
+	if sv.open {
+		search, placeholder, label = &sv.search, "Search servers", "Search servers"
 	}
 	ui.Row(c).Padding(0, 10, 6).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
 		field := ui.Row(c).
@@ -169,14 +189,22 @@ func (a *App) searchRow(c *ui.Context) {
 		var input ui.Element
 		field.Children(func() {
 			ui.Icon(c, icons.Search).FontSize(14).TextColor(p.MutedForeground).Shrink(0)
-			input = ui.TextInputBase(c.Key("search"), &a.search).
-				Placeholder("Search").
-				Label("Search sessions").
+			input = ui.TextInputBase(c.Key("search"), search).
+				Placeholder(placeholder).
+				Label(label).
 				Grow(1).
 				MinWidth(0).
 				HandleInput(func(ev ui.InputEvent) bool {
-					if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEscape && a.search != "" {
-						a.search = ""
+					if ev.Kind != ui.InputKeyDown || ev.Key != ui.KeyEscape {
+						return false
+					}
+					if *search != "" {
+						*search = ""
+						return true
+					}
+					// Emptied, the servers give way to the sessions
+					if sv.open {
+						a.toggleServers()
 						return true
 					}
 					return false
@@ -209,6 +237,7 @@ func (a *App) searchRow(c *ui.Context) {
 			a.NewSessionInFolder()
 		}
 		if icon(icons.SquarePen, "New Session", "New Session (⌘N)") {
+			sv.open = false
 			a.NewSession("")
 		}
 	})

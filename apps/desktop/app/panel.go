@@ -1,8 +1,9 @@
 package app
 
 // The panel at the right of a session: tabs of what opens beside the
-// conversation, a terminal in the session's folder or the changes made
-// there, each a surface; with none open, the surfaces it can open.
+// conversation, a terminal in the session's folder or connected to a
+// server, or the changes made there, each a surface; with none open, the
+// surfaces it can open.
 
 import (
 	"fmt"
@@ -20,6 +21,9 @@ type surfaceKind int
 const (
 	surfaceTerminal surfaceKind = iota
 	surfaceDiff
+	// surfaceSSH is a terminal connected to a server the picker then asks
+	// for.
+	surfaceSSH
 )
 
 // surfaceKinds are the surfaces the panel opens, in the order its picker
@@ -33,6 +37,7 @@ var surfaceKinds = []struct {
 }{
 	{surfaceTerminal, "Terminal", icons.SquareTerminal, ui.KeyT, "T"},
 	{surfaceDiff, "Diff", icons.FileDiff, ui.KeyD, "D"},
+	{surfaceSSH, "SSH", icons.Machine, ui.KeyS, "S"},
 }
 
 // surface is a tab of the panel: a terminal or the diff.
@@ -50,6 +55,9 @@ func (s *surface) name() string {
 }
 
 func (s *surface) icon() *ui.SVG {
+	if s.term != nil && s.term.host != "" {
+		return icons.Machine
+	}
 	if s.term != nil {
 		return icons.SquareTerminal
 	}
@@ -70,9 +78,12 @@ type panelState struct {
 	open      bool
 	maximized bool
 	picking   bool
-	tabs      []*surface
-	active    int
-	lastID    int
+	// Whether the picker asks for the server to connect to, and its search.
+	hosts      bool
+	hostSearch string
+	tabs       []*surface
+	active     int
+	lastID     int
 	// Whether a terminal of the panel had the keys in the last frame,
 	// for the keys the session's own shortcuts would else take from it.
 	typing bool
@@ -112,29 +123,55 @@ func (a *App) togglePanel(view *sessionView) {
 // time, the diff once, read again as it is opened again.
 func (a *App) openSurface(s agent.Session, view *sessionView, kind surfaceKind) {
 	pn := &view.panel
+	switch kind {
+	case surfaceSSH:
+		pn.open, pn.picking, pn.hosts, pn.hostSearch = true, true, true, ""
+		a.loadServers()
+	case surfaceTerminal:
+		a.openTerminal(s, view, "")
+	case surfaceDiff:
+		a.openDiff(s, view)
+	}
+}
+
+// openDiff shows the panel's diff, read again, or opens it.
+func (a *App) openDiff(s agent.Session, view *sessionView) {
+	pn := &view.panel
 	pn.open, pn.picking = true, false
-	if kind == surfaceDiff {
-		if i := slices.IndexFunc(pn.tabs, func(t *surface) bool { return t.diff != nil }); i >= 0 {
-			pn.active = i
-			a.loadDiff(pn.tabs[i].diff)
-			return
-		}
+	if i := slices.IndexFunc(pn.tabs, func(t *surface) bool { return t.diff != nil }); i >= 0 {
+		pn.active = i
+		a.loadDiff(pn.tabs[i].diff)
+		return
 	}
 	pn.lastID++
+	tab := &surface{id: pn.lastID, diff: &diffSurface{root: s.Root}}
+	a.loadDiff(tab.diff)
+	pn.tabs = append(pn.tabs, tab)
+	pn.active = len(pn.tabs) - 1
+}
+
+// serverTab is the tab of the terminal connected to the server alias,
+// -1 for none.
+func (pn *panelState) serverTab(alias string) int {
+	return slices.IndexFunc(pn.tabs, func(t *surface) bool {
+		return t.term != nil && t.term.host == alias
+	})
+}
+
+// openTerminal opens a terminal in the panel, of the user's shell or
+// connected to host, and shows it.
+func (a *App) openTerminal(s agent.Session, view *sessionView, host string) {
+	pn := &view.panel
+	pn.open, pn.picking = true, false
+	pn.lastID++
 	tab := &surface{id: pn.lastID}
-	switch kind {
-	case surfaceTerminal:
-		term, err := a.startTerminal(s, view, tab)
-		if err != nil {
-			a.toast = &toast{message: "Could not open a terminal: " + err.Error()}
-			pn.picking = len(pn.tabs) == 0
-			return
-		}
-		tab.term = term
-	case surfaceDiff:
-		tab.diff = &diffSurface{root: s.Root}
-		a.loadDiff(tab.diff)
+	term, err := a.startTerminal(s, view, tab, host)
+	if err != nil {
+		a.toast = &toast{message: "Could not open a terminal: " + err.Error()}
+		pn.picking = len(pn.tabs) == 0
+		return
 	}
+	tab.term = term
 	pn.tabs = append(pn.tabs, tab)
 	pn.active = len(pn.tabs) - 1
 }
@@ -226,10 +263,10 @@ func (a *App) panelBar(c *ui.Context, view *sessionView, covering bool, under fl
 			}
 			if components.Button(c, "", ghost).
 				Label("New Tab").
-				Tooltip("Open a terminal or the diff").
+				Tooltip("Open a terminal, the diff or a server").
 				Shrink(0).
 				Clicked() {
-				pn.picking = true
+				pn.picking, pn.hosts = true, false
 			}
 			ui.Box(c).Grow(1).MinWidth(8)
 			if !covering || pn.maximized {
@@ -354,6 +391,10 @@ func (a *App) panelToggle(c *ui.Context, view *sessionView) {
 // surfacePicker lists the surfaces the panel opens, each with the key
 // that opens it while the list has the keys, as it has once shown.
 func (a *App) surfacePicker(c *ui.Context, s agent.Session, view *sessionView) {
+	if view.panel.hosts {
+		a.hostPicker(c, view)
+		return
+	}
 	p := components.PaletteOf(c.Theme())
 	list := ui.Column(c.Key("picker")).
 		Fill().
@@ -400,6 +441,75 @@ func (a *App) surfacePicker(c *ui.Context, s agent.Session, view *sessionView) {
 					a.openSurface(s, view, k.kind)
 				}
 			}
+		})
+	})
+}
+
+// hostPicker is the picker's second step for SSH: the servers of the ssh
+// config under a search, Enter connecting to the first it finds, Esc going
+// back to the surfaces.
+func (a *App) hostPicker(c *ui.Context, view *sessionView) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	pn := &view.panel
+	back := func() { pn.hosts, pn.hostSearch = false, "" }
+	ui.Column(c.Key("hosts")).Fill().Center().Padding(24).Children(func() {
+		ui.Column(c).Width(300).Gap(2).Children(func() {
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Margin(0, 0, 8).Children(func() {
+				b := components.Button(c, "", components.ButtonStyle{
+					Variant: components.Ghost,
+					Size:    components.SizeIconExtraSmall,
+					Icon:    icons.ChevronLeft,
+				}).
+					Label("Back to Surfaces").
+					Tooltip("Back to Surfaces (Esc)").
+					Shrink(0)
+				if b.Clicked() {
+					back()
+				}
+				ui.Text(c, "Connect to a server").FontWeight(500).Grow(1)
+			})
+			field := ui.Row(c).
+				Height(32).
+				Padding(0, 8).
+				Gap(6).
+				Radius(t.Radius).
+				AlignItems(ui.Center).
+				Border(1, p.Input).
+				Margin(0, 0, 6).
+				Shrink(0)
+			field.Children(func() {
+				ui.Icon(c, icons.Search).FontSize(14).TextColor(p.MutedForeground).Shrink(0)
+				input := ui.TextInputBase(c.Key("host-search"), &pn.hostSearch).
+					Placeholder("Search servers").
+					Label("Search servers").
+					Grow(1).
+					MinWidth(0).
+					AutoFocus().
+					HandleInput(func(ev ui.InputEvent) bool {
+						if ev.Kind == ui.InputKeyDown && ev.Key == ui.KeyEscape {
+							back()
+							return true
+						}
+						return false
+					})
+				if input.Focused() {
+					field.Border(1, p.Ring)
+				}
+				if input.Submitted() {
+					for _, sv := range a.servers.list {
+						if matchesServer(sv, pn.hostSearch) {
+							a.connect(sv)
+							break
+						}
+					}
+				}
+			})
+			ui.Scroll(c).MaxHeight(360).Children(func() {
+				ui.Column(c).Gap(2).Children(func() {
+					a.serverRows(c, pn.hostSearch)
+				})
+			})
 		})
 	})
 }

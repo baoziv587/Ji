@@ -98,6 +98,12 @@ var (
 	SquarePen = lucide(
 		`<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>`,
 	)
+	// Machine is drawn here, not Lucide's: a box seen from above at 2:1, in
+	// isometric line as the empty states draw machines, two vents on its
+	// left face and a light on its right, in Lucide's stroke.
+	Machine = lucide(
+		`<path d="M12 2 21 6.5 12 11 3 6.5Z"/><path d="M3 6.5v11l9 4.5 9-4.5v-11"/><path d="M12 11v11"/><path d="m5.5 11.75 4 2"/><path d="m5.5 14.75 4 2"/><path d="m14.5 15.25 1.5-.75"/>`,
+	)
 	Square = lucide(`<rect width="14" height="14" x="5" y="5" rx="2" fill="currentColor"/>`)
 	Sun    = lucide(
 		`<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,

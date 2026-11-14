@@ -15,6 +15,9 @@ import (
 
 type terminalSurface struct {
 	term *terminal.Terminal
+	// host is the server of the ssh config the terminal is connected to,
+	// none for the user's shell.
+	host string
 	// What the shell calls itself, as it sets the title, and the theme the
 	// terminal's colors were taken from.
 	title string
@@ -24,6 +27,9 @@ type terminalSurface struct {
 }
 
 func (t *terminalSurface) name() string {
+	if t.host != "" {
+		return t.host
+	}
 	if t.title != "" {
 		return t.title
 	}
@@ -34,31 +40,46 @@ func (t *terminalSurface) close() {
 	t.term.Close()
 }
 
-// startTerminal starts the user's shell in the session's folder; the
-// shell's exit closes its tab.
+// startTerminal starts the user's shell in the session's folder, or ssh
+// connected to host; the program's exit closes its tab, but for ssh's own
+// failure, which the tab is left to tell.
 func (a *App) startTerminal(
 	s agent.Session,
 	view *sessionView,
 	tab *surface,
+	host string,
 ) (*terminalSurface, error) {
-	surface := &terminalSurface{focus: true}
-	term, err := a.NewTerminal(terminal.Options{
+	surface := &terminalSurface{host: host, focus: true}
+	options := terminal.Options{
 		Dir:         s.Root,
 		Transparent: true,
 		Padding:     terminal.Padding{X: 12, Y: 8},
 		OnTitle: func(title string) {
 			a.update(func() { surface.title = title })
 		},
-		OnExit: func(int) {
+		OnExit: func(code int) {
+			if host != "" && code == sshFailed {
+				a.update(func() { surface.term.Feed([]byte("\r\n[Not connected]\r\n")) })
+				return
+			}
 			a.update(func() { a.closeSurface(view, tab) })
 		},
-	})
+	}
+	if host != "" {
+		options.Command = []string{"ssh", host}
+		options.Dir = ""
+	}
+	term, err := a.NewTerminal(options)
 	if err != nil {
 		return nil, err
 	}
 	surface.term = term
 	return surface, nil
 }
+
+// sshFailed is what ssh exits with when it fails itself, as it does when
+// it cannot connect.
+const sshFailed = 255
 
 // terminalView shows the terminal, and is whether it has the keys.
 func (a *App) terminalView(c *ui.Context, tab *surface) bool {
