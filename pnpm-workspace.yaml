@@ -9,5 +9,4 @@ packages:
 
 allowBuilds:
   '@google/genai': false
-  lefthook: true
   protobufjs: false

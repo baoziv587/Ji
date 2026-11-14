@@ -112,7 +112,7 @@ class JiCodingAgent(BaseInstalledAgent):
             await self._upload_source(environment, self.options.source)
             fetch = f"cd {INSTALL_DIR}"
 
-        # --ignore-scripts skips lefthook's git-hook install, which has no business in a task container.
+        # --ignore-scripts skips husky's git-hook install (the prepare script), which has no business in a task container.
         # Nothing is built: Node 24 runs the TypeScript sources as they are. The CLI with no task exits 2.
         await self.exec_as_agent(
             environment,

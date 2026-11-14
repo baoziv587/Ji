@@ -1,0 +1,4 @@
+# 只格式化暂存的文件，格式化后自动重新 git add
+git diff --cached --quiet --diff-filter=ACMR && exit 0
+git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 pnpm format --no-error-on-unmatched-pattern
+git diff --cached --name-only --diff-filter=ACMR -z | xargs -0 git add --

@@ -7,6 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "prepare": "husky",
     "demo": "pnpm --filter @ji.dev/demo start",
     "coding-agent": "pnpm --filter @ji.dev/coding-agent start",
     "agent-server": "pnpm --filter @ji.dev/coding-agent serve",
@@ -36,8 +37,8 @@
     "eslint": "^10.11.0",
     "eslint-plugin-slop": "^0.1.3",
     "fast-check": "^4.10.2",
+    "husky": "^9.1.7",
     "knip": "^6.38.0",
-    "lefthook": "^2.1.14",
     "oxfmt": "^0.70.0",
     "rolldown": "^1.2.9",
     "typescript": "npm:@typescript/typescript6@^6.0.2",

@@ -1,0 +1,55 @@
+# 并行跑所有检查，跑完后依次打印每个检查的标题和输出，最后是 summary
+cd "$(git rev-parse --show-toplevel)"
+out=$(mktemp -d)
+trap 'rm -rf "$out"' EXIT
+started=$(date +%s)
+
+# 成功时不出声，失败时才打印全部输出
+quiet() { sh scripts/quiet.sh "$@"; }
+
+go_format() {
+  unformatted=$(cd apps/desktop && gofmt -l .) || return $?
+  if [ -n "$unformatted" ]; then
+    printf 'Go files need formatting:\n%s\n' "$unformatted"
+    return 1
+  fi
+}
+
+jobs="format go-format lint go-lint knip typecheck test"
+job() {
+  case $1 in
+    format) quiet pnpm format:check ;;
+    go-format) go_format ;;
+    lint) quiet pnpm exec eslint . ;;
+    go-lint) quiet pnpm lint:go ;;
+    knip) quiet pnpm knip ;;
+    typecheck) quiet pnpm typecheck ;;
+    test) quiet pnpm test ;;
+  esac
+}
+
+for name in $jobs; do
+  (
+    code=0
+    job "$name" >"$out/$name.log" 2>&1 || code=$?
+    echo "$code" >"$out/$name.code"
+  ) &
+done
+wait
+
+for name in $jobs; do
+  echo "┃ $name"
+  cat "$out/$name.log"
+done
+
+printf '\nsummary: (done in %s seconds)\n' "$(($(date +%s) - started))"
+failed=0
+for name in $jobs; do
+  if [ "$(cat "$out/$name.code")" = 0 ]; then
+    echo "✔ $name"
+  else
+    echo "✘ $name"
+    failed=1
+  fi
+done
+exit $failed
