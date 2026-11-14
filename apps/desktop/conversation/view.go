@@ -31,8 +31,6 @@ func Centered(c *ui.Context, gap float32, fn func()) ui.Element {
 // session took longer than a frame for every delta of a reply. A reply is
 // a row for each of its blocks, and its text is selected with the rest.
 func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
-	theme := c.Theme()
-	p := components.PaletteOf(theme)
 	list.FollowEnd = true
 	view := ui.List(c, list, t.rows(), func(i int) {
 		k, part := t.row(i)
@@ -54,36 +52,17 @@ func View(c *ui.Context, list *ui.ListState, t *Transcript) ui.Element {
 		if len(t.Items) > 0 {
 			return
 		}
-		Centered(c, 16, func() {
-			if t.State.ID == "" {
+		// Once open, the window asks what to do over the input, which it
+		// centers while the session is empty
+		if t.State.ID == "" {
+			Centered(c, 16, func() {
 				Marker(
 					c,
 					func() { components.Spinner(c, "Opening", 16, ui.Color{}) },
 					"Opening the session…",
 				)
-				return
-			}
-			ui.Column(c).Center().Gap(12).Padding(80, 0).Unselectable().Children(func() {
-				ui.Text(c, "What should we work on?").
-					FontSize(components.TextLG(theme)).
-					FontWeight(500).
-					LetterSpacing(-0.4)
-				ui.Row(c).Gap(16).Children(func() {
-					for _, hint := range [][2]string{
-						{"↵", "to send"},
-						{"⇧↵", "for a new line"},
-						{"/", "for commands"},
-					} {
-						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-							components.Kbd(c, hint[0])
-							ui.Text(c, hint[1]).
-								FontSize(components.TextXS(theme)).
-								TextColor(p.MutedForeground)
-						})
-					}
-				})
 			})
-		})
+		}
 	})
 	t.sight = view.Bounds()
 	return view

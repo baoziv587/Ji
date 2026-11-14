@@ -175,6 +175,9 @@ func Theme(system *ui.Theme, s *Scheme, dark bool) *ui.Theme {
 func TextXS(t *ui.Theme) float32 { return t.FontSize - 2 }
 func TextLG(t *ui.Theme) float32 { return t.FontSize + 4 }
 
+// TextHero is the size of the one question an empty session asks.
+func TextHero(t *ui.Theme) float32 { return t.FontSize + 11 }
+
 // TextCode is the size of code in a reply, a step under the body: at
 // TextXS its colors blur.
 func TextCode(t *ui.Theme) float32 { return t.FontSize - 1 }

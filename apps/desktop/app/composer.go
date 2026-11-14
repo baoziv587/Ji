@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -10,6 +11,7 @@ import (
 	"desktop/agent"
 	"desktop/commands"
 	"desktop/conversation"
+	"desktop/format"
 	"desktop/ui/components"
 	"desktop/ui/icons"
 )
@@ -25,6 +27,10 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 	st := view.t.State
 	ui.Column(c).Padding(0, 24, 12).Children(func() {
 		conversation.Centered(c, 6, func() {
+			if !s.Archived && a.isMissing(s.Root) {
+				a.folderGone(c, s)
+				return
+			}
 			if s.Archived {
 				ui.Row(c).
 					Gap(12).
@@ -33,7 +39,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					Radius(t.Radius).
 					Border(1, p.Border).
 					Children(func() {
-						ui.Text(c, "This session is archived. Unarchive it to go on.").
+						ui.Text(c, "This session is settled. Reopen it to go on.").
 							TextColor(p.MutedForeground).
 							Grow(1)
 						unarchive := components.ButtonStyle{
@@ -41,7 +47,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 							Size:    components.SizeSmall,
 							Icon:    icons.ArchiveRestore,
 						}
-						if components.Button(c, "Unarchive", unarchive).Clicked() {
+						if components.Button(c, "Reopen", unarchive).Clicked() {
 							a.unarchive(s.ID)
 						}
 					})
@@ -83,6 +89,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					usageGauge(c, st.Usage, &view.usageOpen, &view.usageDrain)
 					ui.Box(c).Grow(1)
+					a.modelControls(c, s, view)
 					if st.Replying {
 						stop := components.ButtonStyle{
 							Variant: components.Outline,
@@ -111,6 +118,7 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 			if pane.FocusWithin() {
 				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))
 			}
+			a.composerMeta(c, s)
 
 			// Esc closes the menu and the inspector first
 			if st.Replying && len(entries) == 0 && view.t.Inspected == nil &&
@@ -127,6 +135,90 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					Top(-4)
 			}
 		})
+	})
+}
+
+// folderGone stands for the input of a session whose folder is not there
+// any more: it goes on where its project is now, or the project is told
+// where that is.
+func (a *App) folderGone(c *ui.Context, s agent.Session) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	live := a.liveFolder(s.Root)
+	ui.Row(c).
+		Gap(12).
+		AlignItems(ui.Center).
+		Padding(12, 16).
+		Radius(t.Radius).
+		Border(1, p.Destructive.Alpha(0.45)).
+		Background(p.Destructive.Alpha(0.06)).
+		Children(func() {
+			ui.Icon(c, icons.TriangleAlert).FontSize(16).TextColor(p.Destructive).Shrink(0)
+			ui.Text(c, format.ShortPath(s.Root)+" no longer exists.").
+				Grow(1).
+				Shrink(1).
+				MinWidth(0)
+			// The primary action is going on where the project is now, when it can
+			edit := ui.PrimaryButton
+			if live != "" {
+				edit = ui.Button
+			}
+			if edit(c, "Edit Project…").Shrink(0).Clicked() {
+				a.EditProject(a.groupKeyOf(s.Root))
+			}
+			if live == "" {
+				return
+			}
+			if ui.PrimaryButton(c, "Continue in "+filepath.Base(live)).
+				Tooltip("Its sessions go on in " + live + ", their history kept").
+				Shrink(0).
+				Clicked() {
+				a.moveFolders([]string{s.Root}, live)
+			}
+		})
+}
+
+// modelControls is the model and its thinking level, chosen for the
+// replies to come, as one quiet phrase before the buttons.
+func (a *App) modelControls(c *ui.Context, s agent.Session, view *sessionView) {
+	p := components.PaletteOf(c.Theme())
+	st := view.t.State
+	ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
+		if st.Model != "" {
+			a.modelSelect(c.Key("model"), s, view)
+		}
+		if len(st.ThinkingLevels) > 0 {
+			level := st.Thinking
+			if components.InlineSelect(c, &level, st.ThinkingLevels, s.Archived).
+				Label("Thinking").
+				Tooltip("Thinking level").
+				Shrink(0).
+				Changed() {
+				a.think(view, level)
+			}
+		}
+		if st.Fast {
+			ui.Text(c, "fast").
+				TextColor(p.MutedForeground).
+				Padding(0, 4).
+				Shrink(0).
+				Tooltip("OpenAI's priority tier, at about 2x the usage: /fast off")
+		}
+	})
+}
+
+// composerMeta is where the session works, under the input: its folder,
+// and the branch checked out there.
+func (a *App) composerMeta(c *ui.Context, s agent.Session) {
+	ui.Row(c).Height(20).Padding(0, 12).Gap(16).AlignItems(ui.Center).Children(func() {
+		metaLine(c, icons.Folder, format.ShortPath(s.Root)).MinWidth(0).Shrink(1).Tooltip(s.Root)
+		ui.Box(c).Grow(1)
+		if branch := a.branches[s.Root]; branch != "" {
+			metaLine(c, icons.GitBranch, branch).
+				MinWidth(0).
+				Shrink(0).
+				Tooltip("The branch checked out in the folder")
+		}
 	})
 }
 

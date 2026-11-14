@@ -245,6 +245,9 @@ type Agent interface {
 	// service's default folder and model for those left empty.
 	CreateSession(ctx context.Context, root, model string) (Session, error)
 	Archive(ctx context.Context, id string, archived bool) (Session, error)
+	// SetRoot gives a session the folder it works in from now on, its
+	// history kept; refused while it replies.
+	SetRoot(ctx context.Context, id, root string) (Session, error)
 
 	State(ctx context.Context, id string) (State, error)
 	// Send starts a reply, or steers the one in progress: "started" or

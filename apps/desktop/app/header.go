@@ -9,15 +9,13 @@ import (
 	"desktop/ui/icons"
 )
 
-// header is the terminal's title, in one line over a rule: the session,
-// the model and its settings muted after it, then its folder; what gives
-// way first as the window narrows is the folder, then the title. The model
-// and the thinking level are chosen here: the rest is the session's.
+// header is the session's place, as a trail over a rule: its folder, then
+// its title; the folder gives way first as the window narrows. At the
+// right, what opens the folder elsewhere and what puts the session away.
 func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	st := view.t.State
-	dot := func() ui.Element { return ui.Text(c, "·").TextColor(p.MutedForeground).Shrink(0) }
 	// The window's title bar, as tall as the sidebar's top, so the two read as one bar
 	ui.Row(c).
 		Absolute().
@@ -25,56 +23,40 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 		Left(0).
 		Right(0).
 		Height(TitleBarHeight).
-		Gap(6).
-		Padding(0, 10, 0, 16).
+		Gap(8).
+		Padding(0, 10, 0, a.titleInset(c)).
 		AlignItems(ui.Center).
 		Material(a.bar(a.contentCover(c))).
 		DragWindow().
 		Children(func() {
-			ui.Text(c, titleOf(s)).FontWeight(600).SingleLine().Shrink(1)
-			if st.Model != "" {
-				dot()
-				a.modelSelect(c.Key("model"), s, view)
+			if a.Layout.SidebarHidden {
+				a.sidebarToggle(c)
 			}
-			if len(st.ThinkingLevels) > 0 {
-				dot()
-				level := st.Thinking
-				// Pulled in by its padding, so its text keeps the dots' spacing
-				if components.InlineSelect(c, &level, st.ThinkingLevels, s.Archived).
-					Margin(0, -2, 0, -6).
-					Label("Thinking").
-					Tooltip("Thinking level").
-					Changed() {
-					a.think(view, level)
-				}
-			}
-			if st.Fast {
-				dot()
-				ui.Text(c, "fast").
-					TextColor(p.MutedForeground).
-					Shrink(0).
-					Tooltip("OpenAI's priority tier, at about 2x the usage: /fast off")
-			}
-			// The folder shrinks far faster than the rest, so it gives way before
-			// they are cut; and as the terminal drops it whole, it hides while the
-			// last frame had no room for all of it, rather than show a stub
-			before := dot()
-			root := format.ShortPath(s.Root)
-			folder := ui.Text(c, root).
+			folder := a.folderTitle(s.Root)
+			monogram(c, folder).Tooltip(s.Root)
+			ui.Text(c, folder).
 				TextColor(p.MutedForeground).
 				SingleLine().
 				Shrink(1000).
-				Tooltip(s.Root)
-			if full, _ := c.MeasureText(
-				0,
-				ui.Span{Text: root, Size: t.FontSize},
-			); folder.Bounds().W+0.5 < full {
-				before.Opacity(0)
-				folder.Opacity(0)
-			}
+				MinWidth(24).
+				Tooltip(format.ShortPath(s.Root))
+			ui.Text(c, "/").TextColor(p.MutedForeground.Alpha(0.6)).Shrink(0)
+			ui.Text(c, titleOf(s)).FontWeight(600).SingleLine().Shrink(1)
 			ui.Box(c).Grow(1).MinWidth(8)
+			if a.OpenInEditor != nil && !a.isMissing(s.Root) {
+				if components.Button(c, "Open in VS Code", components.ButtonStyle{
+					Variant: components.Ghost,
+					Size:    components.SizeSmall,
+					Icon:    icons.SquareArrowOutUpRight,
+				}).
+					Tooltip("Open " + format.ShortPath(s.Root) + " in VS Code").
+					Shrink(0).
+					Clicked() {
+					a.openInEditor(s.Root)
+				}
+			}
 			if s.Archived {
-				if components.Button(c, "Unarchive", components.ButtonStyle{
+				if components.Button(c, "Reopen", components.ButtonStyle{
 					Variant: components.Outline,
 					Size:    components.SizeSmall,
 					Icon:    icons.ArchiveRestore,
@@ -91,14 +73,24 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 				Icon:     icons.Archive,
 				Disabled: busy,
 			}).
-				Label("Archive")
+				Label("Settle")
 			if busy {
-				archive.Tooltip("Stop the reply before archiving the session")
+				archive.Tooltip("Stop the reply before settling the session")
 			} else {
-				archive.Tooltip("Archive: move to Archived; nothing is deleted")
+				archive.Tooltip("Settle: move to Settled; nothing is deleted")
 			}
 			if archive.Clicked() {
 				a.archive(s.ID, true)
 			}
 		})
+}
+
+// openInEditor opens root in VS Code, and says so if it cannot.
+func (a *App) openInEditor(root string) {
+	open := a.OpenInEditor
+	a.async(func() {
+		if err := open(root); err != nil {
+			a.update(func() { a.toast = &toast{message: "Could not open VS Code: " + err.Error()} })
+		}
+	})
 }

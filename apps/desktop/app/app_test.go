@@ -33,8 +33,10 @@ type fakeAgent struct {
 	commands  map[string][]string
 	answers   map[string][][]string
 	archived  []string
-	stopped   []string
-	modes     int
+	// Each folder a session was given, "id > root"
+	roots   []string
+	stopped []string
+	modes   int
 	// What every session was set to, in turn
 	everyMode []string
 	// Where each session followed takes its events after those played back
@@ -61,6 +63,17 @@ func (f *fakeAgent) CreateSession(_ context.Context, root, model string) (agent.
 	f.createdOn = append(f.createdOn, model)
 	return agent.Session{ID: "new", Root: root, Updated: time.Now().UnixMilli()}, nil
 }
+func (f *fakeAgent) SetRoot(_ context.Context, id, root string) (agent.Session, error) {
+	f.roots = append(f.roots, id+" > "+root)
+	for _, s := range f.sessions {
+		if s.ID == id {
+			s.Root = root
+			return s, nil
+		}
+	}
+	return agent.Session{ID: id, Root: root}, nil
+}
+
 func (f *fakeAgent) Archive(_ context.Context, id string, archived bool) (agent.Session, error) {
 	f.archived = append(f.archived, id+map[bool]string{true: ":on", false: ":off"}[archived])
 	return agent.Session{ID: id, Root: "/code/" + id, Title: "Title " + id, Archived: archived}, nil
@@ -286,6 +299,7 @@ func testApp() (*App, *fakeAgent) {
 	a := New(f, func(fn func()) { fn() })
 	a.async = func(fn func()) { fn() }
 	a.after = func(_ time.Duration, fn func()) { fn() }
+	a.isDir = func(path string) bool { return !strings.HasPrefix(path, "/gone/") }
 	a.link.up = true
 	a.setList(agent.Sessions{DefaultRoot: "/code/web", Sessions: []agent.Session{
 		{ID: "a", Root: "/code/web", Title: "Fix the login form", Updated: now},
@@ -308,7 +322,7 @@ func TestSidebarGroupsSessionsByFolder(t *testing.T) {
 
 	for _, text := range []string{
 		"web", "api", "Fix the login form", "Add rate limits", "Upgrade React", "Approval",
-		"Archived (1)",
+		"Settled (1)",
 	} {
 		if !tt.HasText(text) {
 			t.Errorf("no %q in %q", text, tt.Texts())
@@ -626,7 +640,7 @@ func TestArchiveMovesOnAndCanBeUndone(t *testing.T) {
 	a, f := testApp()
 	tt := ui.NewTester(a.View, 1100, 700)
 
-	if err := tt.Click("Archive"); err != nil {
+	if err := tt.Click("Settle"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -732,10 +746,10 @@ func TestArchivedSessionOffersToUnarchive(t *testing.T) {
 	if tt.HasText("Message") {
 		t.Error("an archived session takes messages")
 	}
-	if err := tt.Click("Unarchive to go on"); err == nil {
+	if err := tt.Click("Reopen it to go on"); err == nil {
 		t.Error("the notice is not a button")
 	}
-	if err := tt.Click("Unarchive"); err != nil {
+	if err := tt.Click("Reopen"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -771,7 +785,9 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 // that mode chosen in the settings, USAGE=1 with the history 3/4 full and
 // what was spent open, COMPACT=1 with a compaction done and one running,
 // MODELS=1 with the picker of models open, SCALE=2 drawn at twice the size,
-// VIBRANCY=1 over the window's material, left transparent, as much as
+// MISSING=1 has /code/web moved to /code/site, kept in its project
+// (ALONE=1: in none), EDIT=1 opens Edit project on it, REMOVE=1 there asks
+// to remove it. VIBRANCY=1 over the window's material, left transparent, as much as
 // CONTENT_TRANSPARENCY=<0 to 100> lets through. In the settings, PAGE=approvals
 // or models shows that page, which the following imply: ENDPOINT=1
 // adds an endpoint to the providers, REMOVING=<id> asks to remove one,
@@ -893,6 +909,46 @@ func TestSnapshot(t *testing.T) {
 	if menu := os.Getenv("MENU"); menu != "" {
 		view.draft = menu
 	}
+	if os.Getenv("EMPTY") == "1" {
+		a.Select("c")
+	}
+	a.branches["/code/web"] = "main"
+	a.branches["/code/api"] = "rate-limits"
+	a.OpenInEditor = func(string) error { return nil }
+	if os.Getenv("HIDDEN") == "1" {
+		a.Layout.SidebarHidden = true
+	}
+	if q := os.Getenv("SEARCH"); q != "" {
+		a.search = q
+	}
+	if pins := os.Getenv("PINS"); pins != "" {
+		a.Pins = strings.Split(pins, ",")
+		a.regroup()
+	}
+	if os.Getenv("MISSING") == "1" || os.Getenv("EDIT") == "1" {
+		a.Projects = []Project{{Folders: []string{"/code/web", "/code/site"}}}
+		a.isDir = func(path string) bool { return path != "/code/web" }
+		a.ChooseFolder = func() (string, error) { return "/code/site", nil }
+		a.regroup()
+		a.readFolders(a.roots()...)
+		if os.Getenv("ALONE") == "1" {
+			a.Projects = nil
+			a.regroup()
+		}
+	}
+	if os.Getenv("EDIT") == "1" {
+		a.EditProject("/code/web")
+		a.editing.removing = os.Getenv("REMOVE") == "1"
+	}
+	if os.Getenv("FOLDED") == "1" {
+		folded := false
+		a.opened["/code/api"] = &folded
+	}
+	if os.Getenv("FOLDERS") == "1" {
+		open := true
+		a.opened["/code/web"] = &open
+		a.archivedOpen = true
+	}
 	a.Settings.Theme = os.Getenv("THEME")
 	a.Settings.Approvals = os.Getenv("APPROVALS")
 	a.Settings.Model = os.Getenv("DEFAULT_MODEL")
@@ -988,7 +1044,7 @@ func TestSnapshot(t *testing.T) {
 		a.apply(view, agent.Event{Type: "ask_closed", ID: "4"})
 		a.apply(view, agent.Event{Type: "state", State: &agent.State{ID: "a", Mode: "ask"}})
 		tt.Frame()
-		if err := tt.Click("Archive"); err != nil {
+		if err := tt.Click("Settle"); err != nil {
 			t.Fatal(err)
 		}
 		tt.Frame()

@@ -25,6 +25,8 @@
 //                                                   on model, 'provider/id' (default: the service's --model), its
 //                                                   commands run with env, {name: value} (default: the service's)
 //   POST /api/sessions/:id/archive    {archived}    out of the list's way, or back
+//   POST /api/sessions/:id/root       {root}        the folder it works in from now on, its history kept: opened
+//                                                   again there if it was open; not while it replies
 //
 //   GET  /api/sessions/:id/state                    a session's state, as in its 'state' event
 //   GET  /api/sessions/:id/events                   its events: those after Last-Event-ID (or ?after=n), then each as
@@ -172,6 +174,9 @@ async function route(
   const body = await RequestBody.read(req)
   if (action === 'archive') {
     return sendJson(res, 200, hub.archive(sessionId, body.get('archived') !== false))
+  }
+  if (action === 'root') {
+    return sendJson(res, 200, hub.setRoot(sessionId, body.string('root')))
   }
 
   const service = hub.session(sessionId)

@@ -6,6 +6,7 @@
 //             terminal that made it
 //   session   one session's service, opened if need be
 //   archive   out of the list's way, or back in it: nothing is deleted
+//   setRoot   the folder it works in, as when the folder was renamed or moved
 //   setMode   what waits for a yes in every session, those opened later included
 
 import type { Mode } from '../features/permissions.ts'
@@ -123,6 +124,28 @@ export class SessionHub {
     const meta = this.update(this.metaOf(id), { archived })
     this.changed()
     return this.summaryOf(meta)
+  }
+
+  /**
+   * The session works in `folder` from now on, opened again there if it was open; its history stays. Throws when
+   * `folder` is not a folder, and while the session is replying.
+   */
+  setRoot(id: string, folder: string): SessionSummary {
+    const meta = this.metaOf(id)
+    const root = resolve(folder)
+    if (!isFolder(root)) {
+      throw new Error(`${root} is not a folder`)
+    }
+    const service = this.opened.get(id)
+    if (service?.replying === true) {
+      throw new Error('the session is replying: stop it before changing its folder')
+    }
+
+    const next = this.update(meta, { root })
+    service?.stop()
+    this.opened.delete(id)
+    this.changed()
+    return this.summaryOf(next)
   }
 
   /** Every session's mode, and the one the sessions opened from now on start in. */

@@ -27,10 +27,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -152,6 +154,12 @@ func main() {
 			client = c
 			a = app.New(c, update)
 			a.Layout = loadLayout()
+			readConfig("pins.json", &a.Pins)
+			readConfig("projects.json", &a.Projects)
+			a.SaveProjects = func(projects []app.Project) error {
+				return writeConfig("projects.json", projects)
+			}
+			a.SavePins = func(pins []string) { _ = writeConfig("pins.json", pins) }
 			a.Settings = settings
 
 			appearance := a.Settings.Appearance
@@ -167,6 +175,11 @@ func main() {
 			}
 
 			a.Quit = mygo.App.Quit
+			if vscode := findVSCode(); vscode != "" {
+				a.OpenInEditor = func(root string) error {
+					return exec.Command("open", "-a", vscode, root).Run()
+				}
+			}
 			a.ChooseFolder = func() (string, error) {
 				paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
 					Parent:            win,
@@ -360,20 +373,20 @@ func readConfig(name string, v any) {
 
 // writeConfig writes v as JSON to the config file of that name, or nothing
 // when it cannot.
-func writeConfig(name string, v any) {
+func writeConfig(name string, v any) error {
 	path := configPath(name)
 	if path == "" {
-		return
+		return errors.New("no folder for the settings")
 	}
 
 	b, err := json.Marshal(v)
 	if err != nil {
-		return
+		return err
 	}
-	if os.MkdirAll(filepath.Dir(path), 0o755) != nil {
-		return
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
 	}
-	_ = os.WriteFile(path, b, 0o644)
+	return os.WriteFile(path, b, 0o644)
 }
 
 // loadSettings reads the settings kept, the defaults where a file is
@@ -384,7 +397,7 @@ func loadSettings() app.Settings {
 	return s
 }
 
-func saveSettings(s app.Settings) { writeConfig("settings.json", s) }
+func saveSettings(s app.Settings) { _ = writeConfig("settings.json", s) }
 
 func themeSource(a components.Appearance) mygo.ThemeSource {
 	switch a {
@@ -396,13 +409,28 @@ func themeSource(a components.Appearance) mygo.ThemeSource {
 	return mygo.ThemeSystem
 }
 
+// findVSCode is where VS Code is installed, "" when it is not.
+func findVSCode() string {
+	dirs := []string{"/Applications"}
+	if dir, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(dir, "Applications"))
+	}
+	for _, dir := range dirs {
+		path := filepath.Join(dir, "Visual Studio Code.app")
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
 func loadLayout() app.Layout {
 	l := app.DefaultLayout
 	readConfig("layout.json", &l)
 	return l.Fit()
 }
 
-func saveLayout(l app.Layout) { writeConfig("layout.json", l) }
+func saveLayout(l app.Layout) { _ = writeConfig("layout.json", l) }
 
 // bundledAgent is where `pnpm desktop:build` puts the service in the app.
 func bundledAgent() string {

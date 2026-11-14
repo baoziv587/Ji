@@ -172,12 +172,12 @@ func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 		trigger.Background(p.Accent)
 	}
 	components.FocusRing(trigger, p, 1)
-	color := p.MutedForeground
-	if picker.open {
-		color = p.Foreground
+	color := p.Foreground
+	if off {
+		color = p.MutedForeground
 	}
 	trigger.Children(func() {
-		ui.Text(c, st.Model).TextColor(color).SingleLine().Shrink(1)
+		ui.Text(c, modelName(st.Model)).TextColor(color).SingleLine().Shrink(1)
 		if !off {
 			ui.Icon(c, icons.ChevronDown).
 				FontSize(14).
@@ -189,7 +189,7 @@ func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 	case st.Replying:
 		trigger.Tooltip("Stop the reply to switch models")
 	case !picker.open:
-		trigger.Tooltip("Model")
+		trigger.Tooltip("Model: " + st.Model)
 	}
 	if trigger.Clicked() {
 		a.toggleModels(picker, st.Model)
@@ -460,4 +460,13 @@ func nameOf(m agent.Model) string {
 		return m.ID
 	}
 	return m.Name
+}
+
+// modelName is a model without its provider, as "deepseek-flash" of
+// "deepseek/deepseek-flash".
+func modelName(spec string) string {
+	if _, name, ok := strings.Cut(spec, "/"); ok && name != "" {
+		return name
+	}
+	return spec
 }

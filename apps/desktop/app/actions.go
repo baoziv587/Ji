@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"desktop/agent"
@@ -15,6 +16,12 @@ func (a *App) NewSession(root string) {
 	if root == "" {
 		if s, ok := a.session(a.selected); ok {
 			root = s.Root
+		}
+	}
+	// A folder gone gives way to its project's where it is now
+	if a.isMissing(root) {
+		if live := a.liveFolder(root); live != "" {
+			root = live
 		}
 	}
 	model := a.Settings.Model
@@ -65,7 +72,7 @@ func (a *App) OpenFolder(root string) {
 			}
 			a.pinned = root
 			a.setList(list)
-			if open := a.opened[root]; open != nil {
+			if open := a.opened[a.groupKeyOf(root)]; open != nil {
 				*open = true
 			}
 			var recent *agent.Session
@@ -83,8 +90,8 @@ func (a *App) OpenFolder(root string) {
 	})
 }
 
-// archive takes a session out of the list's way, or puts it back. One
-// archived while chosen gives way to the next, and a toast can take it back.
+// archive settles a session out of the list's way, or puts it back. One
+// settled while chosen gives way to the next, and a toast can take it back.
 func (a *App) archive(id string, archived bool) {
 	next := a.neighbour(id)
 	a.call(func(ctx context.Context) error {
@@ -103,7 +110,7 @@ func (a *App) archive(id string, archived bool) {
 			}
 			a.close(id)
 			a.toast = &toast{
-				message: "Archived “" + titleOf(s) + "”",
+				message: "Settled “" + titleOf(s) + "”",
 				action:  "Undo",
 				run:     func() { a.unarchive(id) },
 			}
@@ -131,8 +138,12 @@ func (a *App) replace(s agent.Session) {
 // before it at the end: what to show once id is archived. None when id is
 // the only one.
 func (a *App) neighbour(id string) string {
+	groups := a.groups()
 	var shown []string
-	for _, g := range a.groups().folders {
+	for _, i := range groups.pinned {
+		shown = append(shown, a.list.Sessions[i].ID)
+	}
+	for _, g := range groups.folders {
 		for _, i := range g.sessions {
 			shown = append(shown, a.list.Sessions[i].ID)
 		}
@@ -228,3 +239,18 @@ func (a *App) answer(view *sessionView, answers [][]string) {
 		func(ctx context.Context) error { return a.agent.Answer(ctx, view.id, asking.ID, answers) },
 	)
 }
+
+// pin keeps a session over the folders, or puts it back under its own.
+func (a *App) pin(id string, on bool) {
+	pins := slices.DeleteFunc(slices.Clone(a.Pins), func(p string) bool { return p == id })
+	if on {
+		pins = append(pins, id)
+	}
+	a.Pins = pins
+	a.regroup()
+	if save := a.SavePins; save != nil {
+		a.async(func() { save(pins) })
+	}
+}
+
+func (a *App) isPinned(id string) bool { return slices.Contains(a.Pins, id) }

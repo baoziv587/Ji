@@ -110,6 +110,17 @@ func (c *Client) Archive(ctx context.Context, id string, archived bool) (Session
 	)
 }
 
+func (c *Client) SetRoot(ctx context.Context, id, root string) (Session, error) {
+	var s Session
+	return s, c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "root"),
+		map[string]string{"root": root},
+		&s,
+	)
+}
+
 func (c *Client) State(ctx context.Context, id string) (State, error) {
 	var s State
 	return s, c.do(ctx, http.MethodGet, sessionPath(id, "state"), nil, &s)

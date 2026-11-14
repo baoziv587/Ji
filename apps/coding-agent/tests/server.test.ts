@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net'
 import type { ServiceEvent, ServiceState } from '../src/server/events.ts'
 import type { ModelView, ProviderView } from '../src/server/providers.ts'
 import type { SessionSummary } from '../src/server/sessions.ts'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -208,6 +208,58 @@ describe('agent HTTP service', () => {
     expect(archived).toMatchObject({ id, archived: true })
     expect(back).toMatchObject({ id, archived: false })
     expect(JSON.parse(readFileSync(join(sessions, `${id}.json`), 'utf8'))).toMatchObject({ archived: false })
+  })
+
+  it('should go on in the folder a session is given, its history kept, after a restart too', async () => {
+    // Arrange
+    const sessions = scratch()
+    const base = scratch()
+    const was = join(base, 'pi-rsi')
+    mkdirSync(was)
+    const replies = [
+      assistantMessage('first answer'),
+      assistantMessage([toolUse('bash', { command: 'echo hi > out.txt' })]),
+      assistantMessage('done'),
+    ]
+    const { url } = await serve(replies, sessions)
+    const { id } = (await post(url, '/api/sessions', { root: was })) as SessionSummary
+    const before = await subscribe(`${url}/api/sessions/${id}/events`)
+    await post(url, `/api/sessions/${id}/messages`, { text: 'hello' })
+    await before.until(e => e.type === 'reply_end')
+    const now = join(base, 'ji')
+    renameSync(was, now)
+
+    // Act
+    const moved = await post(url, `/api/sessions/${id}/root`, { root: now })
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+    await post(url, `/api/sessions/${id}/messages`, { text: 'write hi' })
+    const ask = await events.until(e => e.type === 'ask')
+    await post(url, `/api/sessions/${id}/questions/${idOf(ask)}`, { answers: [['yes']] })
+    await events.until(e => e.type === 'reply_end' && events.seen.some(u => u.type === 'ask'))
+    const after = await serve([], sessions)
+    const listed = (await (await fetch(`${after.url}/api/sessions`)).json()) as { sessions: SessionSummary[] }
+
+    // Assert
+    expect(moved).toMatchObject({ id, root: now, title: 'hello' })
+    expect(readFileSync(join(now, 'out.txt'), 'utf8')).toBe('hi\n')
+    expect(texts(events.seen)).toContain('first answer')
+    expect(listed.sessions).toMatchObject([{ id, root: now }])
+  })
+
+  it('should refuse a folder for a session where there is none', async () => {
+    // Arrange
+    const { url, root } = await serve([])
+    const { id } = await create(url)
+
+    // Act
+    const response = await fetch(`${url}/api/sessions/${id}/root`, {
+      method: 'POST',
+      body: JSON.stringify({ root: join(root, 'gone') }),
+    })
+
+    // Assert
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: `${join(root, 'gone')} is not a folder` })
   })
 
   it('should answer a bad request with a 4xx and its reason', async () => {

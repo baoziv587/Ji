@@ -36,31 +36,59 @@ func (a *App) View(c *ui.Context) {
 	if a.vibrant(c) {
 		c.Root().Background(ui.Transparent)
 	}
+	defer a.projectDialog(c)
+	// The settings' pages are listed in the sidebar, which they show
+	if a.Layout.SidebarHidden && !a.settingsOpen {
+		toasts(c, 0)
+		a.content(c)
+		return
+	}
 	toasts(c, a.Layout.Sidebar)
+	ui.Split(c, &a.Layout.Sidebar, func() { a.sidebar(c) }, func() { a.content(c) }).Fill()
+}
 
+// content is the right of the window: the session chosen, or the settings.
+func (a *App) content(c *ui.Context) {
 	p := components.PaletteOf(a.theme)
-	ui.Split(c, &a.Layout.Sidebar, func() { a.sidebar(c) }, func() {
-		s, view, ok := a.current()
-		// Of glass, a session's conversation and its inspector each lay
-		// their own color over the material, rather than over this one
-		cover := a.contentCover(c)
-		content := ui.Column(c).Fill()
-		if a.settingsOpen || !ok || cover >= 1 {
-			content.Background(p.Background.Alpha(cover))
+	s, view, ok := a.current()
+	// Of glass, a session's conversation and its inspector each lay
+	// their own color over the material, rather than over this one
+	cover := a.contentCover(c)
+	content := ui.Column(c).Fill()
+	if a.settingsOpen || !ok || cover >= 1 {
+		content.Background(p.Background.Alpha(cover))
+	}
+	content.Children(func() {
+		if a.settingsOpen {
+			a.settings(c)
+			return
 		}
-		content.Children(func() {
-			if a.settingsOpen {
-				a.settings(c)
-				return
-			}
-			if !ok {
-				ui.Box(c).Height(TitleBarHeight).Shrink(0).DragWindow()
-				a.noSession(c)
-				return
-			}
-			a.detail(c, s, view)
-		})
-	}).Fill()
+		if !ok {
+			ui.Row(c).
+				Height(TitleBarHeight).
+				Shrink(0).
+				Padding(0, 10, 0, a.titleInset(c)).
+				AlignItems(ui.Center).
+				DragWindow().
+				Children(func() {
+					if a.Layout.SidebarHidden {
+						a.sidebarToggle(c)
+					}
+				})
+			a.noSession(c)
+			return
+		}
+		a.detail(c, s, view)
+	})
+}
+
+// titleInset is where the content's title bar starts: clear of the window
+// controls while the sidebar is hidden.
+func (a *App) titleInset(c *ui.Context) float32 {
+	if a.Layout.SidebarHidden {
+		return max(c.TitleBar().Left+12, 14)
+	}
+	return 16
 }
 
 // look is the theme made from the settings and the system's, until either
@@ -207,21 +235,50 @@ func (a *App) conversation(c *ui.Context, s agent.Session, view *sessionView) ui
 			Padding(TitleBarHeight+24, 24, view.bottom+24).
 			ScrollbarInsets(TitleBarHeight, 0, view.bottom)
 		a.header(c, s, view)
+		// An empty session asks what to do, the input under the question in
+		// the middle of the room; once it has a message, the input sits at
+		// its foot
+		empty := view.t.State.ID != "" && len(view.t.Items) == 0 && view.t.Asking == nil &&
+			!s.Archived && !a.isMissing(s.Root)
 		bottom := ui.Column(c).
 			Absolute().
 			Bottom(0).Left(0).Right(0).
-			PassThrough().
-			Children(func() {
-				if view.t.Asking != nil && !s.Archived {
-					a.questions(c.Key("questions:"+s.ID), view)
-				}
-				a.composer(c.Key("composer:"+s.ID), s, view)
-			})
+			PassThrough()
+		if empty {
+			bottom.Top(TitleBarHeight).Justify(ui.Center).Padding(0, 0, 64)
+		}
+		bottom.Children(func() {
+			if empty {
+				a.welcome(c, s)
+			}
+			if view.t.Asking != nil && !s.Archived {
+				a.questions(c.Key("questions:"+s.ID), view)
+			}
+			a.composer(c.Key("composer:"+s.ID), s, view)
+		})
 		// Known only once laid out: the conversation makes room for it a
 		// frame later
-		if h := bottom.Bounds().H; h != view.bottom {
+		if h := bottom.Bounds().H; !empty && h != view.bottom {
 			view.bottom = h
 			c.AnimationFrame()
 		}
+	})
+}
+
+// welcome asks what to build in the session's folder, over the input; the
+// keys it takes are in the input's status line.
+func (a *App) welcome(c *ui.Context, s agent.Session) {
+	size := components.TextHero(c.Theme())
+	folder := a.folderTitle(s.Root)
+	ui.Column(c).Center().Padding(0, 24, 24).Children(func() {
+		ui.RichText(
+			c,
+			ui.Span{Text: "What should we build in ", Size: size, Weight: 400},
+			ui.Span{Text: folder, Size: size, Weight: 600},
+			ui.Span{Text: "?", Size: size, Weight: 400},
+		).
+			LetterSpacing(-0.5).
+			TextAlign(ui.Center).
+			Label("What should we build in " + folder + "?")
 	})
 }

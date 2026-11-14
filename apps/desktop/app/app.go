@@ -32,6 +32,17 @@ type App struct {
 	// Quit ends the app, as /exit does in the terminal. Nil leaves /exit to
 	// the service, which says there is nothing to quit.
 	Quit func()
+	// Pins are the sessions the person pinned over the folders, by ID;
+	// SavePins keeps them once changed, nil for this run only.
+	Pins     []string
+	SavePins func([]string)
+	// Projects group folders under a name, as the person set them;
+	// SaveProjects keeps them once changed, nil for this run only.
+	Projects     []Project
+	SaveProjects func([]Project) error
+	// OpenInEditor opens a folder in VS Code. Nil, with no VS Code, leaves
+	// the button out.
+	OpenInEditor func(root string) error
 
 	ctx      context.Context
 	list     agent.Sessions
@@ -41,13 +52,25 @@ type App struct {
 	selected string
 	views    map[string]*sessionView
 	grouped  *grouping
+	// What the sidebar's search holds, the sessions it matches, and
+	// whether the field is to take the focus in the next frame.
+	search      string
+	found       *found
+	focusSearch bool
+	// The branch each folder has checked out, "" outside a repository, and
+	// the folders found gone.
+	branches map[string]string
+	missing  map[string]bool
+	isDir    func(string) bool
+	// The Edit project dialog's draft, while it is open.
+	editing projectEdit
 	// The sessions followed, the one shown last first.
 	recent []string
 	Layout Layout
 	// Whether the inspector's edge is being dragged.
 	resizing bool
-	// Whether each folder's section of the sidebar is open, by folder; the
-	// archived section is closed until opened.
+	// Whether each folder's section of the sidebar is open, by folder, and
+	// the settled section, closed until opened.
 	opened       map[string]*bool
 	archivedOpen bool
 	// The folder `ji app` opened last, whose section the sidebar shows
@@ -106,8 +129,9 @@ func (l link) tooltip() string {
 // next: how wide the sidebar is, and the inspector beside the
 // conversation. The window's own frame MyGo keeps (StateKey).
 type Layout struct {
-	Sidebar   float32 `json:"sidebar"`
-	Inspector float32 `json:"inspector"`
+	Sidebar       float32 `json:"sidebar"`
+	SidebarHidden bool    `json:"sidebarHidden,omitempty"`
+	Inspector     float32 `json:"inspector"`
 }
 
 var DefaultLayout = Layout{Sidebar: 260, Inspector: 400}
@@ -141,6 +165,9 @@ func New(service agent.Agent, update func(func())) *App {
 		ctx:      context.Background(),
 		views:    map[string]*sessionView{},
 		opened:   map[string]*bool{},
+		branches: map[string]string{},
+		missing:  map[string]bool{},
+		isDir:    isDir,
 		Layout:   DefaultLayout,
 		Settings: DefaultSettings,
 	}
@@ -166,6 +193,7 @@ func (a *App) Follow(ctx context.Context) {
 func (a *App) setList(s agent.Sessions) {
 	a.list, a.listed = s, true
 	a.regroup()
+	a.readFolders(a.roots()...)
 	if a.selected == "" {
 		for _, session := range s.Sessions {
 			if !session.Archived {
@@ -189,6 +217,9 @@ func (a *App) show(id string) {
 	}
 	a.selected = id
 	a.open(id)
+	if s, ok := a.session(id); ok {
+		a.readFolders(a.foldersOf(s.Root)...)
+	}
 	if view := a.views[id]; view != nil {
 		view.shown.Store(true)
 		a.drain(view)
