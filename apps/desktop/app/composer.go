@@ -75,6 +75,9 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView, empty 
 					placeholder = "Drop the files to attach them"
 				case st.Replying:
 					placeholder = "Steer the reply: it reads this after the step in progress"
+				case s.ID == draftID:
+					// Its commands are the service's, which has no session yet
+					placeholder = "Ask anything"
 				}
 				// The menu's keys, Enter and Shift+Tab, before the text area takes
 				// them; Shift+Enter is left to it
@@ -205,32 +208,11 @@ func (a *App) folderGone(c *ui.Context, s agent.Session) {
 }
 
 // modelControls is the model and its thinking level, chosen for the
-// replies to come, as one quiet phrase before the buttons.
+// replies to come, as one button before the others.
 func (a *App) modelControls(c *ui.Context, s agent.Session, view *sessionView) {
-	p := components.PaletteOf(c.Theme())
-	st := view.t.State
-	ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(1).MinWidth(0).Children(func() {
-		if st.Model != "" {
-			a.modelSelect(c.Key("model"), s, view)
-		}
-		if len(st.ThinkingLevels) > 0 {
-			level := st.Thinking
-			if components.InlineSelect(c, &level, st.ThinkingLevels, s.Archived).
-				Label("Thinking").
-				Tooltip("Thinking level").
-				Shrink(0).
-				Changed() {
-				a.think(view, level)
-			}
-		}
-		if st.Fast {
-			ui.Text(c, "fast").
-				TextColor(p.MutedForeground).
-				Padding(0, 4).
-				Shrink(0).
-				Tooltip("OpenAI's priority tier, at about 2x the usage: /fast off")
-		}
-	})
+	if view.t.State.Model != "" || s.ID == draftID {
+		a.modelSelect(c.Key("model"), s, view)
+	}
 }
 
 // composerMeta is where the session works, under the input: its folder,

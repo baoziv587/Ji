@@ -48,6 +48,15 @@ type attachment struct {
 	thumb *ui.Bitmap
 }
 
+// pathsOf is the files' paths, as a message sends them.
+func pathsOf(files []attachment) []string {
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.path
+	}
+	return paths
+}
+
 // attach adds files to the next message, each once.
 func (a *App) attach(view *sessionView, paths ...string) {
 	for _, path := range paths {

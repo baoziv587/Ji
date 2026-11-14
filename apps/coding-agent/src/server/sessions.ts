@@ -2,14 +2,16 @@
 // back from its log, the first time a client asks for it; until then it is only its line in the list.
 //
 //   list      every session, with what each is doing: what a sidebar shows
-//   create    a new session working in a folder, on a model of its own or the default, with the environment of the
-//             terminal that made it
+//   create    a new session working in a folder, on a model and thinking level of its own or the default's, with the
+//             environment of the terminal that made it
+//   startsOn  the model a new session starts on and the thinking levels it takes, before there is one
 //   session   one session's service, opened if need be
 //   archive   out of the list's way, or back in it: nothing is deleted
 //   delete    gone for good, its files with it
 //   setRoot   the folder it works in, as when the folder was renamed or moved
 //   setMode   what waits for a yes in every session, those opened later included
 
+import type { ThinkingLevel } from '@ji.dev/llm'
 import type { Mode } from '../features/permissions.ts'
 import type { ServiceState } from './events.ts'
 import type { AgentService } from './service.ts'
@@ -31,6 +33,24 @@ export type Environment = Readonly<Record<string, string | undefined>>
 /** Opens a session's service: its tools working in its root, with `env` when given, its log written to the store. */
 export interface Opener {
   open: (meta: SessionMeta, mode: Mode, env?: Environment) => AgentService
+  /** What a session opened on `model` at `thinking` starts on; the default's for what is not given. */
+  startsOn: (model?: string, thinking?: string) => ModelChoice
+}
+
+/** A model, 'provider/id', at a thinking level, and the levels it takes. */
+export interface ModelChoice {
+  model: string
+  thinking: ThinkingLevel
+  thinkingLevels: ThinkingLevel[]
+}
+
+export interface CreateOptions {
+  /** 'provider/id', or a bare id one provider offers: the default's without it. */
+  model?: string
+  /** One of the model's levels: the default's, or the nearest the model takes, without it. */
+  thinking?: string
+  /** What its commands run with: this process's without it. */
+  env?: Environment
 }
 
 export interface SessionHubOptions {
@@ -73,23 +93,28 @@ export class SessionHub {
   }
 
   /**
-   * `model` is 'provider/id', or a bare id one provider offers; without it, the session opens on the opener's default.
-   * `env` is what its commands run with: this process's without it. Throws when `folder` is not a folder, and
-   * UnknownModelError when the catalog has no such model.
+   * Throws when `folder` is not a folder, UnknownModelError when the catalog has no such model, and
+   * UnsupportedThinkingError for a level the model does not take.
    */
-  create(folder: string, model?: string, env?: Environment): SessionSummary {
+  create(folder: string, { model, thinking, env }: CreateOptions = {}): SessionSummary {
     const root = resolve(folder)
     if (!isFolder(root)) {
       throw new Error(`${root} is not a folder`)
     }
+    const level = thinking === undefined ? undefined : this.startsOn(model, thinking).thinking
 
-    const meta = this.store.create(root, model === undefined ? undefined : specOf(model))
+    const meta = this.store.create(root, model === undefined ? undefined : specOf(model), level)
     this.metas.set(meta.id, meta)
     if (env !== undefined) {
       this.envs.set(meta.id, env)
     }
     this.changed()
     return this.summaryOf(meta)
+  }
+
+  /** What a session made with `model` and `thinking` starts on; throws as create does for them. */
+  startsOn(model?: string, thinking?: string): ModelChoice {
+    return this.opener.startsOn(model, thinking)
   }
 
   /** The session's service, opened if need be. Throws SessionNotFoundError for an id no session has. */
@@ -106,8 +131,11 @@ export class SessionHub {
       if (e.type === 'user') {
         this.used(id, topicOf(e.text, e.files))
       }
-      if (e.type === 'state' && e.state.model !== this.metaOf(id).model) {
-        this.update(this.metaOf(id), { model: e.state.model })
+      if (e.type === 'state') {
+        const meta = this.metaOf(id)
+        if (e.state.model !== meta.model || e.state.thinking !== meta.thinking) {
+          this.update(meta, { model: e.state.model, thinking: e.state.thinking })
+        }
       }
       if (e.type === 'state' || e.type === 'user' || e.type === 'reply_end') {
         this.changed()

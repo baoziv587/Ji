@@ -1,11 +1,12 @@
 // The sessions on disk, two files each in one folder (~/.ji/sessions by default):
 //
 //   <id>.json    what the list shows: the folder it works in, its title, when it was made and last used, archived,
-//                and the model it runs on
+//                and the model it runs on, at its thinking level
 //   <id>.jsonl   its log, one run event a line, as @ji.dev/plugin-jsonl writes it: what it is read back from
 //
 // An archived session keeps both files; only deleting it removes them.
 
+import type { ThinkingLevel } from '@ji.dev/llm'
 import type { LogRecord } from './history.ts'
 import { Buffer } from 'node:buffer'
 import { randomUUID } from 'node:crypto'
@@ -36,6 +37,8 @@ export interface SessionMeta {
   archived: boolean
   /** 'provider/id' it runs on, switched to or the default when it opened: it opens on it again. */
   model?: string
+  /** Its thinking level, set or the default when it opened: it opens on it again, or the nearest its model takes. */
+  thinking?: ThinkingLevel
 }
 
 export class SessionStore {
@@ -61,9 +64,18 @@ export class SessionStore {
       })
   }
 
-  create(root: string, model?: string): SessionMeta {
+  create(root: string, model?: string, thinking?: ThinkingLevel): SessionMeta {
     const now = Date.now()
-    const meta: SessionMeta = { id: randomUUID(), root, title: '', created: now, updated: now, archived: false, model }
+    const meta: SessionMeta = {
+      id: randomUUID(),
+      root,
+      title: '',
+      created: now,
+      updated: now,
+      archived: false,
+      model,
+      thinking,
+    }
     this.save(meta)
     return meta
   }

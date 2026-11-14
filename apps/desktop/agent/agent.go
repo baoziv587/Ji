@@ -164,6 +164,25 @@ type Model struct {
 	Name          string `json:"name"`
 	ContextWindow int    `json:"contextWindow"`
 	Reasoning     bool   `json:"reasoning"`
+	// The thinking levels it takes, "off" first.
+	ThinkingLevels []string `json:"thinkingLevels"`
+}
+
+// NewSession is what a session is started with: the service's default
+// folder, model and thinking level for those left empty.
+type NewSession struct {
+	Root string `json:"root,omitempty"`
+	// "provider/id".
+	Model    string `json:"model,omitempty"`
+	Thinking string `json:"thinking,omitempty"`
+}
+
+// ModelChoice is a model, "provider/id", at the thinking level a session
+// starts on it at, and the levels it takes.
+type ModelChoice struct {
+	Model          string   `json:"model"`
+	Thinking       string   `json:"thinking"`
+	ThinkingLevels []string `json:"thinkingLevels"`
 }
 
 // Option is one answer a question offers.
@@ -242,9 +261,8 @@ type Agent interface {
 	FollowSessions(ctx context.Context, fn func(Sessions), status func(error))
 	// Sessions is the list as it is now.
 	Sessions(ctx context.Context) (Sessions, error)
-	// CreateSession starts a session in root, on model, "provider/id"; the
-	// service's default folder and model for those left empty.
-	CreateSession(ctx context.Context, root, model string) (Session, error)
+	// CreateSession starts a session as start says.
+	CreateSession(ctx context.Context, start NewSession) (Session, error)
 	Archive(ctx context.Context, id string, archived bool) (Session, error)
 	// Delete removes a session and its history for good; refused while it
 	// replies.
@@ -277,6 +295,9 @@ type Agent interface {
 	Providers(ctx context.Context) ([]Provider, error)
 	// Models is a provider's chat models.
 	Models(ctx context.Context, provider string) ([]Model, error)
+	// ModelChoice is what a session started on model, "provider/id", runs
+	// on: the default's when model is empty.
+	ModelChoice(ctx context.Context, model string) (ModelChoice, error)
 	// StoreKey keeps a provider's key in ~/.ji, as /login does; it is
 	// used in place of the environment's. Each change returns the
 	// providers as they are after it.

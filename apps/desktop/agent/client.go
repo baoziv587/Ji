@@ -88,15 +88,18 @@ func (c *Client) withRoot(s Sessions) Sessions {
 	return s
 }
 
-func (c *Client) CreateSession(ctx context.Context, root, model string) (Session, error) {
+func (c *Client) CreateSession(ctx context.Context, start NewSession) (Session, error) {
 	var s Session
-	return s, c.do(
-		ctx,
-		http.MethodPost,
-		"/api/sessions",
-		map[string]string{"root": root, "model": model},
-		&s,
-	)
+	return s, c.do(ctx, http.MethodPost, "/api/sessions", start, &s)
+}
+
+func (c *Client) ModelChoice(ctx context.Context, model string) (ModelChoice, error) {
+	name := "default"
+	if model != "" {
+		name = url.PathEscape(model)
+	}
+	var choice ModelChoice
+	return choice, c.do(ctx, http.MethodGet, "/api/models/"+name, nil, &choice)
 }
 
 func (c *Client) Archive(ctx context.Context, id string, archived bool) (Session, error) {

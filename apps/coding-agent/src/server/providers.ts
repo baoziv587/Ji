@@ -2,7 +2,7 @@
 // the person added, whether it can be used now and where its key comes from, and whether /login signs in to it. And
 // what a client changes of them: a key stored or forgotten, an endpoint added, changed or removed.
 
-import type { Endpoint, EndpointModel } from '@ji.dev/llm'
+import type { Endpoint, EndpointModel, ThinkingLevel } from '@ji.dev/llm'
 import { fetchEndpointModels, listModels, listProviders, models } from '@ji.dev/llm'
 import { authMethodsOf, listEndpoints, login, logout, removeEndpoint, saveEndpoint } from '@ji.dev/plugin-auth'
 
@@ -33,6 +33,8 @@ export interface ModelView {
   /** Tokens. */
   contextWindow: number
   reasoning: boolean
+  /** The thinking levels it takes, 'off' first. */
+  thinkingLevels: ThinkingLevel[]
 }
 
 /** What a client sends to add an endpoint, or to change one when it names its id. */
@@ -71,7 +73,13 @@ export async function providerViews(dir?: string): Promise<ProviderView[]> {
 
 /** The chat models of a provider; none for an unknown one. */
 export function modelViews(provider: string): ModelView[] {
-  return listModels(provider).map(({ id, name, contextWindow, reasoning }) => ({ id, name, contextWindow, reasoning }))
+  return listModels(provider).map(({ id, name, contextWindow, reasoning, thinkingLevels }) => ({
+    id,
+    name,
+    contextWindow,
+    reasoning,
+    thinkingLevels: [...thinkingLevels],
+  }))
 }
 
 /** Stores the key as /login would, through the provider's own flow, which asks for nothing but the key. */

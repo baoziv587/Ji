@@ -855,6 +855,7 @@ func (a *App) defaultModel(c *ui.Context) {
 				model,
 				false,
 				func(spec string) { a.Settings.Model = spec },
+				nil,
 			)
 		})
 	})

@@ -67,6 +67,10 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 				a.panelToggleWhenHidden(c, view)
 				return
 			}
+			if s.ID == draftID {
+				a.panelToggleWhenHidden(c, view)
+				return
+			}
 			busy := st.Replying || len(st.Asking) > 0
 			archive := components.Button(c, "", components.ButtonStyle{
 				Variant:  components.Ghost,

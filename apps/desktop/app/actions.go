@@ -11,13 +11,19 @@ import (
 	"desktop/agent"
 )
 
-// NewSession starts a session in root, the chosen session's folder when
-// empty, on the default model of the settings, and shows it.
+// NewSession shows a new session in root, the chosen session's folder when
+// empty, on the default model of the settings at the service's thinking
+// level: a draft of the window's, which the service makes a session of as
+// its first message is sent. One draft at a time, what is typed and picked
+// in it kept.
 func (a *App) NewSession(root string) {
 	if root == "" {
 		if s, ok := a.session(a.selected); ok {
 			root = s.Root
 		}
+	}
+	if root == "" {
+		root = a.list.DefaultRoot
 	}
 	// A folder gone gives way to its project's where it is now
 	if a.isMissing(root) {
@@ -25,19 +31,73 @@ func (a *App) NewSession(root string) {
 			root = live
 		}
 	}
-	model := a.Settings.Model
-	a.call(func(ctx context.Context) error {
-		s, err := a.agent.CreateSession(ctx, root, model)
-		if err == nil {
+	view := a.views[draftID]
+	if view == nil {
+		view = &sessionView{id: draftID, stop: func() {}}
+		view.t.State = agent.State{ID: draftID, Mode: a.Settings.Approvals}
+		a.views[draftID] = view
+		a.chooseModel(view, a.Settings.Model)
+	}
+	view.t.State.Root = root
+	view.refocus = true
+	a.Select(draftID)
+}
+
+// start makes the draft a session of the service's, in its folder, on the
+// model, at the thinking level and in the mode picked for it, with the
+// message or command sent first; then shows it in the draft's place, its
+// panel with it.
+func (a *App) start(view *sessionView, text string) {
+	if view.starting {
+		return
+	}
+	view.starting = true
+	st, approvals := view.t.State, a.Settings.Approvals
+	attached := view.files
+	view.draft, view.files = "", nil
+	a.failure = ""
+	a.request(func(ctx context.Context) {
+		s, err := a.agent.CreateSession(ctx, agent.NewSession{
+			Root:     st.Root,
+			Model:    st.Model,
+			Thinking: st.Thinking,
+		})
+		if err != nil {
 			a.update(func() {
-				if _, listed := a.session(s.ID); !listed {
-					a.list.Sessions = append([]agent.Session{s}, a.list.Sessions...)
-					a.regroup()
-				}
-				a.Select(s.ID)
+				view.starting = false
+				view.restoreMessage(text, attached)
+				a.failure = err.Error()
 			})
+			return
 		}
-		return err
+		if st.Mode != "" && st.Mode != approvals {
+			_, err = a.agent.SetMode(ctx, s.ID, st.Mode)
+		}
+		if err == nil {
+			if strings.HasPrefix(text, "/") {
+				_, err = a.agent.Command(ctx, s.ID, text)
+			} else {
+				_, err = a.agent.Send(ctx, s.ID, text, pathsOf(attached))
+			}
+		}
+		a.update(func() {
+			if _, listed := a.session(s.ID); !listed {
+				a.list.Sessions = append([]agent.Session{s}, a.list.Sessions...)
+				a.regroup()
+			}
+			delete(a.views, draftID)
+			if a.selected == draftID {
+				a.Select(s.ID)
+			} else {
+				a.open(s.ID)
+			}
+			started := a.views[s.ID]
+			started.panel = view.panel
+			if err != nil {
+				started.restoreMessage(text, attached)
+				a.failure = err.Error()
+			}
+		})
 	})
 }
 
@@ -174,23 +234,18 @@ func (a *App) send(view *sessionView) {
 		a.command(view, text)
 		return
 	}
+	if view.id == draftID {
+		a.start(view, text)
+		return
+	}
 
 	view.draft = ""
 	attached := view.files
 	view.files = nil
-	paths := make([]string, len(attached))
-	for i, f := range attached {
-		paths[i] = f.path
-	}
 	a.call(func(ctx context.Context) error {
-		_, err := a.agent.Send(ctx, view.id, text, paths)
+		_, err := a.agent.Send(ctx, view.id, text, pathsOf(attached))
 		if err != nil {
-			a.update(func() {
-				view.restore(text)
-				if len(view.files) == 0 {
-					view.files = attached
-				}
-			})
+			a.update(func() { view.restoreMessage(text, attached) })
 		}
 		return err
 	})
@@ -200,8 +255,12 @@ func (a *App) send(view *sessionView) {
 // quits the app here.
 func (a *App) command(view *sessionView, line string) {
 	view.draft = ""
-	if strings.Fields(line)[0] == "/exit" && a.Quit != nil {
+	if a.quits(line) {
 		a.Quit()
+		return
+	}
+	if view.id == draftID {
+		a.start(view, line)
 		return
 	}
 
@@ -212,6 +271,12 @@ func (a *App) command(view *sessionView, line string) {
 		}
 		return err
 	})
+}
+
+// quits is whether the command line is /exit, which quits the app here.
+func (a *App) quits(line string) bool {
+	fields := strings.Fields(line)
+	return len(fields) > 0 && fields[0] == "/exit" && a.Quit != nil
 }
 
 func (a *App) stop(id string) {
@@ -231,6 +296,10 @@ func (a *App) switchMode(view *sessionView) {
 // setMode sets the session's mode: ask, auto or yolo, which the window
 // calls Full access.
 func (a *App) setMode(view *sessionView, mode string) {
+	if view.id == draftID {
+		view.t.State.Mode = mode
+		return
+	}
 	a.callState(
 		view,
 		func(ctx context.Context) (agent.State, error) {
@@ -240,6 +309,10 @@ func (a *App) setMode(view *sessionView, mode string) {
 }
 
 func (a *App) think(view *sessionView, level string) {
+	if view.id == draftID {
+		view.t.State.Thinking = level
+		return
+	}
 	a.callState(
 		view,
 		func(ctx context.Context) (agent.State, error) {

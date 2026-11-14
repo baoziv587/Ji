@@ -6,7 +6,7 @@ import type { FakeReply } from '@ji.dev/testing'
 import type { AddressInfo } from 'node:net'
 import type { ServiceEvent, ServiceState } from '../src/server/events.ts'
 import type { ModelView, ProviderView } from '../src/server/providers.ts'
-import type { SessionSummary } from '../src/server/sessions.ts'
+import type { ModelChoice, SessionSummary } from '../src/server/sessions.ts'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -477,7 +477,7 @@ describe('models over HTTP', () => {
       endpoint: { baseUrl: local, models: [{ id: 'qwen2.5-coder' }] },
     })
     expect(listed.models).toEqual([
-      { id: 'qwen2.5-coder', name: 'qwen2.5-coder', contextWindow: 256_000, reasoning: false },
+      { id: 'qwen2.5-coder', name: 'qwen2.5-coder', contextWindow: 256_000, reasoning: false, thinkingLevels: ['off'] },
     ])
     expect(again.status).toBe(400)
     expect(changed.providers.find(p => p.id === 'local-llm')).toMatchObject({
@@ -557,6 +557,51 @@ describe('models over HTTP', () => {
     expect(state.model).toBe(spec)
     expect(unknown.status).toBe(400)
     expect(((await unknown.json()) as { error: string }).error).toContain('Unknown provider "nope"')
+  })
+
+  it('should tell what a new session starts on, and the thinking levels of each model', async () => {
+    // Arrange
+    const { url } = await serve([])
+    const spec = 'deepseek/deepseek-v4-pro'
+
+    // Act
+    const byDefault = (await (await fetch(`${url}/api/models/default`)).json()) as ModelChoice
+    const chosen = (await (await fetch(`${url}/api/models/${encodeURIComponent(spec)}`)).json()) as ModelChoice
+    const listed = (await (await fetch(`${url}/api/providers/deepseek/models`)).json()) as { models: ModelView[] }
+    const unknown = await fetch(`${url}/api/models/${encodeURIComponent('nope/nothing')}`)
+
+    // Assert
+    expect(byDefault).toMatchObject({ thinking: 'off', thinkingLevels: expect.arrayContaining(['off']) })
+    expect(chosen.model).toBe(spec)
+    expect(chosen.thinkingLevels.length).toBeGreaterThan(1)
+    expect(listed.models.find(m => m.id === 'deepseek-v4-pro')?.thinkingLevels).toEqual(chosen.thinkingLevels)
+    expect(unknown.status).toBe(400)
+  })
+
+  it('should start a session at the thinking level it is created with, again once reopened', async () => {
+    // Arrange
+    const sessions = scratch()
+    const { url } = await serve([], sessions)
+    const spec = 'deepseek/deepseek-v4-pro'
+    const { thinkingLevels } = (await (
+      await fetch(`${url}/api/models/${encodeURIComponent(spec)}`)
+    ).json()) as ModelChoice
+    const level = thinkingLevels.at(-1)
+
+    // Act
+    const { id } = (await post(url, '/api/sessions', { model: spec, thinking: level })) as SessionSummary
+    const state = (await (await fetch(`${url}/api/sessions/${id}/state`)).json()) as ServiceState
+    const after = await serve([], sessions)
+    const reopened = (await (await fetch(`${after.url}/api/sessions/${id}/state`)).json()) as ServiceState
+    const refused = await fetch(`${url}/api/sessions`, {
+      method: 'POST',
+      body: JSON.stringify({ model: spec, thinking: 'loud' }),
+    })
+
+    // Assert
+    expect(state).toMatchObject({ model: spec, thinking: level })
+    expect(reopened.thinking).toBe(level)
+    expect(refused.status).toBe(400)
   })
 
   it('should refuse a model the catalog lacks, and a switch while the session replies', async () => {

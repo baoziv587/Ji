@@ -43,8 +43,10 @@ type fakeAgent struct {
 	everyMode []string
 	// Where each session followed takes its events after those played back
 	live map[string]func(agent.Event)
-	// The models each session was switched to, in turn
-	models map[string][]string
+	// The models each session was switched to, in turn, and the thinking
+	// levels, as "id level"
+	models  map[string][]string
+	thought []string
 	// The providers as changed, testProviders until then; the keys stored,
 	// the endpoints kept and removed, and what the probe finds.
 	providers []agent.Provider
@@ -60,10 +62,41 @@ func (f *fakeAgent) FollowSessions(context.Context, func(agent.Sessions), func(e
 func (f *fakeAgent) Sessions(context.Context) (agent.Sessions, error) {
 	return agent.Sessions{Sessions: f.sessions}, nil
 }
-func (f *fakeAgent) CreateSession(_ context.Context, root, model string) (agent.Session, error) {
-	f.created = append(f.created, root)
-	f.createdOn = append(f.createdOn, model)
-	return agent.Session{ID: "new", Root: root, Updated: time.Now().UnixMilli()}, nil
+
+func (f *fakeAgent) CreateSession(
+	_ context.Context,
+	start agent.NewSession,
+) (agent.Session, error) {
+	f.created = append(f.created, start.Root)
+	f.createdOn = append(f.createdOn, start.Model+" "+start.Thinking)
+	return agent.Session{ID: "new", Root: start.Root, Updated: time.Now().UnixMilli()}, nil
+}
+
+// ModelChoice is as the service says of testModels: one that reasons
+// takes off, low and high, and starts at high; deepseek-flash is the
+// service's own.
+func (f *fakeAgent) ModelChoice(_ context.Context, model string) (agent.ModelChoice, error) {
+	if model == "" {
+		model = "deepseek/deepseek-flash"
+	}
+	provider, id, _ := strings.Cut(model, "/")
+	for _, m := range testModels[provider] {
+		if m.ID == id && m.Reasoning {
+			return agent.ModelChoice{
+				Model:          model,
+				Thinking:       "high",
+				ThinkingLevels: []string{"off", "low", "high"},
+			}, nil
+		}
+		if m.ID == id {
+			return agent.ModelChoice{
+				Model:          model,
+				Thinking:       "off",
+				ThinkingLevels: []string{"off"},
+			}, nil
+		}
+	}
+	return agent.ModelChoice{}, fmt.Errorf("unknown model %s", model)
 }
 func (f *fakeAgent) SetRoot(_ context.Context, id, root string) (agent.Session, error) {
 	f.roots = append(f.roots, id+" > "+root)
@@ -117,7 +150,8 @@ func (f *fakeAgent) SetModes(_ context.Context, mode string) error {
 	f.everyMode = append(f.everyMode, mode)
 	return nil
 }
-func (f *fakeAgent) Think(_ context.Context, id, _ string) (agent.State, error) {
+func (f *fakeAgent) Think(_ context.Context, id, level string) (agent.State, error) {
+	f.thought = append(f.thought, id+" "+level)
 	return agent.State{ID: id}, nil
 }
 func (f *fakeAgent) UseModel(_ context.Context, id, model string) (agent.State, error) {
@@ -125,7 +159,14 @@ func (f *fakeAgent) UseModel(_ context.Context, id, model string) (agent.State, 
 		f.models = map[string][]string{}
 	}
 	f.models[id] = append(f.models[id], model)
-	return agent.State{ID: id, Model: model, Mode: "ask"}, nil
+	choice, _ := f.ModelChoice(context.Background(), model)
+	return agent.State{
+		ID:             id,
+		Model:          model,
+		Mode:           "ask",
+		Thinking:       choice.Thinking,
+		ThinkingLevels: choice.ThinkingLevels,
+	}, nil
 }
 func (f *fakeAgent) Providers(context.Context) ([]agent.Provider, error) {
 	return f.listed(), nil
@@ -696,22 +737,77 @@ func TestOpenFolderStartsASessionInAnEmptyOne(t *testing.T) {
 	f.sessions = a.list.Sessions
 
 	a.OpenFolder("/code/new")
+	sendDraft(a, "hello")
 
 	if !reflect.DeepEqual(f.created, []string{"/code/new"}) || a.selected != "new" {
 		t.Errorf("created %v, selected %q", f.created, a.selected)
 	}
 }
 
-func TestNewSessionStartsInTheChosenFolder(t *testing.T) {
+// sendDraft sends text as the new session's first message.
+func sendDraft(a *App, text string) {
+	view := a.views[draftID]
+	view.draft = text
+	a.send(view)
+}
+
+// New Session shows a draft in the chosen session's folder, which the
+// service makes a session of only as its first message is sent.
+func TestNewSessionStartsInTheChosenFolderOnItsFirstMessage(t *testing.T) {
 	a, f := testApp()
+	a.Settings.Approvals = "ask"
 	tt := ui.NewTester(a.View, 1100, 700)
 
 	if err := tt.Click("New Session"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
+	if len(f.created) != 0 || a.selected != draftID {
+		t.Fatalf("created %v, selected %q: nothing is made before a message", f.created, a.selected)
+	}
+	if !tt.HasText("What should we build in web?") {
+		t.Fatalf("texts %q", tt.Texts())
+	}
+	if err := tt.Click("Mode"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("Auto"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.views[draftID].t.State.Mode != "auto" {
+		t.Fatalf("mode %q", a.views[draftID].t.State.Mode)
+	}
+	if err := tt.Click("Message"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("add a footer")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
 
-	if !reflect.DeepEqual(f.created, []string{"/code/web"}) || a.selected != "new" {
-		t.Errorf("created %v, selected %q", f.created, a.selected)
+	if !reflect.DeepEqual(f.created, []string{"/code/web"}) || a.selected != "new" ||
+		!reflect.DeepEqual(f.sent["new"], []string{"add a footer"}) || f.modes != 1 {
+		t.Errorf(
+			"created %v, selected %q, sent %v, modes set %d",
+			f.created,
+			a.selected,
+			f.sent["new"],
+			f.modes,
+		)
+	}
+	if a.views[draftID] != nil {
+		t.Error("the draft stays once its session is made")
+	}
+
+	// Another draft, left for a session and taken up again, keeps what is typed
+	a.NewSession("/code/api")
+	a.views[draftID].draft = "half a thought"
+	a.Select("a")
+	a.NewSession("")
+	if view := a.views[draftID]; view.draft != "half a thought" ||
+		view.t.State.Root != "/code/web" {
+		t.Errorf("draft %q in %q", view.draft, view.t.State.Root)
 	}
 }
 
@@ -733,6 +829,7 @@ func TestFirstRunOffersToStart(t *testing.T) {
 	if err := tt.Click("New Session in web"); err != nil {
 		t.Fatal(err)
 	}
+	sendDraft(a, "hello")
 	// Back to none, as before the first
 	a.list.Sessions, a.selected = nil, ""
 	a.regroup()
@@ -740,6 +837,7 @@ func TestFirstRunOffersToStart(t *testing.T) {
 	if err := tt.Click("Choose Folder…"); err != nil {
 		t.Fatal(err)
 	}
+	sendDraft(a, "hello")
 
 	if !reflect.DeepEqual(f.created, []string{"/code/web", "/code/elsewhere"}) {
 		t.Errorf("created %v", f.created)
@@ -976,6 +1074,13 @@ func TestSnapshot(t *testing.T) {
 	a.Settings.Theme = os.Getenv("THEME")
 	a.Settings.Approvals = os.Getenv("APPROVALS")
 	a.Settings.Model = os.Getenv("DEFAULT_MODEL")
+	if os.Getenv("DRAFT") == "1" {
+		a.NewSession("")
+	}
+	if os.Getenv("PICKER") == "1" {
+		v := a.views[a.selected]
+		a.toggleModels(&v.models, v.t.State.Model)
+	}
 	if v, err := strconv.ParseFloat(os.Getenv("TRANSPARENCY"), 64); err == nil {
 		a.Settings.Transparency = v
 	}

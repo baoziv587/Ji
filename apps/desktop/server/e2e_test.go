@@ -36,7 +36,7 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := agent.NewClient(server.URL)
-	session, err := client.CreateSession(ctx, "", "")
+	session, err := client.CreateSession(ctx, agent.NewSession{})
 	if err != nil {
 		t.Fatal(err)
 	}

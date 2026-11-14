@@ -2,15 +2,15 @@
 // own permissions, the terminal's commands, /login and the skills' too, talking to the client, and the jsonl plugin writing every run event
 // to the session's log, which is what it is read back from next time.
 
-import type { Api, Model, ThinkingLevel } from '@ji.dev/llm'
+import type { Api, Model, ModelInfo, ThinkingLevel } from '@ji.dev/llm'
 import type { Plugins, StartOptions } from '../agent/agent.ts'
 import type { Feature } from '../features/feature.ts'
 import type { Mode } from '../features/permissions.ts'
 import type { CommandClient } from './service.ts'
-import type { Environment, Opener } from './sessions.ts'
+import type { Environment, ModelChoice, Opener } from './sessions.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
 import process from 'node:process'
-import { findModel, nearestThinking } from '@ji.dev/llm'
+import { findModel, modelInfo, nearestThinking, UnsupportedThinkingError } from '@ji.dev/llm'
 import { localWorkspace } from '@ji.dev/plugin-files'
 import { jsonl } from '@ji.dev/plugin-jsonl'
 import { createLocalExecutor } from '@ji.dev/plugin-shell'
@@ -65,21 +65,39 @@ export class SessionOpener implements Opener {
   }
 
   /**
-   * The model the session ran on last, at the default's thinking or the nearest it takes; the default when it has none,
+   * Throws UnknownModelError for a model the catalog does not have, and UnsupportedThinkingError for a level the model
+   * does not take.
+   */
+  startsOn(spec?: string, level?: string): ModelChoice {
+    const model = spec === undefined ? this.defaultModel() : findModel(spec)
+    const thinking = level === undefined ? nearestThinking(model, this.options.thinking) : level
+    const found = model.thinkingLevels.find(l => l === thinking)
+    if (found === undefined) {
+      throw new UnsupportedThinkingError(model, thinking)
+    }
+    return { model: `${model.provider}/${model.id}`, thinking: found, thinkingLevels: [...model.thinkingLevels] }
+  }
+
+  private defaultModel(): ModelInfo {
+    const { model } = this.options
+    return typeof model === 'string' ? findModel(model) : modelInfo(model)
+  }
+
+  /**
+   * The model the session ran on last, at its thinking or the nearest the model takes; the default when it has none,
    * or one the catalog no longer has.
    */
-  private modelOf({ model: spec }: SessionMeta): Pick<StartOptions, 'model' | 'thinking'> {
-    const { model, thinking } = this.options
-    if (spec === undefined) {
-      return { model, thinking }
+  private modelOf({ model: spec, thinking: level }: SessionMeta): Pick<StartOptions, 'model' | 'thinking'> {
+    const thinking = level ?? this.options.thinking
+    if (spec !== undefined) {
+      try {
+        const found = findModel(spec)
+        return { model: found, thinking: nearestThinking(found, thinking) }
+      } catch {
+        // Gone from the catalog: the default's
+      }
     }
-
-    try {
-      const found = findModel(spec)
-      return { model: found, thinking: nearestThinking(found, thinking) }
-    } catch {
-      return { model, thinking }
-    }
+    return { model: this.options.model, thinking: nearestThinking(this.defaultModel(), thinking) }
   }
 
   /** As in the terminal, and the log written to the store. */

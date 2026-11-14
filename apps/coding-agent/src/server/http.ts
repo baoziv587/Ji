@@ -10,7 +10,12 @@
 //                                                   yolo
 //   GET  /api/providers                             {providers}: every provider of the catalog, the detected ones
 //                                                   (a key in the environment, or a login) marked as such
-//   GET  /api/providers/:id/models                  {models}: the provider's chat models
+//   GET  /api/providers/:id/models                  {models}: the provider's chat models, with the thinking levels
+//                                                   each takes
+//   GET  /api/models/default                        {model, thinking, thinkingLevels}: what a new session starts on
+//                                                   when it names none, and the levels that model takes
+//   GET  /api/models/:model                         the same for the model, 'provider/id' (encoded), at the level the
+//                                                   default's is nearest
 //   PUT  /api/providers/:id/key       {key}         stores the key in ~/.ji, as /login does: {providers}
 //   DELETE /api/providers/:id/key                   forgets the stored key or login, as /logout does: {providers}
 //
@@ -21,9 +26,11 @@
 //                                                   or else the stored key of endpoint id
 //
 //   GET  /api/sessions                              {sessions, defaultRoot}
-//   POST /api/sessions                {root?, model?, env?}  a new session, working in root (default: defaultRoot),
-//                                                   on model, 'provider/id' (default: the service's --model), its
-//                                                   commands run with env, {name: value} (default: the service's)
+//   POST /api/sessions                {root?, model?, thinking?, env?}  a new session, working in root (default:
+//                                                   defaultRoot), on model, 'provider/id' (default: the service's
+//                                                   --model), at one of its thinking levels (default: the service's
+//                                                   --thinking, or the nearest the model takes), its commands run
+//                                                   with env, {name: value} (default: the service's)
 //   POST /api/sessions/:id/archive    {archived}    out of the list's way, or back
 //   DELETE /api/sessions/:id                        removes it and its log from the disk; not while it replies
 //   POST /api/sessions/:id/root       {root}        the folder it works in from now on, its history kept: opened
@@ -142,6 +149,10 @@ async function route(
     hub.setMode(mode)
     return sendJson(res, 200, { mode })
   }
+  if (collection === 'models' && method === 'GET' && id !== undefined && action === undefined) {
+    const model = id === 'default' ? undefined : decodeURIComponent(id)
+    return sendJson(res, 200, hub.startsOn(model))
+  }
   if (collection === 'providers') {
     return routeProviders({ method, id, action, noRoute }, auth, req, res)
   }
@@ -157,7 +168,15 @@ async function route(
       return sendJson(res, 200, { sessions: hub.list(), defaultRoot })
     }
     const body = await RequestBody.read(req)
-    return sendJson(res, 200, hub.create(body.stringOr('root', defaultRoot), body.optional('model'), body.env()))
+    return sendJson(
+      res,
+      200,
+      hub.create(body.stringOr('root', defaultRoot), {
+        model: body.optional('model'),
+        thinking: body.optional('thinking'),
+        env: body.env(),
+      }),
+    )
   }
 
   const sessionId = decodeURIComponent(id)

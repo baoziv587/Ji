@@ -108,7 +108,10 @@ var (
 	TriangleAlert = lucide(
 		`<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>`,
 	)
-	X = lucide(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)
+	X   = lucide(`<path d="M18 6 6 18"/><path d="m6 6 12 12"/>`)
+	Zap = lucide(
+		`<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>`,
+	)
 )
 
 func lucide(shapes string) *ui.SVG {

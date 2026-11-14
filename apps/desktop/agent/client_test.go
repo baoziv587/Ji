@@ -56,12 +56,12 @@ func TestAPendingClientWaitsForTheService(t *testing.T) {
 	c := NewPendingClient()
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	if _, err := c.CreateSession(ctx, "", ""); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := c.CreateSession(ctx, NewSession{}); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("asked before the service listens: %v, want it to wait", err)
 	}
 
 	go c.Connect(service.URL)
-	if s, err := c.CreateSession(context.Background(), "", ""); err != nil || s.ID != "s1" {
+	if s, err := c.CreateSession(context.Background(), NewSession{}); err != nil || s.ID != "s1" {
 		t.Errorf("asked once it listens: %+v, %v", s, err)
 	}
 }

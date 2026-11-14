@@ -93,6 +93,7 @@ export {
   findModel,
   listModels,
   listProviders,
+  modelInfo,
   type ModelInfo,
   type ModelRef,
   models,

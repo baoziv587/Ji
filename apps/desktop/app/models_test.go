@@ -10,9 +10,10 @@ import (
 	"desktop/agent"
 )
 
-// The title bar's model opens a picker of the detected providers' models:
-// another provider shows its own, the filter narrows them, and a click
-// switches the session to one.
+// The model and thinking level are one button, which opens a picker of the
+// detected providers' models: another provider shows its own, the filter
+// narrows them, and a click switches the session to one; the picker stays
+// for the levels that model takes, one of which closes it.
 func TestModelPickerSwitchesTheSessionsModel(t *testing.T) {
 	a, f := testApp()
 	tt := ui.NewTester(a.View, 1100, 700)
@@ -51,11 +52,36 @@ func TestModelPickerSwitchesTheSessionsModel(t *testing.T) {
 	if want := []string{"groq/qwen3-32b"}; !reflect.DeepEqual(f.models["a"], want) {
 		t.Errorf("switched to %v, want %v", f.models["a"], want)
 	}
-	if a.views["a"].models.open || a.views["a"].t.State.Model != "groq/qwen3-32b" {
-		t.Errorf(
-			"open %v, model %q: the picker closes on the model chosen",
+	if !a.views["a"].models.open || a.views["a"].t.State.Model != "groq/qwen3-32b" ||
+		!tt.HasText("This model does not think before it answers.") {
+		t.Fatalf(
+			"open %v, model %q, texts %q: the picker stays for the reasoning",
 			a.views["a"].models.open,
 			a.views["a"].t.State.Model,
+			tt.Texts(),
+		)
+	}
+
+	if err := tt.Click("DeepSeek"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if err := tt.Click("deepseek-v4-pro"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if !tt.HasText("Reasoning") || !tt.HasText("Low") {
+		t.Fatalf("the levels of deepseek-v4-pro: %q", tt.Texts())
+	}
+	if err := tt.Click("Low"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.views["a"].models.open || !reflect.DeepEqual(f.thought, []string{"a low"}) {
+		t.Errorf(
+			"open %v, thought %v: a level closes the picker",
+			a.views["a"].models.open,
+			f.thought,
 		)
 	}
 }
@@ -165,6 +191,7 @@ func TestDefaultModelIsWhatNewSessionsStartOn(t *testing.T) {
 	}
 
 	a.NewSession("/code/web")
+	sendDraft(a, "hello")
 	a.OpenSettings()
 	tt.Frame()
 	if err := tt.Click("Use the service's model"); err != nil {
@@ -172,8 +199,49 @@ func TestDefaultModelIsWhatNewSessionsStartOn(t *testing.T) {
 	}
 	tt.Frame()
 	a.NewSession("/code/web")
+	sendDraft(a, "hello")
 
-	if want := []string{"deepseek/deepseek-v4-pro", ""}; !reflect.DeepEqual(f.createdOn, want) {
+	if want := []string{
+		"deepseek/deepseek-v4-pro high",
+		"deepseek/deepseek-flash off",
+	}; !reflect.DeepEqual(
+		f.createdOn,
+		want,
+	) {
+		t.Errorf("created on %v, want %v", f.createdOn, want)
+	}
+}
+
+// A new session's model and thinking level are the service's to tell
+// before there is a session: the levels are the model's, and the one
+// picked is what the session is created at.
+func TestNewSessionTakesTheModelsThinkingLevels(t *testing.T) {
+	a, f := testApp()
+	a.Settings.Model = "deepseek/deepseek-v4-pro"
+	tt := ui.NewTester(a.View, 1100, 700)
+
+	a.NewSession("/code/web")
+	tt.Frame()
+	st := &a.views[draftID].t.State
+	if st.Thinking != "high" ||
+		!reflect.DeepEqual(st.ThinkingLevels, []string{"off", "low", "high"}) ||
+		!tt.HasText("v4-pro") {
+		t.Fatalf("thinking %q of %v, texts %q", st.Thinking, st.ThinkingLevels, tt.Texts())
+	}
+	a.think(a.views[draftID], "low")
+	a.useModel(a.views[draftID], "groq/qwen3-32b")
+	if st.Thinking != "off" || len(st.ThinkingLevels) != 1 {
+		t.Errorf(
+			"thinking %q of %v: a model that does not reason takes off",
+			st.Thinking,
+			st.ThinkingLevels,
+		)
+	}
+	a.useModel(a.views[draftID], "deepseek/deepseek-v4-pro")
+	a.think(a.views[draftID], "low")
+	sendDraft(a, "hello")
+
+	if want := []string{"deepseek/deepseek-v4-pro low"}; !reflect.DeepEqual(f.createdOn, want) {
 		t.Errorf("created on %v, want %v", f.createdOn, want)
 	}
 }

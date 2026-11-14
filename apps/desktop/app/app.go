@@ -252,7 +252,7 @@ const keptViews = 8
 // keep puts id first among the sessions shown last, and lets go of those
 // past keptViews that are idle with nothing typed.
 func (a *App) keep(id string) {
-	if id == "" {
+	if id == "" || id == draftID {
 		return
 	}
 
@@ -283,7 +283,7 @@ func isBusy(status string) bool {
 
 // open follows a session's events until it is closed.
 func (a *App) open(id string) {
-	if id == "" || a.views[id] != nil {
+	if id == "" || id == draftID || a.views[id] != nil {
 		return
 	}
 
@@ -362,7 +362,18 @@ func (a *App) apply(view *sessionView, e agent.Event) {
 	view.draft = strings.TrimSpace(strings.Join([]string{view.t.Unsent, view.draft}, " "))
 }
 
+// draftID is the new session's while it is the window's draft, before
+// its first message: no ID of the service's.
+const draftID = "\x00draft"
+
 func (a *App) session(id string) (agent.Session, bool) {
+	if id == draftID {
+		view := a.views[draftID]
+		if view == nil {
+			return agent.Session{}, false
+		}
+		return agent.Session{ID: draftID, Root: view.t.State.Root}, true
+	}
 	for _, s := range a.list.Sessions {
 		if s.ID == id {
 			return s, true

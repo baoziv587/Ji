@@ -52,6 +52,8 @@ type sessionView struct {
 	dropping bool
 	// The panel beside the conversation: a terminal, the diff.
 	panel panelState
+	// Of the draft: whether the service is making a session of it.
+	starting bool
 }
 
 // sendable is whether there is a message to send: text typed, or a file
@@ -65,6 +67,15 @@ func (v *sessionView) sendable() bool {
 func (v *sessionView) restore(text string) {
 	if v.draft == "" {
 		v.draft = text
+	}
+}
+
+// restoreMessage puts back a message that was not sent, its text and its
+// files, unless others were typed or attached meanwhile.
+func (v *sessionView) restoreMessage(text string, files []attachment) {
+	v.restore(text)
+	if len(v.files) == 0 {
+		v.files = files
 	}
 }
 

@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -95,12 +96,38 @@ func (a *App) pickable(current string) []agent.Provider {
 }
 
 func (a *App) useModel(view *sessionView, model string) {
+	if view.id == draftID {
+		a.chooseModel(view, model)
+		return
+	}
 	a.callState(
 		view,
 		func(ctx context.Context) (agent.State, error) {
 			return a.agent.UseModel(ctx, view.id, model)
 		},
 	)
+}
+
+// chooseModel puts the draft on model, "" for the service's own, as the
+// service tells what that is and the thinking levels it takes; the level
+// picked stays while the model takes it.
+func (a *App) chooseModel(view *sessionView, model string) {
+	view.t.State.Model = model
+	a.request(func(ctx context.Context) {
+		choice, err := a.agent.ModelChoice(ctx, model)
+		a.update(func() {
+			st := &view.t.State
+			switch {
+			case err != nil:
+				a.failure = err.Error()
+			case st.Model == model:
+				st.Model, st.ThinkingLevels = choice.Model, choice.ThinkingLevels
+				if !slices.Contains(choice.ThinkingLevels, st.Thinking) {
+					st.Thinking = choice.Thinking
+				}
+			}
+		})
+	})
 }
 
 // providerOf is the provider of a model, "provider/id"; the id itself can
@@ -144,21 +171,21 @@ func matches(query string, texts ...string) bool {
 	return false
 }
 
-// modelSelect is the session's model in its title bar, which opens the
-// picker of models. Off while the session replies, as a reply's steps go to
-// the model it started with.
+// modelSelect is the session's model and thinking level as one button,
+// which opens the picker of both: the models, then the levels the model
+// takes at the right. Off while the session replies, as a reply's steps go
+// to the model it started with.
 func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	st := view.t.State
 	picker := &view.models
-	off := s.Archived || st.Replying
+	off := s.Archived || st.Replying || view.starting
 
 	trigger := ui.ButtonBase(c).
 		Height(24).
-		Padding(0, 2, 0, 6).
-		Margin(0, -2, 0, -6).
-		Gap(2).
+		Padding(0, 8).
+		Gap(4).
 		Radius(6).
 		AlignItems(ui.Center).
 		Shrink(1).
@@ -166,10 +193,13 @@ func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 		FocusRing(false).
 		Transition(components.ColorTransition).
 		Label("Model")
-	if off {
+	switch {
+	case off:
 		trigger.Disabled(true)
-	} else if trigger.Hovered() || picker.open {
+	case trigger.Hovered() || picker.open:
 		trigger.Background(p.Accent)
+	default:
+		trigger.Background(p.Accent.Alpha(0.6))
 	}
 	components.FocusRing(trigger, p, 1)
 	color := p.Foreground
@@ -177,24 +207,114 @@ func (a *App) modelSelect(c *ui.Context, s agent.Session, view *sessionView) {
 		color = p.MutedForeground
 	}
 	trigger.Children(func() {
-		ui.Text(c, modelName(st.Model)).TextColor(color).SingleLine().Shrink(1)
-		if !off {
-			ui.Icon(c, icons.ChevronDown).
-				FontSize(14).
-				TextColor(p.MutedForeground.Alpha(0.6)).
-				Shrink(0)
+		name := modelName(st.Model)
+		if name == "" {
+			name = "Default model"
+		}
+		ui.Text(c, name).TextColor(color).FontWeight(500).SingleLine().Shrink(1)
+		if len(st.ThinkingLevels) > 1 {
+			ui.Text(c, levelName(st.Thinking)).TextColor(p.MutedForeground).SingleLine().Shrink(0)
+		}
+		if st.Fast {
+			ui.Icon(c, icons.Zap).FontSize(12).TextColor(p.MutedForeground).Shrink(0)
 		}
 	})
 	switch {
 	case st.Replying:
 		trigger.Tooltip("Stop the reply to switch models")
-	case !picker.open:
-		trigger.Tooltip("Model: " + st.Model)
+	case picker.open:
+	case st.Model == "":
+		trigger.Tooltip("The service's own model, its --model")
+	case st.Fast:
+		trigger.Tooltip(st.Model + ", on OpenAI's priority tier at about 2x the usage: /fast off")
+	default:
+		trigger.Tooltip(st.Model)
 	}
 	if trigger.Clicked() {
 		a.toggleModels(picker, st.Model)
 	}
-	a.modelMenu(c, trigger, picker, st.Model, true, func(spec string) { a.useModel(view, spec) })
+	a.modelMenu(
+		c,
+		trigger,
+		picker,
+		st.Model,
+		true,
+		func(spec string) { a.useModel(view, spec) },
+		func() { a.pickerReasoning(c, view, picker) },
+	)
+}
+
+// pickerReasoning is the picker's column of the thinking levels the
+// session's model takes, the one it is at checked: one chosen closes the
+// picker, as the model and the level are picked.
+func (a *App) pickerReasoning(c *ui.Context, view *sessionView, picker *modelPicker) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	st := view.t.State
+	ui.Column(c).Width(180).Shrink(0).Children(func() {
+		ui.Row(c).
+			Height(40).
+			Padding(0, 12).
+			Gap(8).
+			AlignItems(ui.Center).
+			BorderWidth(0, 0, 1, 0).
+			BorderColor(p.Border).
+			Shrink(0).
+			Children(func() {
+				ui.Text(c, "Reasoning").TextColor(p.MutedForeground).Grow(1).Shrink(0)
+				ui.Text(c, modelName(st.Model)).
+					FontSize(components.TextXS(t)).
+					TextColor(p.MutedForeground).
+					SingleLine().
+					Shrink(1)
+			})
+		ui.Column(c).Padding(4).Gap(2).Children(func() {
+			if len(st.ThinkingLevels) <= 1 {
+				ui.Text(c, "This model does not think before it answers.").
+					FontSize(components.TextXS(t)).
+					TextColor(p.MutedForeground).
+					Padding(8)
+				return
+			}
+			for _, level := range st.ThinkingLevels {
+				row := ui.ButtonBase(c.Key(level)).
+					Height(32).
+					Padding(0, 8).
+					Gap(8).
+					Radius(t.Radius - 2).
+					AlignItems(ui.Center).
+					FocusRing(false).
+					Label(levelName(level))
+				if row.Hovered() {
+					row.Background(p.Accent)
+				}
+				components.FocusRing(row, p, 0)
+				row.Children(func() {
+					ui.Text(c, levelName(level)).SingleLine().Grow(1).Shrink(1)
+					if level == st.Thinking {
+						ui.Icon(c, icons.Check).FontSize(16).TextColor(p.Foreground).Shrink(0)
+					}
+				})
+				if row.Clicked() {
+					picker.open = false
+					if level != st.Thinking {
+						a.think(view, level)
+					}
+				}
+			}
+		})
+	})
+}
+
+// levelName is a thinking level as the window names it.
+func levelName(level string) string {
+	switch level {
+	case "xhigh":
+		return "Extra High"
+	case "":
+		return ""
+	}
+	return strings.ToUpper(level[:1]) + level[1:]
 }
 
 // toggleModels opens the picker on the provider of current, reading the
@@ -216,8 +336,10 @@ func (a *App) showProvider(picker *modelPicker, provider string) {
 
 // modelMenu is the picker under anchor while it is open: the providers
 // detected down the left, the chosen one's models, filtered by what is
-// typed, on the right. pick takes the model chosen, "provider/id", unless
-// it is current; link adds the way to the settings' list of providers.
+// typed, beside them, and reasoning, when given, at the right. pick takes
+// the model chosen, "provider/id", unless it is current, which closes the
+// picker but with reasoning to choose in next; link adds the way to the
+// settings' list of providers.
 func (a *App) modelMenu(
 	c *ui.Context,
 	anchor ui.Element,
@@ -225,12 +347,17 @@ func (a *App) modelMenu(
 	current string,
 	link bool,
 	pick func(spec string),
+	reasoning func(),
 ) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	ui.PopoverBase(c, anchor, &picker.open, func(panel ui.Element) {
+		width := float32(520)
+		if reasoning != nil {
+			width += 180
+		}
 		panel.Margin(4, 0, 0, 0).
-			Width(520).
+			Width(width).
 			Radius(t.Radius).
 			Background(p.Popover).
 			Border(1, p.Border).
@@ -239,7 +366,11 @@ func (a *App) modelMenu(
 		ui.Row(c).Height(340).AlignItems(ui.Stretch).Children(func() {
 			a.pickerProviders(c, picker, current, link)
 			ui.Box(c).Width(1).Background(p.Border).Shrink(0)
-			a.pickerModels(c, picker, current, pick)
+			a.pickerModels(c, picker, current, reasoning == nil, pick)
+			if reasoning != nil {
+				ui.Box(c).Width(1).Background(p.Border).Shrink(0)
+				reasoning()
+			}
 		})
 	})
 }
@@ -344,13 +475,14 @@ func (a *App) pickerModels(
 	c *ui.Context,
 	picker *modelPicker,
 	current string,
+	closes bool,
 	choose func(spec string),
 ) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	models := picker.filtered(a.catalog.models[picker.provider])
 	pick := func(m agent.Model) {
-		picker.open = false
+		picker.open = !closes
 		if spec := picker.provider + "/" + m.ID; spec != current {
 			choose(spec)
 		}
