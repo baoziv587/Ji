@@ -1,4 +1,4 @@
-# 并行跑所有检查，跑完后依次打印每个检查的标题和输出，最后是 summary
+# 并行跑所有检查，每个检查一结束就打印它的标题和输出，最后是 summary
 cd "$(git rev-parse --show-toplevel)"
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
@@ -28,19 +28,23 @@ job() {
   esac
 }
 
+# 同时结束的检查轮流打印，输出不会交错在一起
+report() {
+  until mkdir "$out/lock" 2>/dev/null; do sleep 0.05; done
+  echo "┃ $1"
+  cat "$out/$1.log"
+  rmdir "$out/lock"
+}
+
 for name in $jobs; do
   (
     code=0
     job "$name" >"$out/$name.log" 2>&1 || code=$?
     echo "$code" >"$out/$name.code"
+    report "$name"
   ) &
 done
 wait
-
-for name in $jobs; do
-  echo "┃ $name"
-  cat "$out/$name.log"
-done
 
 printf '\nsummary: (done in %s seconds)\n' "$(($(date +%s) - started))"
 failed=0
