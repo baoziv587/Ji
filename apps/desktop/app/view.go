@@ -190,6 +190,9 @@ func (a *App) noSession(c *ui.Context) {
 
 func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 	view.answer.reset(view.t.Asking)
+	if c.Shortcut(ui.Cmd, ui.KeyJ) {
+		a.togglePanel(view)
+	}
 	room := ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch)
 	space := room.Bounds().W
 	room.Children(func() {
@@ -207,16 +210,73 @@ func (a *App) detail(c *ui.Context, s agent.Session, view *sessionView) {
 		}
 
 		// The step shown is read once its lines in the conversation, which
-		// a click shows or hides, are built
-		step := view.t.Inspected
-		if step == nil {
-			return
-		}
-		// With too little room for both, the inspector covers the
+		// a click shows or hides, are built; it takes the panel's place
+		// while it shows. With too little room for both, either covers the
 		// conversation rather than squeeze it
 		covering := space < inspectorMin+conversationMin
-		width := min(a.Layout.Inspector, max(space-conversationMin, inspectorMin))
-		a.inspector(c, view, step, covering, width)
+		if step := view.t.Inspected; step != nil {
+			a.inspector(c, view, step, covering, sideWidth(a.Layout.Inspector, space))
+			return
+		}
+		if view.panel.open {
+			a.panel(c, s, view, covering || view.panel.maximized, sideWidth(a.Layout.Panel, space))
+		}
+	})
+}
+
+// sideWidth is how wide a pane beside the conversation is: as wide as it
+// was left, but no wider than leaves the conversation its room.
+func sideWidth(want, space float32) float32 {
+	return min(want, max(space-conversationMin, inspectorMin))
+}
+
+// sidePane is the inspector's or the panel's pane at the right of the
+// session: beside the conversation at width, its left edge dragged to
+// resize it into *size, or covering it. Children get how much of the
+// pane's color lies under its glass, for their bar.
+func (a *App) sidePane(
+	c *ui.Context,
+	key string,
+	color ui.Color,
+	covering bool,
+	width float32,
+	size *float32,
+	children func(under float32),
+) {
+	p := components.PaletteOf(c.Theme())
+	// Of the content's glass beside the conversation; covering it, solid,
+	// so that the conversation does not show through
+	under := a.contentCover(c)
+	if covering {
+		under = 1
+	}
+	pane := ui.Box(c.Key(key)).
+		Shrink(0).
+		Background(color.Alpha(under)).
+		BorderWidth(0, 0, 0, 1).
+		BorderColor(p.Border).
+		Transition(panelMotion)
+	if covering {
+		pane.Absolute().Top(0).Bottom(0).Left(0).Right(0)
+	} else {
+		pane.Width(width)
+	}
+	pane.Children(func() {
+		children(under)
+		if covering {
+			return
+		}
+		edge := ui.Box(c).
+			Absolute().
+			Left(-3).
+			Top(0).
+			Width(6).
+			FillHeight().
+			Cursor(ui.CursorResizeEW)
+		a.resizing = edge.Pressed()
+		if dx, _, ok := edge.Dragged(); ok && dx != 0 {
+			*size = max(width-dx, inspectorMin)
+		}
 	})
 }
 

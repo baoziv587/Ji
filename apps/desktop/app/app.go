@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egoist/mygo/plugins/terminal"
+
 	"desktop/agent"
 	"desktop/syntax"
 	"desktop/ui/components"
@@ -46,6 +48,9 @@ type App struct {
 	// OpenInEditor opens a folder in VS Code. Nil, with no VS Code, leaves
 	// the button out.
 	OpenInEditor func(root string) error
+	// NewTerminal starts a terminal for the panel: MyGo's, in Ghostty's
+	// emulator.
+	NewTerminal func(terminal.Options) (*terminal.Terminal, error)
 
 	ctx      context.Context
 	list     agent.Sessions
@@ -129,15 +134,16 @@ func (l link) tooltip() string {
 }
 
 // Layout is what of the window's arrangement lasts from one run to the
-// next: how wide the sidebar is, and the inspector beside the
-// conversation. The window's own frame MyGo keeps (StateKey).
+// next: how wide the sidebar is, and the inspector and the panel beside
+// the conversation. The window's own frame MyGo keeps (StateKey).
 type Layout struct {
 	Sidebar       float32 `json:"sidebar"`
 	SidebarHidden bool    `json:"sidebarHidden,omitempty"`
 	Inspector     float32 `json:"inspector"`
+	Panel         float32 `json:"panel,omitempty"`
 }
 
-var DefaultLayout = Layout{Sidebar: 260, Inspector: 400}
+var DefaultLayout = Layout{Sidebar: 260, Inspector: 400, Panel: 520}
 
 const sidebarMin = 180
 
@@ -148,6 +154,9 @@ func (l Layout) Fit() Layout {
 	}
 	if l.Inspector < inspectorMin {
 		l.Inspector = DefaultLayout.Inspector
+	}
+	if l.Panel < inspectorMin {
+		l.Panel = DefaultLayout.Panel
 	}
 	return l
 }
@@ -161,18 +170,19 @@ func New(service agent.Agent, update func(func())) *App {
 	// Code colored in the background shows as it is
 	syntax.Ready = func() { update(func() {}) }
 	return &App{
-		agent:    service,
-		update:   update,
-		async:    func(fn func()) { go fn() },
-		after:    func(d time.Duration, fn func()) { time.AfterFunc(d, fn) },
-		ctx:      context.Background(),
-		views:    map[string]*sessionView{},
-		opened:   map[string]*bool{},
-		branches: map[string]string{},
-		missing:  map[string]bool{},
-		isDir:    isDir,
-		Layout:   DefaultLayout,
-		Settings: DefaultSettings,
+		agent:       service,
+		update:      update,
+		async:       func(fn func()) { go fn() },
+		after:       func(d time.Duration, fn func()) { time.AfterFunc(d, fn) },
+		ctx:         context.Background(),
+		views:       map[string]*sessionView{},
+		opened:      map[string]*bool{},
+		branches:    map[string]string{},
+		missing:     map[string]bool{},
+		isDir:       isDir,
+		NewTerminal: terminal.New,
+		Layout:      DefaultLayout,
+		Settings:    DefaultSettings,
 	}
 }
 
@@ -310,6 +320,7 @@ func (a *App) drain(view *sessionView) {
 func (a *App) close(id string) {
 	if view := a.views[id]; view != nil {
 		view.stop()
+		view.panel.close()
 		delete(a.views, id)
 	}
 }

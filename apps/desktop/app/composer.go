@@ -146,8 +146,9 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView, empty 
 			a.composerMeta(c, s, view)
 
 			// Esc closes the menu and the inspector first
+			// and a terminal of the panel keeps it, for its programs
 			if st.Replying && len(entries) == 0 && view.t.Inspected == nil &&
-				c.Shortcut(0, ui.KeyEscape) {
+				!view.panel.typing && c.Shortcut(0, ui.KeyEscape) {
 				a.stop(s.ID)
 			}
 			// Over the conversation, as wide as the input

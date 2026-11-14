@@ -50,6 +50,8 @@ type sessionView struct {
 	// another app are dragged over the session.
 	files    []attachment
 	dropping bool
+	// The panel beside the conversation: a terminal, the diff.
+	panel panelState
 }
 
 // sendable is whether there is a message to send: text typed, or a file

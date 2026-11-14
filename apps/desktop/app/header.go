@@ -64,6 +64,7 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 					Clicked() {
 					a.unarchive(s.ID)
 				}
+				a.panelToggleWhenHidden(c, view)
 				return
 			}
 			busy := st.Replying || len(st.Asking) > 0
@@ -82,7 +83,16 @@ func (a *App) header(c *ui.Context, s agent.Session, view *sessionView) {
 			if archive.Clicked() {
 				a.archive(s.ID, true)
 			}
+			a.panelToggleWhenHidden(c, view)
 		})
+}
+
+// panelToggleWhenHidden is the button that shows the panel, in the header
+// while the panel does not: shown, the panel has it in its own bar.
+func (a *App) panelToggleWhenHidden(c *ui.Context, view *sessionView) {
+	if !view.panelShown() {
+		a.panelToggle(c, view)
+	}
 }
 
 // openInEditor opens root in VS Code, and says so if it cannot.

@@ -50,24 +50,7 @@ func (a *App) inspector(
 		view.inspectedLast, view.inspectList = s, ui.ListState{}
 	}
 
-	// Of the content's glass beside the conversation; covering it, solid,
-	// so that the conversation does not show through
-	under := a.contentCover(c)
-	if covering {
-		under = 1
-	}
-	pane := ui.Box(c.Key("inspector")).
-		Shrink(0).
-		Background(p.Card.Alpha(under)).
-		BorderWidth(0, 0, 0, 1).
-		BorderColor(p.Border).
-		Transition(panelMotion)
-	if covering {
-		pane.Absolute().Top(0).Bottom(0).Left(0).Right(0)
-	} else {
-		pane.Width(width)
-	}
-	pane.Children(func() {
+	a.sidePane(c, "inspector", p.Card, covering, width, &a.Layout.Inspector, func(under float32) {
 		// The step's lines come in again as another is chosen
 		ui.Box(c.Key(fmt.Sprint("step:", s.Step))).Fill().Transition(ui.ElementTransition{
 			Duration: 240 * time.Millisecond, Ease: components.EaseOutExpo, Enter: &ui.Motion{Y: 6},
@@ -78,20 +61,6 @@ func (a *App) inspector(
 				ScrollbarInsets(TitleBarHeight, 0, 0)
 		})
 		a.inspectorBar(c, view, s, covering, under)
-
-		if !covering {
-			edge := ui.Box(c).
-				Absolute().
-				Left(-3).
-				Top(0).
-				Width(6).
-				FillHeight().
-				Cursor(ui.CursorResizeEW)
-			a.resizing = edge.Pressed()
-			if dx, _, ok := edge.Dragged(); ok && dx != 0 {
-				a.Layout.Inspector = max(width-dx, inspectorMin)
-			}
-		}
 	})
 
 	switch {
