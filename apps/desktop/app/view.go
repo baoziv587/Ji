@@ -229,6 +229,14 @@ func (a *App) conversation(c *ui.Context, s agent.Session, view *sessionView) ui
 		Grow(1).
 		MinWidth(0).
 		Background(p.Background.Alpha(a.contentCover(c)))
+	view.dropping = false
+	if !s.Archived && !a.isMissing(s.Root) {
+		view.dropping = room.FileDragOver()
+		if dropped := room.DroppedFiles(); len(dropped) > 0 {
+			a.attach(view, dropped...)
+			view.refocus = true
+		}
+	}
 	return room.Children(func() {
 		conversation.View(c.Key("conversation:"+s.ID), &view.list, &view.t).
 			Fill().
@@ -254,7 +262,7 @@ func (a *App) conversation(c *ui.Context, s agent.Session, view *sessionView) ui
 			if view.t.Asking != nil && !s.Archived {
 				a.questions(c.Key("questions:"+s.ID), view)
 			}
-			a.composer(c.Key("composer:"+s.ID), s, view)
+			a.composer(c.Key("composer:"+s.ID), s, view, empty)
 		})
 		// Known only once laid out: the conversation makes room for it a
 		// frame later

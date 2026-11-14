@@ -136,6 +136,10 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	settings := loadSettings()
+	// --yolo is the service's mode, which the window then leaves as it is
+	if service.Yolo {
+		settings.Approvals = ""
+	}
 	var a *app.App
 	var started *server.Server
 
@@ -192,6 +196,15 @@ func main() {
 					return "", err
 				}
 				return paths[0], nil
+			}
+
+			a.ChooseFiles = func() ([]string, error) {
+				return mygo.Dialog.Open(mygo.OpenDialogOptions{
+					Parent:      win,
+					Title:       "Attach Files",
+					ButtonLabel: "Attach",
+					Multiple:    true,
+				})
 			}
 
 			go a.Follow(ctx)

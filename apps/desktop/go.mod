@@ -12,6 +12,7 @@ require (
 	github.com/mazznoer/csscolorparser v0.1.8
 	github.com/tdewolff/parse/v2 v2.8.16
 	github.com/yuin/goldmark v1.8.6
+	golang.org/x/image v0.46.0
 )
 
 require (
@@ -24,7 +25,6 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	go.digitalxero.dev/rpm v0.3.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/image v0.46.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.43.0 // indirect

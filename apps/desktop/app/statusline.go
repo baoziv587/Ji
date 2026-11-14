@@ -10,6 +10,7 @@ import (
 	"desktop/commands"
 	"desktop/format"
 	"desktop/ui/components"
+	"desktop/ui/icons"
 )
 
 // statusLine is the terminal's status line: what the reply does and for
@@ -51,43 +52,7 @@ func (a *App) statusLine(
 			})
 		}
 		if st.Mode != "" {
-			parts = append(parts, func() {
-				// Less careful than ask, so it stands out in the warning color
-				color := p.MutedForeground
-				if st.Mode != "ask" {
-					color = p.Warning
-				}
-				mode := ui.ButtonBase(c).
-					Padding(0, 4).
-					Radius(4).
-					FocusRing(false).
-					Transition(components.ColorTransition).
-					Label("Mode")
-				if !canSwitchMode(s, st) {
-					mode.Disabled(true)
-				} else if mode.Hovered() {
-					mode.Background(p.Accent)
-				}
-				components.FocusRing(mode, p, 0)
-				mode.Children(func() { small(st.Mode, color).FontWeight(500) })
-				switch st.Mode {
-				case "ask":
-					mode.Tooltip(
-						"Every command, file read and change waits for a yes. ⇧⇥ approves the folder's files.",
-					)
-				case "auto":
-					mode.Tooltip(
-						"Files inside the folder are approved; commands still wait for a yes. ⇧⇥ asks about all.",
-					)
-				default:
-					mode.Tooltip(
-						"Nothing waits for a yes, outside the folder too. ⇧⇥ goes back to ask.",
-					)
-				}
-				if mode.Clicked() {
-					a.switchMode(view)
-				}
-			})
+			parts = append(parts, func() { a.modeButton(c, s, view, false) })
 		}
 		if st.Allowed != "" {
 			parts = append(parts, func() { small(st.Allowed, p.Warning).Shrink(1) })
@@ -123,6 +88,95 @@ func (a *App) statusLine(
 			})
 		}
 	})
+}
+
+// modeButton is the session's mode, a menu of the three to choose among;
+// marked, it shows the shield of how much waits for a yes. ⇧⇥ switches
+// between ask and auto as in the terminal.
+func (a *App) modeButton(c *ui.Context, s agent.Session, view *sessionView, marked bool) {
+	t := c.Theme()
+	p := components.PaletteOf(t)
+	st := view.t.State
+	current := modeNamed(st.Mode)
+	// Less careful than ask, so it stands out in the warning color
+	color := p.MutedForeground
+	if st.Mode != "ask" {
+		color = p.Warning
+	}
+
+	chosen := st.Mode
+	sel := ui.SelectBase(c, &chosen)
+	if !canSwitchMode(s, st) {
+		sel.Trigger.Disabled(true)
+	}
+	mode := sel.Trigger.
+		Padding(0, 4).
+		Gap(4).
+		Radius(4).
+		AlignItems(ui.Center).
+		FocusRing(false).
+		Transition(components.ColorTransition).
+		Label("Mode")
+	if mode.Hovered() {
+		mode.Background(p.Accent)
+	}
+	components.FocusRing(mode, p, 0)
+	mode.Children(func() {
+		if marked {
+			ui.Icon(c, current.icon).FontSize(12).TextColor(color)
+		}
+		barText(c, current.name, color).FontWeight(500)
+	})
+	switch st.Mode {
+	case "ask":
+		mode.Tooltip(current.note + " ⇧⇥ approves the folder's files.")
+	case "auto":
+		mode.Tooltip(current.note + " ⇧⇥ asks about all.")
+	default:
+		mode.Tooltip("Nothing waits for a yes, outside the folder too. ⇧⇥ goes back to ask.")
+	}
+
+	sel.Popup(func(panel ui.Element) {
+		panel.Margin(4, 0).
+			Padding(4).
+			Radius(t.Radius).
+			Background(p.Popover).
+			Border(1, p.Border).
+			Shadow(0, 4, 6, -1, ui.RGBA(0, 0, 0, 0.1)).
+			Width(300)
+		for _, m := range modes {
+			ink := p.Foreground
+			if m.mode == "yolo" {
+				ink = p.Warning
+			}
+			item := sel.Item(m.mode).
+				Padding(6, 8).
+				Gap(8).
+				Radius(6).
+				AlignItems(ui.Start).
+				Label(m.name)
+			if item.Highlighted() {
+				item.Background(p.Accent)
+			}
+			item.Children(func() {
+				ui.Icon(c, m.icon).FontSize(14).TextColor(ink).Margin(2, 0, 0).Shrink(0)
+				ui.Column(c).Gap(2).Grow(1).Shrink(1).Children(func() {
+					ui.Text(c, m.name).FontWeight(500).TextColor(ink)
+					ui.Text(c, m.note).
+						FontSize(components.TextXS(t)).
+						TextColor(p.MutedForeground)
+				})
+				if m.mode == st.Mode {
+					ui.Icon(c, icons.Check).FontSize(16).TextColor(p.Foreground).Shrink(0)
+				} else {
+					ui.Box(c).Size(16, 16).Shrink(0)
+				}
+			})
+		}
+	})
+	if mode.Changed() && chosen != st.Mode {
+		a.setMode(view, chosen)
+	}
 }
 
 // keysOf is the keys that work now, as the terminal's status line lists

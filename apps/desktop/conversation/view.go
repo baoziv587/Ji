@@ -95,7 +95,16 @@ func item(c *ui.Context, item *Item) {
 				Border(1, p.Border).
 				Gap(4).
 				Children(func() {
-					ui.Text(c, item.Text).LineHeight(1.625)
+					if len(item.Files) > 0 {
+						ui.Row(c).Wrap().Gap(6).Padding(2, 0).Children(func() {
+							for _, path := range item.Files {
+								components.FileChip(c.Key(path), path, "").Background(p.Background)
+							}
+						})
+					}
+					if item.Text != "" {
+						ui.Text(c, item.Text).LineHeight(1.625)
+					}
 					if item.Steer {
 						ui.Text(c, "steer").
 							FontSize(components.TextXS(t)).

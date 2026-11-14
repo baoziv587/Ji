@@ -162,22 +162,34 @@ func (a *App) neighbour(id string) string {
 	return ""
 }
 
-// send sends what is typed: a message, or the command it names.
+// send sends what is typed, with the files attached: a message, or the
+// command it names, which leaves the files for the next message.
 func (a *App) send(view *sessionView) {
-	text := strings.TrimSpace(view.draft)
-	if text == "" {
+	if !view.sendable() {
 		return
 	}
+	text := strings.TrimSpace(view.draft)
 	if strings.HasPrefix(text, "/") {
 		a.command(view, text)
 		return
 	}
 
 	view.draft = ""
+	attached := view.files
+	view.files = nil
+	paths := make([]string, len(attached))
+	for i, f := range attached {
+		paths[i] = f.path
+	}
 	a.call(func(ctx context.Context) error {
-		_, err := a.agent.Send(ctx, view.id, text)
+		_, err := a.agent.Send(ctx, view.id, text, paths)
 		if err != nil {
-			a.update(func() { view.restore(text) })
+			a.update(func() {
+				view.restore(text)
+				if len(view.files) == 0 {
+					view.files = attached
+				}
+			})
 		}
 		return err
 	})
@@ -212,6 +224,12 @@ func (a *App) switchMode(view *sessionView) {
 	if view.t.State.Mode == "ask" {
 		mode = "auto"
 	}
+	a.setMode(view, mode)
+}
+
+// setMode sets the session's mode: ask, auto or yolo, which the window
+// calls Full access.
+func (a *App) setMode(view *sessionView, mode string) {
 	a.callState(
 		view,
 		func(ctx context.Context) (agent.State, error) {

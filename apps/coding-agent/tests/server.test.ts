@@ -1,7 +1,7 @@
 // The sessions over HTTP: a message starts a reply whose events stream to the client, a command waits for the client's
 // yes, the list follows what each session does, a session read back from its log goes on where it was, and an
 // archived session stays on disk
-import type { AssistantMessage } from '@ji.dev/llm'
+import type { AssistantMessage, Message } from '@ji.dev/llm'
 import type { FakeReply } from '@ji.dev/testing'
 import type { AddressInfo } from 'node:net'
 import type { ServiceEvent, ServiceState } from '../src/server/events.ts'
@@ -260,6 +260,42 @@ describe('agent HTTP service', () => {
     // Assert
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: `${join(root, 'gone')} is not a folder` })
+  })
+
+  it('should name the files attached to a message, and show the model the pictures among them', async () => {
+    // Arrange
+    const seen: Message[] = []
+    const { url, root } = await serve([
+      request => {
+        seen.push(...request.messages)
+        return assistantMessage('read them')
+      },
+    ])
+    const { id } = await create(url)
+    const notes = join(root, 'notes.md')
+    const shot = join(root, 'shot.png')
+    writeFileSync(notes, '# notes')
+    writeFileSync(shot, 'png bytes')
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+
+    // Act
+    await post(url, `/api/sessions/${id}/messages`, { text: '', files: [notes, shot] })
+    await events.until(e => e.type === 'reply_end')
+    const listed = (await (await fetch(`${url}/api/sessions`)).json()) as { sessions: SessionSummary[] }
+    const missing = await fetch(`${url}/api/sessions/${id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text: 'and this', files: [join(root, 'gone.txt')] }),
+    })
+
+    // Assert
+    expect(seen.at(-1)?.content).toEqual([
+      { type: 'text', text: `Attached files:\n${notes}\n${shot}` },
+      { type: 'image', data: btoa('png bytes'), mimeType: 'image/png' },
+    ])
+    expect(events.seen.find(e => e.type === 'user')).toMatchObject({ text: '', files: [notes, shot] })
+    expect(listed.sessions[0]).toMatchObject({ title: 'notes.md' })
+    expect(missing.status).toBe(400)
+    expect(await missing.json()).toEqual({ error: `${join(root, 'gone.txt')} is not a file` })
   })
 
   it('should answer a bad request with a 4xx and its reason', async () => {

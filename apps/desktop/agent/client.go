@@ -126,17 +126,15 @@ func (c *Client) State(ctx context.Context, id string) (State, error) {
 	return s, c.do(ctx, http.MethodGet, sessionPath(id, "state"), nil, &s)
 }
 
-func (c *Client) Send(ctx context.Context, id, text string) (string, error) {
+func (c *Client) Send(ctx context.Context, id, text string, files []string) (string, error) {
 	var out struct {
 		Result string `json:"result"`
 	}
-	err := c.do(
-		ctx,
-		http.MethodPost,
-		sessionPath(id, "messages"),
-		map[string]string{"text": text},
-		&out,
-	)
+	body := struct {
+		Text  string   `json:"text"`
+		Files []string `json:"files,omitempty"`
+	}{text, files}
+	err := c.do(ctx, http.MethodPost, sessionPath(id, "messages"), body, &out)
 	return out.Result, err
 }
 

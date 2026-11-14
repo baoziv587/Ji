@@ -32,7 +32,8 @@
 //   GET  /api/sessions/:id/events                   its events: those after Last-Event-ID (or ?after=n), then each as
 //                                                   it happens; with ?run=1, each run event besides, whole, as
 //                                                   {type: 'run', event} with no id, for a client that draws the run
-//   POST /api/sessions/:id/messages   {text}        starts a reply, or steers the one in progress
+//   POST /api/sessions/:id/messages   {text, files?} starts a reply, or steers the one in progress; files are paths,
+//                                                   named to the model, the pictures among them shown to one that sees
 //   POST /api/sessions/:id/commands   {line}        runs the command the line names, as the terminal does: {result:
 //                                                   'ran'}, or a skill's sent as a message ('started' | 'steered')
 //   POST /api/sessions/:id/questions/:q  {answers: string[][]} | {dismissed: true}
@@ -183,10 +184,11 @@ async function route(
   switch (action) {
     case 'messages': {
       const text = body.string('text').trim()
-      if (text === '') {
+      const files = body.strings('files')
+      if (text === '' && files.length === 0) {
         throw new HttpError(400, 'the message is empty')
       }
-      return sendJson(res, 200, { result: await service.send(text) })
+      return sendJson(res, 200, { result: await service.send(text, files) })
     }
     case 'commands':
       return sendJson(res, 200, { result: await service.command(body.string('line').trim()) })
@@ -424,6 +426,15 @@ class RequestBody {
   /** The field when it is a string with something in it; `fallback` otherwise. */
   stringOr(name: string, fallback: string): string {
     return this.optional(name) ?? fallback
+  }
+
+  /** The field as a list of strings, empty when it is not there. */
+  strings(name: string): string[] {
+    const value = this.fields[name] ?? []
+    if (!Array.isArray(value) || !value.every(v => typeof v === 'string')) {
+      throw new HttpError(400, `"${name}" must be a list of strings`)
+    }
+    return value
   }
 
   /** The field when it is a string with something in it. */

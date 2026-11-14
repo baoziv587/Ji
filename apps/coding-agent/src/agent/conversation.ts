@@ -1,9 +1,10 @@
 // The conversation: a message starts a reply, or steers the one in progress; a reply that does not finish takes the
 // conversation back to before it was sent, and says what it was sent, so nothing typed is lost.
 
-import type { Agent, AgentState, Run, Session, ThinkingLevel } from '@ji.dev/llm'
+import type { Agent, AgentState, Message, Run, Session, ThinkingLevel } from '@ji.dev/llm'
 import { createSession, RunError } from '@ji.dev/llm'
 import { requestFastTier, supportsFastMode } from './fast.ts'
+import { contentOf } from './messages.ts'
 
 /** How a reply that did not finish ended, for the person to pick up from. */
 export interface Unfinished {
@@ -68,17 +69,18 @@ export class Conversation {
    * A new reply, to follow; undefined when the message steers the reply in progress. 'step' reaches the model at the
    * next step boundary: at once when idle, after the step in progress otherwise.
    */
-  send(message: string): Run | undefined {
+  send(message: string | Message): Run | undefined {
     const before = this.session.state
     const run = this.session.send(message, { when: 'step' })
+    const typed = typeof message === 'string' ? message : contentOf(message)
     if (run === this.reply) {
-      this.sent.push(message)
+      this.sent.push(typed)
       return undefined
     }
 
     this.reply = run
     this.before = before
-    this.sent = [message]
+    this.sent = [typed]
     return run
   }
 

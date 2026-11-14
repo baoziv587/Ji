@@ -31,6 +31,18 @@ func short(n float64) string {
 	return fmt.Sprintf("%.0f", n)
 }
 
+// Bytes is a file's size as briefly: 950 B, 12 KB, 1.4 MB.
+func Bytes(n int64) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprintf("%d B", n)
+	case n < 1_000_000:
+		return short(float64(n)/1000) + " KB"
+	default:
+		return short(float64(n)/1_000_000) + " MB"
+	}
+}
+
 // Ago says how long ago a time in milliseconds was, as briefly as a
 // sidebar has room for.
 func Ago(ms int64, now time.Time) string {

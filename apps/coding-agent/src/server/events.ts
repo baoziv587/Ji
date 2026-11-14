@@ -8,7 +8,7 @@ import type { HelpSection } from '../agent/commands.ts'
 import type { UsageReading } from '../agent/meter.ts'
 import type { Mode } from '../features/permissions.ts'
 import { STOPPED_MESSAGE } from '../agent/conversation.ts'
-import { contentOf } from '../agent/messages.ts'
+import { attachedTo, contentOf } from '../agent/messages.ts'
 
 /** A tool's output is cut to this many characters in an event: a client shows it, the model already has it whole. */
 const MAX_OUTPUT = 4_000
@@ -72,7 +72,7 @@ export interface ServiceState {
 
 /** What a client reads, in order of `seq`. */
 export type ServiceEvent = { seq: number } & (
-  | { type: 'user'; text: string; steer: boolean }
+  | { type: 'user'; text: string; files?: string[]; steer: boolean }
   | { type: 'thinking'; delta: string }
   | { type: 'text'; delta: string }
   | { type: 'tool_start'; id: string; name: string; args: string }
@@ -192,11 +192,18 @@ export function eventOf(e: RunEvent): Unnumbered | undefined {
       return { type: 'compacting', tokens: e.tokens }
     case 'compaction:end':
       return { type: 'compacted', before: e.before, after: e.after, error: e.error }
-    case 'step_end':
+    case 'step_end': {
       if (e.turn.kind !== 'input') {
         return undefined
       }
-      return { type: 'user', text: e.turn.messages.map(contentOf).join('\n'), steer: !e.turn.idle }
+      const files = e.turn.messages.flatMap(attachedTo)
+      return {
+        type: 'user',
+        text: e.turn.messages.map(contentOf).join('\n'),
+        ...(files.length > 0 && { files }),
+        steer: !e.turn.idle,
+      }
+    }
     default:
       return undefined
   }

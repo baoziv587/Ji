@@ -34,6 +34,7 @@ type Item struct {
 	Kind ItemKind
 	// The message, the reply's text, the thinking or the notice.
 	Text  string
+	Files []string
 	Steer bool
 	// A notice that something went wrong.
 	Failed bool
@@ -162,7 +163,7 @@ type Transcript struct {
 func (t *Transcript) Apply(e agent.Event) (unfinished bool) {
 	switch e.Type {
 	case "user":
-		t.add(&Item{Kind: KindUser, Text: e.Text, Steer: e.Steer})
+		t.add(&Item{Kind: KindUser, Text: e.Text, Files: e.Files, Steer: e.Steer})
 		t.doing("Waiting")
 	case "text":
 		t.extend(KindText, e.Delta)

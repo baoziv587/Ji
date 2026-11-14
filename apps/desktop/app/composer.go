@@ -2,7 +2,6 @@ package app
 
 import (
 	"path/filepath"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/plugins/glass"
@@ -18,10 +17,12 @@ import (
 
 // composer is where the next message is typed, under the terminal's status
 // line: what the reply does, the mode and the keys that work now. The two
-// share one pane of glass, the text area with the gauge of the usage and
-// the buttons that send and stop under it. The
-// menu of commands opens over the conversation as a `/` is typed.
-func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
+// share one pane of glass, the files attached over the text area, the
+// gauge of the usage and the buttons that attach, send and stop under it.
+// The menu of commands opens over the conversation as a `/` is typed. A
+// session not yet begun has no status line, but for the menu's keys and
+// what went wrong: its mode is under the pane, with its folder and branch.
+func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView, empty bool) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
 	st := view.t.State
@@ -63,10 +64,21 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 				Border(1, p.Input).
 				Material(glass.Blur{Radius: 12}).
 				Transition(components.ColorTransition)
+			if empty {
+				pane.Padding(12, 12, 8).Background(p.Card.Alpha(0.6))
+			}
+			// Before the session begins, only for the menu's keys and what went wrong
+			statusShown := !empty || len(entries) > 0 || a.link.problem != "" || a.failure != ""
 			pane.Children(func() {
-				a.statusLine(c, s, view, entries)
+				if statusShown {
+					a.statusLine(c, s, view, entries)
+				}
+				a.attachments(c, view)
 				placeholder := "Ask anything, or type / for commands"
-				if st.Replying {
+				switch {
+				case view.dropping:
+					placeholder = "Drop the files to attach them"
+				case st.Replying:
 					placeholder = "Steer the reply: it reads this after the step in progress"
 				}
 				// The menu's keys, Enter and Shift+Tab, before the text area takes
@@ -87,6 +99,19 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					area.SetTextSelection(runeCount(view.draft), runeCount(view.draft))
 				}
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					if a.ChooseFiles != nil {
+						attach := components.ButtonStyle{
+							Variant: components.Ghost,
+							Size:    components.SizeIconExtraSmall,
+							Icon:    icons.Paperclip,
+						}
+						if components.Button(c, "", attach).
+							Label("Attach files").
+							Tooltip("Attach files, or drop them here").
+							Clicked() {
+							a.chooseFiles(view)
+						}
+					}
 					usageGauge(c, st.Usage, &view.usageOpen, &view.usageDrain)
 					ui.Box(c).Grow(1)
 					a.modelControls(c, s, view)
@@ -106,7 +131,12 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					if st.Replying {
 						label = "Steer"
 					}
-					if components.Button(c, "", components.ButtonStyle{Size: components.SizeIconExtraSmall, Icon: icons.ArrowUp, Disabled: strings.TrimSpace(view.draft) == ""}).
+					send := components.ButtonStyle{
+						Size:     components.SizeIconExtraSmall,
+						Icon:     icons.ArrowUp,
+						Disabled: !view.sendable(),
+					}
+					if components.Button(c, "", send).
 						Radius(999).
 						Label(label).
 						Tooltip(label + " (↵)").
@@ -115,10 +145,10 @@ func (a *App) composer(c *ui.Context, s agent.Session, view *sessionView) {
 					}
 				})
 			})
-			if pane.FocusWithin() {
+			if pane.FocusWithin() || view.dropping {
 				pane.Border(1, p.Ring).Shadow(0, 0, 0, 3, p.Ring.Alpha(0.25))
 			}
-			a.composerMeta(c, s)
+			a.composerMeta(c, s, view, empty)
 
 			// Esc closes the menu and the inspector first
 			if st.Replying && len(entries) == 0 && view.t.Inspected == nil &&
@@ -208,8 +238,8 @@ func (a *App) modelControls(c *ui.Context, s agent.Session, view *sessionView) {
 }
 
 // composerMeta is where the session works, under the input: its folder,
-// and the branch checked out there.
-func (a *App) composerMeta(c *ui.Context, s agent.Session) {
+// the branch checked out there and, before the session begins, its mode.
+func (a *App) composerMeta(c *ui.Context, s agent.Session, view *sessionView, empty bool) {
 	ui.Row(c).Height(20).Padding(0, 12).Gap(16).AlignItems(ui.Center).Children(func() {
 		metaLine(c, icons.Folder, format.ShortPath(s.Root)).MinWidth(0).Shrink(1).Tooltip(s.Root)
 		ui.Box(c).Grow(1)
@@ -218,6 +248,9 @@ func (a *App) composerMeta(c *ui.Context, s agent.Session) {
 				MinWidth(0).
 				Shrink(0).
 				Tooltip("The branch checked out in the folder")
+		}
+		if empty && view.t.State.Mode != "" {
+			a.modeButton(c, s, view, true)
 		}
 	})
 }

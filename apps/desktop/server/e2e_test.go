@@ -47,6 +47,7 @@ func TestEndToEnd(t *testing.T) {
 		ctx,
 		session.ID,
 		"Use the bash tool to run exactly: echo hi > hello.txt. Then reply with the single word: done",
+		nil,
 	); err != nil {
 		t.Fatal(err)
 	}

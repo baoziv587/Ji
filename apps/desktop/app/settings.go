@@ -27,8 +27,8 @@ type Settings struct {
 	// ContentTransparency is as much of the glass behind the conversation
 	// and the settings, kept as Transparency is.
 	ContentTransparency float64 `json:"contentTransparency"`
-	// Approvals is every session's mode: ask, auto or yolo. Unset, each
-	// starts in the service's own.
+	// Approvals is every session's mode: ask, auto or yolo; ask unless
+	// another is chosen. Unset, each starts in the service's own.
 	Approvals string `json:"approvals,omitempty"`
 	// Model is what a new session starts on, "provider/id". Unset, the
 	// service's own, its --model.
@@ -37,6 +37,7 @@ type Settings struct {
 
 // DefaultSettings are the settings of a first run, under those kept.
 var DefaultSettings = Settings{
+	Approvals:           "ask",
 	Transparency:        transparencyStandard,
 	ContentTransparency: transparencyStandard,
 }
@@ -51,11 +52,33 @@ var appearances = []struct {
 	{components.Dark, "Dark", icons.Moon},
 }
 
-// approvals are the modes, in the terminal's words.
-var approvals = []struct{ mode, note string }{
-	{"ask", "Every command, file read and change waits for a yes."},
-	{"auto", "Files inside the folder are approved; commands still wait for a yes."},
-	{"yolo", "Nothing waits for a yes."},
+// sessionMode is a mode of the sessions as the window names it: the
+// terminal's yolo is Full access.
+type sessionMode struct {
+	mode, name, note string
+	icon             *ui.SVG
+}
+
+var modes = []sessionMode{
+	{"ask", "Ask", "Every command, file read and change waits for a yes.", icons.Shield},
+	{
+		"auto",
+		"Auto",
+		"Files inside the folder are approved; commands still wait for a yes.",
+		icons.ShieldCheck,
+	},
+	{"yolo", "Full access", "Nothing waits for a yes.", icons.ShieldOff},
+}
+
+// modeNamed is the mode by its value; one the window does not know goes by
+// that.
+func modeNamed(mode string) sessionMode {
+	for _, m := range modes {
+		if m.mode == mode {
+			return m
+		}
+	}
+	return sessionMode{mode: mode, name: mode, icon: icons.Shield}
 }
 
 const (
@@ -131,8 +154,9 @@ func (a *App) applyApprovals() {
 		a.update(func() {
 			// Not connected, it is set again once the window is
 			if err != nil && a.link.up {
+				name := modeNamed(mode).name
 				a.toast = &toast{
-					message: "Could not set approvals to " + mode + ": " + err.Error(),
+					message: "Could not set approvals to " + name + ": " + err.Error(),
 					action:  "Retry",
 					run:     a.applyApprovals,
 				}
@@ -478,18 +502,19 @@ func (a *App) approvals(c *ui.Context) {
 	ui.Text(c, note).TextColor(p.MutedForeground)
 
 	ui.RadioGroup(c, func() {
-		for _, m := range approvals {
-			a.approval(c.Key(m.mode), m.mode, m.note)
+		for _, m := range modes {
+			a.approval(c.Key(m.mode), m)
 		}
 	}).Gap(8).Label("Approvals")
 }
 
 // approval is a mode to choose, as a card: its radio, its name and what
-// it asks about. Yolo, chosen, is in the warning color, as the status
-// line shows it, and says what it lets through.
-func (a *App) approval(c *ui.Context, mode, note string) {
+// it asks about. Full access, chosen, is in the warning color, as the
+// status line shows it, and says what it lets through.
+func (a *App) approval(c *ui.Context, m sessionMode) {
 	t := c.Theme()
 	p := components.PaletteOf(t)
+	mode := m.mode
 	chosen := a.Settings.Approvals == mode
 	mark := p.Primary
 	if mode == "yolo" {
@@ -497,7 +522,7 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 	}
 
 	row := ui.RadioBase(c, &a.Settings.Approvals, mode).
-		Label(mode).
+		Label(m.name).
 		Gap(12).
 		Padding(12, 16).
 		AlignItems(ui.Start).
@@ -534,8 +559,8 @@ func (a *App) approval(c *ui.Context, mode, note string) {
 			})
 
 		ui.Column(c).Grow(1).Shrink(1).Gap(2).Children(func() {
-			ui.Text(c, mode).FontWeight(500)
-			ui.Text(c, note).TextColor(p.MutedForeground)
+			ui.Text(c, m.name).FontWeight(500)
+			ui.Text(c, m.note).TextColor(p.MutedForeground)
 			if chosen && mode == "yolo" {
 				ui.Row(c).Gap(6).Margin(6, 0, 0).AlignItems(ui.Center).Children(func() {
 					ui.Icon(c, icons.TriangleAlert).FontSize(14).TextColor(p.Warning)

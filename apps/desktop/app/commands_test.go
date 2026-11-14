@@ -205,7 +205,7 @@ func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 	tt := ui.NewTester(a.View, 1100, 760)
 
 	for _, text := range []string{
-		"Running bash", "auto", "allows commands", "2 queued", "steers",
+		"Running bash", "Auto", "allows commands", "2 queued", "steers",
 		"75%", "$0.01", "cache 86%",
 	} {
 		if !tt.HasText(text) {

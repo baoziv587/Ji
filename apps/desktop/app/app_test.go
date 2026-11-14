@@ -30,6 +30,7 @@ type fakeAgent struct {
 	// The model each session was created on, in turn
 	createdOn []string
 	sent      map[string][]string
+	files     []string
 	commands  map[string][]string
 	answers   map[string][][]string
 	archived  []string
@@ -85,8 +86,9 @@ func (f *fakeAgent) State(
 ) (agent.State, error) {
 	return agent.State{}, nil
 }
-func (f *fakeAgent) Send(_ context.Context, id, text string) (string, error) {
+func (f *fakeAgent) Send(_ context.Context, id, text string, files []string) (string, error) {
 	f.sent[id] = append(f.sent[id], text)
+	f.files = append(f.files, files...)
 	return "started", nil
 }
 func (f *fakeAgent) Command(_ context.Context, id, line string) (string, error) {
@@ -772,6 +774,10 @@ func TestModeAndStopActOnTheChosenSession(t *testing.T) {
 	if err := tt.Click("Mode"); err != nil {
 		t.Fatal(err)
 	}
+	tt.Frame()
+	if err := tt.Click("Auto"); err != nil {
+		t.Fatalf("%v: %q", err, tt.Texts())
+	}
 
 	if f.modes != 1 || a.views["a"].t.State.Mode != "auto" ||
 		!reflect.DeepEqual(f.stopped, []string{"a"}) {
@@ -911,6 +917,18 @@ func TestSnapshot(t *testing.T) {
 	}
 	if os.Getenv("EMPTY") == "1" {
 		a.Select("c")
+	}
+	a.ChooseFiles = func() ([]string, error) { return nil, nil }
+	if os.Getenv("ATTACH") == "1" {
+		shot, notes, _ := files(t)
+		a.attach(a.views[a.selected], shot, notes, "/code/web/go.mod", "/code/web/CHANGELOG")
+		if os.Getenv("EMPTY") != "1" {
+			a.views[a.selected].t.Apply(agent.Event{
+				Type:  "user",
+				Text:  "Why does the form break here?",
+				Files: []string{"/code/web/shot.png", "/code/web/trace.log"},
+			})
+		}
 	}
 	a.branches["/code/web"] = "main"
 	a.branches["/code/api"] = "rate-limits"
@@ -1194,6 +1212,7 @@ func TestSettingsChooseAppearanceAndTheme(t *testing.T) {
 	want := Settings{
 		Appearance:          components.Dark,
 		Theme:               "Lagoon",
+		Approvals:           "ask",
 		Transparency:        transparencyStandard,
 		ContentTransparency: transparencyStandard,
 	}
@@ -1248,12 +1267,12 @@ func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
 	a.OpenSettings()
 	tt.Frame()
 
-	if !tt.HasText(
-		"None chosen: each session starts as the service does, in ask unless it was started with --yolo.",
-	) {
-		t.Errorf("no note while none is chosen in %q", tt.Texts())
+	// Ask until another is chosen, which every session is set to on connecting
+	if a.Settings.Approvals != "ask" || !reflect.DeepEqual(f.everyMode, []string{"ask"}) {
+		t.Errorf("approvals %q, set %v: ask is the default", a.Settings.Approvals, f.everyMode)
 	}
-	if err := tt.Click("yolo"); err != nil {
+	f.everyMode = nil
+	if err := tt.Click("Full access"); err != nil {
 		t.Fatal(err)
 	}
 	tt.Frame()
@@ -1278,12 +1297,13 @@ func TestApprovalsSetEverySessionAndYoloIsLeftForAsk(t *testing.T) {
 	a.Select("a")
 	a.apply(a.views["a"], agent.Event{Type: "state", State: &agent.State{ID: "a", Mode: "yolo"}})
 	tt.Frame()
-	if err := tt.Click("Mode"); err != nil {
-		t.Fatal(err)
+	if !tt.HasText("Full access") {
+		t.Errorf("yolo does not show as Full access: %q", tt.Texts())
 	}
+	tt.Key(ui.Shift, ui.KeyTab)
 	if a.views["a"].t.State.Mode != "ask" {
 		t.Errorf(
-			"mode %q: the status line takes a session out of yolo, back to ask",
+			"mode %q: ⇧⇥ takes a session out of yolo, back to ask",
 			a.views["a"].t.State.Mode,
 		)
 	}

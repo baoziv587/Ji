@@ -199,9 +199,10 @@ type Event struct {
 	Seq  int    `json:"seq"`
 	Type string `json:"type"`
 
-	Text  string `json:"text,omitempty"`
-	Steer bool   `json:"steer,omitempty"`
-	Delta string `json:"delta,omitempty"`
+	Text  string   `json:"text,omitempty"`
+	Files []string `json:"files,omitempty"`
+	Steer bool     `json:"steer,omitempty"`
+	Delta string   `json:"delta,omitempty"`
 
 	ID     string `json:"id,omitempty"`
 	Name   string `json:"name,omitempty"`
@@ -251,8 +252,9 @@ type Agent interface {
 
 	State(ctx context.Context, id string) (State, error)
 	// Send starts a reply, or steers the one in progress: "started" or
-	// "steered".
-	Send(ctx context.Context, id, text string) (string, error)
+	// "steered". Files are attached by their paths: the agent reads them
+	// with its tools, and a model that takes images sees the pictures.
+	Send(ctx context.Context, id, text string, files []string) (string, error)
 	// Command runs the command a line names, as the terminal does: "ran",
 	// or what Send says for a skill's, which goes to the model.
 	Command(ctx context.Context, id, line string) (string, error)

@@ -14,7 +14,7 @@ import type { ServiceState } from './events.ts'
 import type { AgentService } from './service.ts'
 import type { SessionMeta, SessionStore } from './store.ts'
 import { statSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { findModel } from '@ji.dev/llm'
 
 /** idle, replying, waiting for an answer, or its last reply failed. */
@@ -103,7 +103,7 @@ export class SessionHub {
     this.opened.set(id, service)
     service.subscribe(e => {
       if (e.type === 'user') {
-        this.used(id, e.text)
+        this.used(id, topicOf(e.text, e.files))
       }
       if (e.type === 'state' && e.state.model !== this.metaOf(id).model) {
         this.update(this.metaOf(id), { model: e.state.model })
@@ -226,6 +226,14 @@ function statusOf(state: ServiceState | undefined): SessionStatus {
     return 'running'
   }
   return state.outcome === 'failed' ? 'failed' : 'idle'
+}
+
+/** What a message is about: its text, or the name of its first file when it has only files. */
+function topicOf(text: string, files: readonly string[] = []): string {
+  if (text.trim() === '' && files.length > 0) {
+    return basename(files[0] ?? '')
+  }
+  return text
 }
 
 function titleOf(text: string): string {

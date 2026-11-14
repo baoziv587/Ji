@@ -29,6 +29,9 @@ type App struct {
 	// ChooseFolder asks for a folder to start a session in: "" when the
 	// person cancels. Nil leaves the choice out.
 	ChooseFolder func() (string, error)
+	// ChooseFiles asks for files to attach to a message: none when the
+	// person cancels. Nil leaves attaching out, but for dropping them.
+	ChooseFiles func() ([]string, error)
 	// Quit ends the app, as /exit does in the terminal. Nil leaves /exit to
 	// the service, which says there is nothing to quit.
 	Quit func()

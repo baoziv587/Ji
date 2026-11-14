@@ -28,7 +28,9 @@ import { errorMessage } from '@ji.dev/utils'
 import { contextLimitOf, startAgent, startOn, toolNamesOf } from '../agent/agent.ts'
 import { createCommands, runCommand } from '../agent/commands.ts'
 import { Conversation } from '../agent/conversation.ts'
+import { messageWith } from '../agent/messages.ts'
 import { UsageMeter } from '../agent/meter.ts'
+import { readAttachments } from './attachments.ts'
 import { EventLog, eventOf, spentOf, viewOf } from './events.ts'
 import { loginInteraction } from './login.ts'
 import { PendingQuestions } from './questions.ts'
@@ -163,8 +165,11 @@ export class AgentService {
     return this.log.watch(watcher)
   }
 
-  /** Whether the message started a reply or steers the one in progress. Throws when the model has no key. */
-  async send(text: string): Promise<'started' | 'steered'> {
+  /**
+   * Whether the message started a reply or steers the one in progress; `files` are attached to it by their paths.
+   * Throws when the model has no key, or a file is not there.
+   */
+  async send(text: string, files: readonly string[] = []): Promise<'started' | 'steered'> {
     const { model } = this.conversation.agent
     if (!(await model.hasKey())) {
       throw new Error(
@@ -172,7 +177,8 @@ export class AgentService {
       )
     }
 
-    const run = this.conversation.send(text)
+    const attached = await readAttachments(files, model.input.includes('image'))
+    const run = this.conversation.send(messageWith(text, attached))
     this.emitState()
 
     if (run === undefined) {

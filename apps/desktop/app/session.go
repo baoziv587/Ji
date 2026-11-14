@@ -46,6 +46,16 @@ type sessionView struct {
 	usageDrain components.Drain
 	// The picker of the session's model.
 	models modelPicker
+	// The files attached to the next message, and whether files from
+	// another app are dragged over the session.
+	files    []attachment
+	dropping bool
+}
+
+// sendable is whether there is a message to send: text typed, or a file
+// attached.
+func (v *sessionView) sendable() bool {
+	return strings.TrimSpace(v.draft) != "" || len(v.files) > 0
 }
 
 // restore puts back what was typed and not sent, unless something else
