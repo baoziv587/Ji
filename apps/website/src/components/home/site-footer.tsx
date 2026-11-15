@@ -65,11 +65,6 @@ export function SiteFooter() {
                 GitHub
               </a>
             </li>
-            <li>
-              <Link to="/brand" className={linkClass}>
-                Brand assets
-              </Link>
-            </li>
           </ul>
         </div>
       </div>

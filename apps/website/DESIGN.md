@@ -11,6 +11,7 @@ colors:
   aged-paper: 'oklch(0.77 0.004 85)'
   ash-paper: 'oklch(0.66 0.004 85)'
   qinglv-mineral: 'oklch(0.8 0.1 168)'
+  cinnabar: 'oklch(0.55 0.15 35)'
   ochre: 'oklch(0.75 0.09 58)'
   gamboge: 'oklch(0.84 0.095 90)'
   azurite: 'oklch(0.77 0.08 245)'
@@ -110,7 +111,7 @@ components:
 
 **Creative North Star: "The Ink Stone 砚台"**
 
-The page is ground ink. Five ink tones, from scorched to clear, do the work that colours do elsewhere: they separate sections, hold code, draw frames and mark structure. Text is paper laid on that ink. One mineral colour, qinglv 石青绿, is the drop of pigment on the stone, and it means exactly one thing: a hook. Inside code wells, four more mineral pigments from Chinese painting separate token kinds, and they never leave the well. Depth comes from how thick the ink is, never from light or shadow.
+The page is ground ink. Five ink tones, from scorched to clear, do the work that colours do elsewhere: they separate sections, hold code, draw frames and mark structure. Text is paper laid on that ink. One mineral colour, qinglv 石青绿, is the drop of pigment on the stone, and it means exactly one thing: a hook. The seal is the one other colour, stamped in cinnabar 朱砂 as seals always are. Inside code wells, four more mineral pigments from Chinese painting separate token kinds, and they never leave the well. Depth comes from how thick the ink is, never from light or shadow.
 
 The system is carved, exact and unhurried. Its reference is a stele rubbing (碑帖拓片): the JI logo is the etched mark pulled in paper white, with the cuts left open so the ink shows through. It closes the page in the footer like a colophon; the first screen belongs to code. Density is low and deliberate. Sections breathe on a fluid rhythm (`spacing.section`), content sits in an 80rem measure, and body copy stays under 42rem. The only Chinese on the page is a meaning, never an ornament: 极, 极简, and the seal glyph, which is drawn as a vector so no CJK font is loaded.
 
@@ -126,11 +127,15 @@ It rejects, by name: AI product templates (purple/blue gradients, glowing grids,
 
 ## 2. Colors: The Grinding Palette
 
-Five ink tones, three paper tones, one hook mineral, and four syntax pigments that live only in code. The ink is a natural dark: near-neutral gray (hue 260, chroma 0.005 or less), soft rather than black, never `#000`. The paper is a near-neutral white (hue 85, chroma 0.004). Qinglv, at chroma 0.1, is the only saturated hue outside code. Nothing is pure black or pure white.
+Five ink tones, three paper tones, one hook mineral, the cinnabar of the seal, and four syntax pigments that live only in code. The ink is a natural dark: near-neutral gray (hue 260, chroma 0.005 or less), soft rather than black, never `#000`. The paper is a near-neutral white (hue 85, chroma 0.004). Qinglv, at chroma 0.1, is the only saturated hue outside code and the seal. Nothing is pure black or pure white.
 
 ### Primary
 
-- **Qinglv Mineral 石青绿** (`qinglv-mineral`): the only hue outside code. Hook helpers (bold, in code) in highlighted code, the selected hook tab underline and label, the active path and frame in the hook diagram, and the focus ring. Contrast 9.8:1 on thick ink.
+- **Qinglv Mineral 石青绿** (`qinglv-mineral`): the only hue outside code. Hook helpers (bold, in code) in highlighted code, the selected hook tab underline and label, the active path and frame in the hook diagram, and the focus ring. Contrast 9.8:1 on thick ink. In the docs, every inline code span is qinglv as well (see the One Pigment Rule).
+
+### The seal
+
+- **Cinnabar 朱砂** (`cinnabar`): the 极 seal and the favicon, nothing else. A 白文 seal: a cinnabar block with the glyph cut out in near-white paper (`#f4f0e7`, 4.6:1 on cinnabar). The same impression works on both grounds (3.4:1 against thick ink, 4.8:1 against rice paper), so there is one `seal.svg`.
 
 ### Secondary: syntax pigments
 
@@ -144,7 +149,7 @@ Used only by the Shiki theme, inside scorched-ink code wells. All read at 8:1 or
 ### Neutral
 
 - **Scorched Ink 焦墨** (`scorched-ink`): the deepest well. Code blocks, inline code, the footer. Ink you look _into_.
-- **Thick Ink 浓墨** (`thick-ink`): the page ground and the default background of every section. Also the text colour on paper buttons and the seal glyph.
+- **Thick Ink 浓墨** (`thick-ink`): the page ground and the default background of every section. Also the text colour on paper buttons.
 - **Heavy Ink 重墨** (`heavy-ink`): raised bands that need to be told apart from the ground: the hook-model band and the "Run it offline" band. Also the icon-button hover fill.
 - **Light Ink 淡墨** (`light-ink`): every hairline. Section borders, row dividers in the capability list, the tab rail, code-block rings (at 60%).
 - **Clear Ink 清墨** (`clear-ink`): the faintest structure. Link underlines at rest, dashed preset frames, inactive diagram strokes, hover borders on tabs.
@@ -154,13 +159,15 @@ Used only by the Shiki theme, inside scorched-ink code wells. All read at 8:1 or
 
 ### Light theme: ink on paper
 
-The page follows the system colour scheme and offers a sun/moon toggle beside the seal; a manual choice is stored in `localStorage` (`ji-theme`). An inline script in `__root.tsx` sets `data-theme` on `<html>` before first paint; without JavaScript the page stays on ink. The token names are roles, not lightness: `ink-*` stay surfaces and rules, `paper-*` stay text, and `:root[data-theme='light']` in `src/styles.css` swaps their values (ground `oklch(0.972 0.008 85)`, warm rice paper; text `oklch(0.21 0.004 260)`, a near-neutral ink). Wells stay darker than the ground, so the Ink Order Rule holds. Qinglv and the syntax pigments are re-cut darker for paper (5:1 or better on the well). Assets made for one ground use `.dark-only` / `.light-only`: the seal swaps to `seal-ink.svg`, and the footer rubbing is pulled in ink (`.rubbing`).
+The page follows the system colour scheme and offers a sun/moon toggle beside the seal; a manual choice is stored in `localStorage` (`ji-theme`). An inline script in `__root.tsx` sets `data-theme` on `<html>` before first paint; without JavaScript the page stays on ink. The token names are roles, not lightness: `ink-*` stay surfaces and rules, `paper-*` stay text, and `:root[data-theme='light']` in `src/styles.css` swaps their values (ground `oklch(0.972 0.008 85)`, warm rice paper; text `oklch(0.21 0.004 260)`, a near-neutral ink). Wells stay darker than the ground, so the Ink Order Rule holds. Qinglv and the syntax pigments are re-cut darker for paper (4.8:1 or better on the well). Marks made for one ground use `.dark-only` / `.light-only` (the sun and moon of the toggle), and the footer rubbing is pulled in ink (`.rubbing`). The cinnabar seal needs no swap.
 
 ### Named Rules
 
-**The One Pigment Rule.** Qinglv marks a hook and nothing else. Never on a CTA, a heading, a link, a badge or a decoration. If removing the hook concept would leave qinglv on the page, that use is wrong. In code, hooks are also bold, so they outrank every syntax pigment.
+**The One Pigment Rule.** Qinglv marks a hook and nothing else. Never on a CTA, a heading, a link, a badge or a decoration. If removing the hook concept would leave qinglv on the page, that use is wrong. In code, hooks are also bold, so they outrank every syntax pigment. One exception, set by type rather than by meaning: in the docs, inline code (Markdown backticks) is qinglv, so API names in prose and tables stand out from the aged-paper text. It is coloured by the Markdown type, never from a word list.
 
 **The Ink Order Rule.** Lighter ink is closer. A surface that sits _inside_ another is darker (code well in scorched ink inside a thick-ink section); a band that sits _beside_ the ground is lighter (heavy ink). Never put scorched ink directly against scorched ink: a code well inside a footer-coloured band disappears.
+
+**The Seal Rule.** Cinnabar is the seal's ink and appears nowhere else: never on a link, a button, a heading, an error or a decoration. One seal per screen, so the page never turns red-and-gold.
 
 **The Code Ink Rule.** Syntax pigments stay inside code wells; never use ochre, gamboge, azurite or rouge for page text, links, diagrams or decoration. Names stay in rubbing paper and punctuation and operators recede into aged paper, so colour lands on meaning, not on structure. The Shiki theme in `vite-plugins/highlight.ts` only references `var(--code-*)`; change colours in `src/styles.css`, never in the theme.
 
@@ -220,7 +227,7 @@ Firm and quiet. There is one filled button per screen.
 ### Docs pages
 
 - Three columns on wide screens: the doc list (12rem, sticky), the article (max 48rem), and "On this page" (13rem, sticky, from 1280px). Below 1024px the doc list becomes a wrapped row above the article, under a hairline.
-- The article follows the home type scale: a display-weight title, `h2` as a headline with a light-ink rule above it, body in aged paper with paper for links, strong text and inline code. Code blocks are the same scorched-ink wells as the code prints, without side notes. Tables are ruled with light-ink hairlines only.
+- The article follows the home type scale: a display-weight title, `h2` as a headline with a light-ink rule above it, body in aged paper with paper for links and strong text, and qinglv for inline code. Code blocks are the same scorched-ink wells as the code prints, without side notes. Tables are ruled with light-ink hairlines only.
 - Previous and next sit under the article, divided by a hairline; links that leave the site carry the up-right arrow.
 
 ### Hook tabs (signature)
@@ -242,7 +249,7 @@ Firm and quiet. There is one filled button per screen.
 
 ### Inline code
 
-- Scorched-ink chip, 2px corners, 2px 6px padding, never wraps internally.
+- Scorched-ink chip, 2px corners, 2px 6px padding, never wraps internally. Text is rubbing paper on the home page and qinglv in the docs (4.85:1 on the light well).
 
 ### Hero
 

@@ -37,6 +37,8 @@ export default defineConfig({
       pages: [
         // Listed explicitly so a doc is published even if nothing links to it yet.
         ...listDocs(docsOptions).map(name => ({ path: pathOfDoc(name) })),
+        // Not linked from any page, but still published at its URL.
+        { path: '/brand' },
         // The static server answers unknown paths with this page (see nginx.conf).
         { path: '/404', prerender: { enabled: true, outputPath: '/404', autoSubfolderIndex: false } },
       ],

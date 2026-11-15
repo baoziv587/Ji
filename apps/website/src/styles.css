@@ -13,6 +13,7 @@
  * The light theme swaps the values (dark text on rubbing paper), so components never branch.
  * The ink is a natural, near-neutral dark gray, never #000; the paper is a near-neutral white.
  * Qinglv is the only saturated hue outside code, so hooks stand out against the neutral ink.
+ * The seal (public/seal.svg) is the one other colour: cinnabar, oklch(0.55 0.15 35).
  * Contrast on ink-1, dark: paper 14.5, paper-dim 8.5, paper-faint 5.6, qinglv 9.8.
  * Contrast on ink-1, light: paper 16.3, paper-dim 8.5, paper-faint 5.8, qinglv 5.5.
  */
@@ -74,7 +75,7 @@
   --code-constant: oklch(0.5 0.14 15);
 }
 
-/* Assets drawn for one ground, e.g. the paper seal on ink and the ink seal on paper. */
+/* Marks drawn for one ground, e.g. the sun and moon in the theme toggle. */
 :root:not([data-theme='light']) .light-only,
 :root[data-theme='light'] .dark-only {
   display: none;
@@ -303,7 +304,8 @@
   padding: 0.125rem 0.375rem;
   border-radius: 2px;
   background: var(--ink-0);
-  color: var(--paper);
+  /* Every inline code span is qinglv: the colour comes from the Markdown type, never from a word list. */
+  color: var(--qinglv);
   font-family: var(--font-mono);
   font-size: 0.875em;
 }

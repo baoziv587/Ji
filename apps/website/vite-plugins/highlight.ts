@@ -84,6 +84,7 @@ function shown(source: string): string {
 }
 
 const HIGHLIGHT_LANGS = ['ts', 'bash'] as const
+const SUPPORTED_LANGS: ReadonlySet<string> = new Set(HIGHLIGHT_LANGS)
 
 let highlighter: ReturnType<typeof createHighlighter> | undefined
 
@@ -94,10 +95,9 @@ export async function codeHighlighter() {
     langs: [...HIGHLIGHT_LANGS],
   })
   const instance = await highlighter
-  const supported = new Set<string>(HIGHLIGHT_LANGS)
   return (code: string, lang: string) =>
     instance.codeToHtml(code, {
-      lang: supported.has(lang) ? lang : 'text',
+      lang: SUPPORTED_LANGS.has(lang) ? lang : 'text',
       theme: 'ink',
       transformers: [
         {
