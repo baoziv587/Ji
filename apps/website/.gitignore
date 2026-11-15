@@ -1,0 +1,4 @@
+dist/
+.tanstack/
+.output/
+.env

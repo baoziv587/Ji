@@ -1,0 +1,27 @@
+{
+  "id": "paper",
+  "name": "纸白拓片",
+  "fill": "#ece5d9",
+  "source": "assets/logos/indigo.svg",
+  "sourceSha256": "3cbd7d89c76e599a946b2c0e8a6bf004582a159dce56e796ba0284958845d81f",
+  "note": "For ink backgrounds. Etched gaps stay transparent so the page ink shows through, like a stone rubbing.",
+  "svgSize": {
+    "width": 543,
+    "height": 669
+  },
+  "webpSize": {
+    "width": 1086,
+    "height": 1338
+  },
+  "verification": {
+    "geometryUnchanged": true,
+    "alphaUnchanged": true,
+    "webpMatchesSvg": true,
+    "transparentPixels": 887233
+  },
+  "thumbnail": {
+    "file": "paper-288.webp",
+    "width": 234,
+    "height": 288
+  }
+}

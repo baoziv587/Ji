@@ -1,0 +1,40 @@
+{
+  "id": "qinglv",
+  "name": "青绿江山",
+  "stops": [
+    {
+      "offset": "0%",
+      "color": "#245a81"
+    },
+    {
+      "offset": "34%",
+      "color": "#207c88"
+    },
+    {
+      "offset": "68%",
+      "color": "#348e77"
+    },
+    {
+      "offset": "100%",
+      "color": "#79a46a"
+    }
+  ],
+  "source": "assets/logos/indigo.svg",
+  "sourceSha256": "3cbd7d89c76e599a946b2c0e8a6bf004582a159dce56e796ba0284958845d81f",
+  "inspiration": "https://www.dpm.org.cn/collection/paint/228354.html",
+  "note": "Interpretive mineral blue-green palette, not a measured color sampling of the painting.",
+  "svgSize": {
+    "width": 543,
+    "height": 669
+  },
+  "webpSize": {
+    "width": 1086,
+    "height": 1338
+  },
+  "verification": {
+    "geometryUnchanged": true,
+    "alphaUnchanged": true,
+    "webpMatchesSvg": true,
+    "transparentPixels": 887233
+  }
+}

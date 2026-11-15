@@ -1,0 +1,152 @@
+[
+  {
+    "id": "indigo",
+    "name": "靛蓝米白",
+    "source": "sources/logos/indigo.png",
+    "sourceSha256": "b0bcf6b1aa5518a1dcbe656c16ef1c6d5d6328f1ab1f47c10b1f934235068434",
+    "ink": "#233b63",
+    "referencePaper": "#f5eadb",
+    "svg": "assets/logos/indigo.svg",
+    "webp": "assets/logos/indigo.webp",
+    "crop": {
+      "left": 339,
+      "top": 232,
+      "width": 543,
+      "height": 669
+    },
+    "sourceBounds": {
+      "left": 363,
+      "top": 257,
+      "width": 495,
+      "height": 620
+    },
+    "svgSize": {
+      "width": 543,
+      "height": 669
+    },
+    "webpSize": {
+      "width": 1086,
+      "height": 1338
+    }
+  },
+  {
+    "id": "cinnabar",
+    "name": "朱砂米白",
+    "source": "sources/logos/cinnabar.png",
+    "sourceSha256": "6430f3a9bfcd0d74ff00ffc8ac20c698b357989250b378e3b9502eec918063b0",
+    "ink": "#a23e25",
+    "referencePaper": "#f5eadd",
+    "svg": "assets/logos/cinnabar.svg",
+    "webp": "assets/logos/cinnabar.webp",
+    "crop": {
+      "left": 339,
+      "top": 232,
+      "width": 543,
+      "height": 669
+    },
+    "sourceBounds": {
+      "left": 364,
+      "top": 256,
+      "width": 494,
+      "height": 621
+    },
+    "svgSize": {
+      "width": 543,
+      "height": 669
+    },
+    "webpSize": {
+      "width": 1086,
+      "height": 1338
+    }
+  },
+  {
+    "id": "pine",
+    "name": "松绿灰白",
+    "source": "sources/logos/pine.png",
+    "sourceSha256": "fdb2546d4e38d960e6f3ccc6ef8ad6a9653910bf1dac29f4af94dc4f30248219",
+    "ink": "#20453a",
+    "referencePaper": "#e9e9e1",
+    "svg": "assets/logos/pine.svg",
+    "webp": "assets/logos/pine.webp",
+    "crop": {
+      "left": 339,
+      "top": 232,
+      "width": 543,
+      "height": 669
+    },
+    "sourceBounds": {
+      "left": 363,
+      "top": 256,
+      "width": 495,
+      "height": 621
+    },
+    "svgSize": {
+      "width": 543,
+      "height": 669
+    },
+    "webpSize": {
+      "width": 1086,
+      "height": 1338
+    }
+  },
+  {
+    "id": "plum",
+    "name": "烟紫淡粉",
+    "source": "sources/logos/plum.png",
+    "sourceSha256": "05b6332999221dda90fe0ae8590145ada01bd3a383c0552ff7788e52247cf1f0",
+    "ink": "#59384b",
+    "referencePaper": "#f3e5e0",
+    "svg": "assets/logos/plum.svg",
+    "webp": "assets/logos/plum.webp",
+    "crop": {
+      "left": 339,
+      "top": 232,
+      "width": 543,
+      "height": 669
+    },
+    "sourceBounds": {
+      "left": 363,
+      "top": 257,
+      "width": 495,
+      "height": 620
+    },
+    "svgSize": {
+      "width": 543,
+      "height": 669
+    },
+    "webpSize": {
+      "width": 1086,
+      "height": 1338
+    }
+  },
+  {
+    "id": "charcoal",
+    "name": "暖黑燕麦",
+    "source": "sources/logos/charcoal.png",
+    "sourceSha256": "0cd77ff9157a25f842c91fb293abe6c1904d267e6d4a13325240945b13900383",
+    "ink": "#2f261d",
+    "referencePaper": "#eee2d1",
+    "svg": "assets/logos/charcoal.svg",
+    "webp": "assets/logos/charcoal.webp",
+    "crop": {
+      "left": 339,
+      "top": 232,
+      "width": 543,
+      "height": 669
+    },
+    "sourceBounds": {
+      "left": 363,
+      "top": 256,
+      "width": 495,
+      "height": 621
+    },
+    "svgSize": {
+      "width": 543,
+      "height": 669
+    },
+    "webpSize": {
+      "width": 1086,
+      "height": 1338
+    }
+  }
+]

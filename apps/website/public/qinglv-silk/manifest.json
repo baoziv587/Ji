@@ -1,0 +1,45 @@
+{
+  "source": "sources/qinglv-silk/approved.png",
+  "sourceSha256": "16771c41155975544b456416f6eb6f3f286d26b7644fd95f744e573e7c603127",
+  "crop": {
+    "left": 250,
+    "top": 159,
+    "width": 751,
+    "height": 925
+  },
+  "svg": {
+    "file": "logo.svg",
+    "width": 751,
+    "height": 925,
+    "pigmentColors": 256,
+    "vectorOnly": true
+  },
+  "webp": {
+    "file": "logo-1024.webp",
+    "width": 831,
+    "height": 1024,
+    "lossless": true,
+    "hasAlpha": true,
+    "matchesSvgRender": true,
+    "transparentPixels": 517751
+  },
+  "background": {
+    "base": "#e0bc7b",
+    "noise": "silk-noise.webp",
+    "opaqueAlternative": "silk-tile.webp",
+    "tileSize": 448,
+    "sourceSample": {
+      "left": 24,
+      "top": 24,
+      "width": 224,
+      "height": 224
+    },
+    "method": "mirrored original paper sample, decomposed into base color and RGBA overlay",
+    "maximumReconstructionError": 0
+  },
+  "limitations": [
+    "Vectorization changes fine pigment and etched details.",
+    "1024px is rendered from vectorized 1254px source; it does not recover new original detail.",
+    "The repeating tile reproduces the sampled paper, not the entire original background or hidden areas."
+  ]
+}

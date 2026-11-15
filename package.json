@@ -10,6 +10,7 @@
     "prepare": "husky",
     "demo": "pnpm --filter @ji.dev/demo start",
     "coding-agent": "pnpm --filter @ji.dev/coding-agent start",
+    "website": "pnpm --filter @ji.dev/website dev",
     "agent-server": "pnpm --filter @ji.dev/coding-agent serve",
     "desktop": "cd apps/desktop && go run .",
     "desktop:onboarding": "cd apps/desktop && go run . -onboarding",

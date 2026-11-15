@@ -3,6 +3,9 @@
   "workspaces": {
     ".": {
       "entry": [".agents/skills/*/scripts/*.{js,mjs,ts}"]
+    },
+    "apps/website": {
+      "ignoreDependencies": ["eslint-plugin-react-hooks", "sirv-cli"]
     }
   },
   "ignore": ["eval/**", "apps/desktop/{build,.mygo,resources/agent-server}/**"],
