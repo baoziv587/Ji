@@ -51,9 +51,9 @@ docker run --rm -p 8080:80 ji-website        # http://localhost:8080
 
 `public/` 原样复制到站点根路径：`public/logos/indigo.webp` 对应 `/logos/indigo.webp`。这里只放网站实际用到的成品：
 
-- `logos/`：七种配色的 SVG 与无损 WebP（`/brand` 的下载文件），页脚用的 `paper-288.webp` 缩略图，以及三份清单。
+- `logos/`：七种配色的 SVG 与无损 WebP（`/brand` 的下载文件），每种配色一张 234×288 的 `<id>-288.webp` 缩略图（页脚拓片和 `/brand` 顶部的跳跃动画用），以及三份清单。
 - `qinglv-silk/`：青绿绢本的 SVG、1024px WebP 和绢纹底图，以及清单。
-- `seal.svg`：「极」字朱砂印章（白文），深浅两种主题共用一张，同时用作 favicon。
+- `seal.svg`：「极」字朱砂印章（白文），深浅两种主题共用一张，同时用作 favicon，也是页头开场动画里被 JI 踩扁的那枚印章（`src/components/header-mark.tsx`，每次进入页面都会播放）。
 
 这些文件由 ji.dev 资源仓库的生成脚本产出（矢量化、换色、像素校验），原图和脚本都留在那边。更新资源时在那边重新生成，再把成品复制到这里。清单（`*.json`）在构建时由 Zod 校验，缺项或格式不对时构建会失败。
 

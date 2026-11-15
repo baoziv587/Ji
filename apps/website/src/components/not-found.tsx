@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { LogoHop } from '~/components/logo-hop'
 import { Seal } from '~/components/seal'
 
 export function NotFound() {
@@ -10,6 +11,7 @@ export function NotFound() {
       <Link to="/" className="text-paper underline decoration-ink-4 underline-offset-[0.3em] hover:decoration-paper">
         Back to ji.dev
       </Link>
+      <LogoHop className="mt-4 justify-start [--logo-h:clamp(3rem,8vw,4.5rem)]" />
     </main>
   )
 }

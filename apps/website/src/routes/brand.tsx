@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { ColorwaySection } from '~/components/colorway-section'
+import { LogoHop } from '~/components/logo-hop'
 import { SilkSection } from '~/components/silk-section'
 import { colorways } from '~/lib/catalog'
 
@@ -23,6 +24,7 @@ function Brand() {
             {colorways.length} 种配色，同一裁切范围。SVG 为纯矢量，WebP
             为无损透明图。全部仅保留图形，已移除纸底和底部文字。下方背景仅用于预览。
           </p>
+          <LogoHop ground="paper" className="mt-10" />
         </header>
         {colorways.map(colorway => (
           <ColorwaySection key={colorway.id} colorway={colorway} />

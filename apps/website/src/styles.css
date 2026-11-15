@@ -19,6 +19,8 @@
  */
 :root {
   color-scheme: dark;
+  /* Above the site header; tall enough for the header stomp to jump without leaving the page. */
+  --header-pt: clamp(3.5rem, 6vw, 4.5rem);
   --ink-0: oklch(0.18 0.003 260);
   --ink-1: oklch(0.215 0.003 260);
   --ink-2: oklch(0.25 0.004 260);
@@ -340,4 +342,713 @@
 }
 .doc hr {
   border-color: var(--ink-3);
+}
+
+/*
+ * The logo hop on /brand (src/components/logo-hop.tsx). One 2.8s round per mark:
+ * anticipation squash, stretch on take-off, ease-out rise, a short hang at the top,
+ * ease-in fall stretched for speed, a hard squash on impact with a ring on the ground,
+ * one small rebound, then a held rest while the others jump. Squash pivots on the
+ * feet (scaleX × scaleY stays near 1); the lean and the flip pivot on the body.
+ * Times below are milliseconds of the 2800ms round.
+ */
+/* In the components layer so utilities on the row (spacing, size, alignment) win. */
+@layer components {
+  .logo-hop {
+    /* One row at every width: a jump from a second row would land in the first. */
+    --logo-h: clamp(3.5rem, 11vw, 7.5rem);
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    gap: clamp(0.625rem, 3.5vw, 2.75rem);
+    padding: var(--logo-h) 0 1.5rem;
+  }
+}
+.logo-hop-cell {
+  position: relative;
+  height: var(--logo-h);
+  aspect-ratio: 234 / 288;
+}
+.logo-hop-body,
+.logo-hop-squash {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.logo-hop-body {
+  transform-origin: 50% 60%;
+}
+.logo-hop-squash {
+  transform-origin: 50% 100%;
+}
+.logo-hop-shadow,
+.logo-hop-ring {
+  position: absolute;
+  left: 50%;
+  bottom: -0.35rem;
+  width: 90%;
+  height: 0.7rem;
+  margin-left: -45%;
+  border-radius: 50%;
+}
+.logo-hop-shadow {
+  background: oklch(0.3 0.012 60 / 0.22);
+}
+.logo-hop-ring {
+  border: 1px solid oklch(0.3 0.012 60 / 0.5);
+  opacity: 0;
+}
+/* On the site's ink the shadow is a deeper ink and the ring a clear-ink line; on paper, as above. */
+.logo-hop--theme .logo-hop-shadow {
+  background: oklch(0.08 0.003 260 / 0.6);
+}
+.logo-hop--theme .logo-hop-ring {
+  border-color: var(--ink-4);
+}
+:root[data-theme='light'] .logo-hop--theme .logo-hop-shadow {
+  background: oklch(0.3 0.012 60 / 0.18);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .logo-hop-body,
+  .logo-hop-squash,
+  .logo-hop-shadow,
+  .logo-hop-ring {
+    /* Longhands: the build minifier turns a shorthand without a name into `animation: none`. */
+    animation-duration: 2.8s;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+    animation-delay: calc(var(--i) * 160ms);
+  }
+  .logo-hop-body {
+    animation-name: logo-hop-body;
+  }
+  .logo-hop-squash {
+    animation-name: logo-hop-squash;
+  }
+  .logo-hop-shadow {
+    animation-name: logo-hop-shadow;
+  }
+  .logo-hop-ring {
+    animation-name: logo-hop-ring;
+  }
+}
+
+/* Height and lean. Rest, take-off at 220, apex at 520, hang to 580, impact at 820, rebound to 940, down at 1010. */
+@keyframes logo-hop-body {
+  0%,
+  7.86% {
+    transform: translateY(0) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  18.57% {
+    transform: translateY(calc(var(--air) * -100%)) rotate(calc(var(--tilt) * -9deg + var(--turn) * -170deg));
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  }
+  20.71% {
+    transform: translateY(calc(var(--air) * -97%)) rotate(calc(var(--tilt) * -7deg + var(--turn) * -200deg));
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  29.29% {
+    transform: translateY(0) rotate(calc(var(--tilt) * 4deg + var(--turn) * -360deg));
+  }
+  31.43% {
+    transform: translateY(0) rotate(calc(var(--tilt) * 2deg + var(--turn) * -360deg));
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  33.57% {
+    transform: translateY(calc(var(--air) * -14%)) rotate(calc(var(--tilt) * -2deg + var(--turn) * -360deg));
+    animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5);
+  }
+  36.07%,
+  100% {
+    transform: translateY(0) rotate(calc(var(--turn) * -360deg));
+  }
+}
+
+/* Shape. Squash in 0–180, snap to stretch by 220, round by 390, stretch into the fall, squash at 880, settle by 1200. */
+@keyframes logo-hop-squash {
+  0% {
+    transform: scale(1, 1);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  6.43% {
+    transform: scale(1.16, 0.82);
+    animation-timing-function: cubic-bezier(0.5, 0, 1, 0.6);
+  }
+  7.86% {
+    transform: scale(0.86, 1.18);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+  }
+  14%,
+  23% {
+    transform: scale(1, 1);
+    animation-timing-function: cubic-bezier(0.6, 0, 1, 0.6);
+  }
+  29.29% {
+    transform: scale(0.88, 1.14);
+    animation-timing-function: cubic-bezier(0, 0.6, 0.4, 1);
+  }
+  31.43% {
+    transform: scale(1.3, 0.74);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1);
+  }
+  33.57% {
+    transform: scale(0.95, 1.06);
+  }
+  36.07% {
+    transform: scale(1, 1);
+    animation-timing-function: cubic-bezier(0, 0.6, 0.4, 1);
+  }
+  37.5% {
+    transform: scale(1.1, 0.9);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.3, 1);
+  }
+  40% {
+    transform: scale(0.97, 1.03);
+  }
+  42.86%,
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+/* The ground shadow shrinks and fades with height, and spreads under each squash. */
+@keyframes logo-hop-shadow {
+  0% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  6.43% {
+    transform: scaleX(1.12);
+    opacity: 1;
+  }
+  7.86% {
+    transform: scaleX(0.95);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  18.57%,
+  20.71% {
+    transform: scaleX(calc(1 - var(--air) * 0.55));
+    opacity: calc(1 - var(--air) * 0.7);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  29.29% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  31.43% {
+    transform: scaleX(1.3);
+    opacity: 1;
+  }
+  33.57% {
+    transform: scaleX(0.92);
+  }
+  36.07% {
+    transform: scaleX(1);
+  }
+  37.5% {
+    transform: scaleX(1.1);
+  }
+  42.86%,
+  100% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+/* A ring kicked up on impact, gone before the rebound lands. */
+@keyframes logo-hop-ring {
+  0%,
+  29.29% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(0.85);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  37.5%,
+  100% {
+    transform: scale(1.9, 1.6);
+    opacity: 0;
+  }
+}
+
+/*
+ * The header stomp (src/components/header-mark.tsx), on every visit, 4s after a 0.6s beat.
+ * A JI hops in from the right (two hops and a leap), lands on the seal and looks at it, then
+ * stomps: light, light, a held beat and a wound-up slam. Each stomp squashes the seal a step
+ * flatter (1 → 0.7 → 0.42 → 0.05); the JI rides the seal's top down on the same curve, so its
+ * feet never leave it. The flat seal spits two chips and slides away; the JI drops into place.
+ * Times below are milliseconds of the 4000ms run (percent × 40).
+ * Without the animation every part sits at its rest state: the seal hidden, the JI in place.
+ */
+.stomp {
+  --mark-h: 2.5rem;
+  /* Space above the JI while it stands on the seal; every jump from there is capped by it, so none leaves the page. */
+  --room: max(0px, var(--header-pt) - var(--mark-h) - 0.375rem);
+  /* Where the JI fades in, in its own widths; closer on phones so it starts clear of the nav. */
+  --start: 360%;
+  position: relative;
+  display: block;
+  height: var(--mark-h);
+  width: calc(var(--mark-h) * 234 / 288);
+}
+.stomp-seal,
+.stomp-ring,
+.stomp-chip,
+.stomp-x {
+  position: absolute;
+  bottom: 0;
+}
+.stomp-seal {
+  left: 0;
+  width: var(--mark-h);
+  height: var(--mark-h);
+  transform-origin: 50% 100%;
+  opacity: 0;
+}
+.stomp-seal img {
+  width: 100%;
+  height: 100%;
+}
+.stomp-x {
+  inset: 0;
+}
+.stomp-y,
+.stomp-body,
+.stomp-body > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* Leans pivot on the feet; squash pivots on the feet. */
+.stomp-y,
+.stomp-body {
+  transform-origin: 50% 100%;
+}
+.stomp-ring {
+  left: calc(var(--mark-h) / 2);
+  bottom: -0.25rem;
+  width: calc(var(--mark-h) * 1.6);
+  height: 0.5rem;
+  margin-left: calc(var(--mark-h) * -0.8);
+  border: 1px solid var(--paper-faint);
+  border-radius: 50%;
+  opacity: 0;
+}
+.stomp-chip {
+  left: calc(var(--mark-h) / 2 - 2px);
+  width: 4px;
+  height: 3px;
+  border-radius: 1px;
+  background: #b8492e;
+  opacity: 0;
+}
+.stomp-chip--l {
+  --dir: -1;
+}
+.stomp-chip--r {
+  --dir: 1;
+}
+
+@media (max-width: 40rem) {
+  .stomp {
+    --start: 290%;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :is(.stomp-seal, .stomp-x, .stomp-y, .stomp-body, .stomp-ring, .stomp-chip) {
+    /* Longhands: the build minifier turns a shorthand without a name into `animation: none`. */
+    animation-duration: 4s;
+    animation-delay: 0.6s;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+  }
+  .stomp-seal {
+    animation-name: stomp-seal;
+  }
+  .stomp-x {
+    animation-name: stomp-x;
+  }
+  .stomp-y {
+    animation-name: stomp-y;
+  }
+  .stomp-body {
+    animation-name: stomp-body;
+    animation-timing-function: cubic-bezier(0.3, 0.6, 0.4, 1);
+  }
+  .stomp-ring {
+    animation-name: stomp-ring;
+  }
+  .stomp-chip {
+    animation-name: stomp-chip;
+  }
+}
+
+/* Across the header. Fades in crouched, hops 0–180–480, 600–900, leaps 1080–1520, onto the seal's centre; the slam ends at the rest place. */
+@keyframes stomp-x {
+  0% {
+    transform: translateX(var(--start));
+    opacity: 0;
+  }
+  3%,
+  4.5% {
+    transform: translateX(var(--start));
+    opacity: 1;
+  }
+  12%,
+  15% {
+    transform: translateX(calc((var(--start) + 140%) / 2));
+  }
+  22.5%,
+  27% {
+    transform: translateX(140%);
+  }
+  38%,
+  82.5% {
+    /* Centred on the seal: (seal width − JI width) / 2 of the JI width. */
+    transform: translateX(11.54%);
+  }
+  90.5%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/*
+ * Height, in JI heights (the seal is one JI tall). Rise eases out, falls ease in.
+ * Land 1520, look at it to 2100. Stomp 2100–2300, crunch to 2350, spring to 2440.
+ * Stomp 2540–2740, crunch to 2790, spring to 2880. Beat, lean back 3100–3300,
+ * slam 3300–3620, crunch to 3660, ride the flat seal, drop at 3800.
+ */
+@keyframes stomp-y {
+  0%,
+  4.5% {
+    transform: translateY(0) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  8.25% {
+    transform: translateY(-38%) rotate(-6deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  12%,
+  15% {
+    transform: translateY(0) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  18.75% {
+    transform: translateY(-45%) rotate(-6deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  22.5%,
+  27% {
+    transform: translateY(0) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  33.25% {
+    transform: translateY(calc(-100% - min(0.6 * var(--mark-h), var(--room)))) rotate(-8deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  38% {
+    transform: translateY(-100%) rotate(2deg);
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  39% {
+    transform: translateY(-93%) rotate(1deg);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  42.5% {
+    transform: translateY(-100%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  /* Looks down at the seal. */
+  45.5%,
+  48.5% {
+    transform: translateY(-100%) rotate(-7deg);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  52.5% {
+    transform: translateY(-100%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  55.5% {
+    transform: translateY(calc(-100% - min(0.45 * var(--mark-h), var(--room)))) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  57.5% {
+    transform: translateY(-100%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  58.75% {
+    transform: translateY(-64%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  61%,
+  63.5% {
+    transform: translateY(-70%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  66.25% {
+    transform: translateY(calc(-70% - min(0.45 * var(--mark-h), var(--room) + 0.3 * var(--mark-h)))) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  68.5% {
+    transform: translateY(-70%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  69.75% {
+    transform: translateY(-36%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  72%,
+  77.5% {
+    transform: translateY(-42%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  82.5% {
+    transform: translateY(-42%) rotate(6deg);
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  87% {
+    transform: translateY(calc(-42% - min(1.08 * var(--mark-h), var(--room) + 0.58 * var(--mark-h)))) rotate(-4deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  90.5% {
+    transform: translateY(-42%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  91.5%,
+  94% {
+    transform: translateY(-5%) rotate(0deg);
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  95%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+/* Shape: crouch before every take-off, stretch only while fast, squash on every landing. */
+@keyframes stomp-body {
+  0% {
+    transform: scale(1, 1);
+  }
+  3.75% {
+    transform: scale(1.14, 0.86);
+  }
+  4.5% {
+    transform: scale(0.88, 1.14);
+  }
+  7% {
+    transform: scale(1, 1);
+  }
+  10.75% {
+    transform: scale(0.92, 1.08);
+  }
+  12% {
+    transform: scale(1.2, 0.8);
+  }
+  14% {
+    transform: scale(1.16, 0.84);
+  }
+  15% {
+    transform: scale(0.88, 1.14);
+  }
+  17.5% {
+    transform: scale(1, 1);
+  }
+  21.25% {
+    transform: scale(0.92, 1.08);
+  }
+  22.5% {
+    transform: scale(1.22, 0.78);
+  }
+  26.5% {
+    transform: scale(1.26, 0.74);
+  }
+  27% {
+    transform: scale(0.84, 1.2);
+  }
+  31.25% {
+    transform: scale(1, 1);
+  }
+  36.5% {
+    transform: scale(0.9, 1.12);
+  }
+  38% {
+    transform: scale(1.26, 0.74);
+  }
+  41% {
+    transform: scale(0.96, 1.04);
+  }
+  43%,
+  50% {
+    transform: scale(1, 1);
+  }
+  51.75% {
+    transform: scale(1.14, 0.86);
+  }
+  52.5% {
+    transform: scale(0.88, 1.14);
+  }
+  55% {
+    transform: scale(1, 1);
+  }
+  57% {
+    transform: scale(0.88, 1.14);
+  }
+  58.75% {
+    transform: scale(1.3, 0.72);
+  }
+  61.5% {
+    transform: scale(1, 1);
+  }
+  62.75% {
+    transform: scale(1.14, 0.86);
+  }
+  63.5% {
+    transform: scale(0.88, 1.14);
+  }
+  66% {
+    transform: scale(1, 1);
+  }
+  68% {
+    transform: scale(0.88, 1.14);
+  }
+  69.75% {
+    transform: scale(1.3, 0.72);
+  }
+  72.5% {
+    transform: scale(0.97, 1.03);
+  }
+  74.5%,
+  77.5% {
+    transform: scale(1, 1);
+  }
+  81.75% {
+    transform: scale(1.3, 0.7);
+  }
+  82.5% {
+    transform: scale(0.8, 1.24);
+  }
+  86.5% {
+    transform: scale(1, 1);
+  }
+  90% {
+    transform: scale(0.82, 1.22);
+  }
+  91.5% {
+    transform: scale(1.4, 0.64);
+  }
+  94% {
+    transform: scale(1.28, 0.74);
+  }
+  95% {
+    transform: scale(1.16, 0.84);
+  }
+  97% {
+    transform: scale(0.95, 1.06);
+  }
+  98.5% {
+    transform: scale(1.02, 0.98);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+/* The seal gives a little under the landing, then a step per stomp; flattening spreads it. Same curves as stomp-y. */
+@keyframes stomp-seal {
+  0%,
+  38% {
+    transform: scale(1, 1);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  39% {
+    transform: scale(1.04, 0.93);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  42.5%,
+  57.5% {
+    transform: scale(1, 1);
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  58.75% {
+    transform: scale(1.16, 0.64);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  61%,
+  68.5% {
+    transform: scale(1.12, 0.7);
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  69.75% {
+    transform: scale(1.32, 0.36);
+    animation-timing-function: cubic-bezier(0.3, 0, 0.2, 1);
+  }
+  72%,
+  90.5% {
+    transform: scale(1.28, 0.42);
+    animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  }
+  91.5%,
+  94% {
+    transform: scale(1.6, 0.05);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0);
+  }
+  97.5%,
+  100% {
+    transform: scale(1.9, 0.02);
+    opacity: 0;
+  }
+}
+
+/* The slam's ring on the ground. */
+@keyframes stomp-ring {
+  0%,
+  91.25% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  91.5% {
+    transform: scale(0.6);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  98%,
+  100% {
+    transform: scale(1.6, 1.3);
+    opacity: 0;
+  }
+}
+
+/* Two chips of cinnabar squirt out sideways on the slam, arc and fall. */
+@keyframes stomp-chip {
+  0%,
+  91.25% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  91.5% {
+    transform: translate(0, -1px) rotate(0deg);
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.2, 0.75, 0.35, 1);
+  }
+  94.5% {
+    transform: translate(calc(var(--dir) * 0.55 * var(--mark-h)), calc(var(--mark-h) * -0.3))
+      rotate(calc(var(--dir) * 140deg));
+    opacity: 1;
+    animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45);
+  }
+  97.5%,
+  100% {
+    transform: translate(calc(var(--dir) * 0.8 * var(--mark-h)), 0) rotate(calc(var(--dir) * 260deg));
+    opacity: 0;
+  }
 }

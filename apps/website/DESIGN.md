@@ -115,7 +115,7 @@ The page is ground ink. Five ink tones, from scorched to clear, do the work that
 
 The system is carved, exact and unhurried. Its reference is a stele rubbing (碑帖拓片): the JI logo is the etched mark pulled in paper white, with the cuts left open so the ink shows through. It closes the page in the footer like a colophon; the first screen belongs to code. Density is low and deliberate. Sections breathe on a fluid rhythm (`spacing.section`), content sits in an 80rem measure, and body copy stays under 42rem. The only Chinese on the page is a meaning, never an ornament: 极, 极简, and the seal glyph, which is drawn as a vector so no CJK font is loaded.
 
-It rejects, by name: AI product templates (purple/blue gradients, glowing grids, three-column icon card rows); 国潮 pastiche (auspicious clouds, ink-landscape stock art, full-screen brush calligraphy, red-and-gold); pure-black Vercel-style engineering monochrome (`#000` ground, hairline grays, no warmth); and editorial-magazine styling (italic display serif headlines, tiny all-caps tracked labels, ruled multi-column layouts). Ink here is a material, never a motif. The `/brand` asset page is the one exception to the ink ground: it keeps a warm-paper light theme (`.theme-paper`) because it shows logos as they will be used on light surfaces.
+It rejects, by name: AI product templates (purple/blue gradients, glowing grids, three-column icon card rows); 国潮 pastiche (auspicious clouds, ink-landscape stock art, full-screen brush calligraphy, red-and-gold); pure-black Vercel-style engineering monochrome (`#000` ground, hairline grays, no warmth); and editorial-magazine styling (italic display serif headlines, tiny all-caps tracked labels, ruled multi-column layouts). Ink here is a material, never a motif. The `/brand` asset page is the one exception to the ink ground: it keeps a warm-paper light theme (`.theme-paper`) because it shows logos as they will be used on light surfaces. The logo hop (`src/components/logo-hop.tsx`) is the one motion that loops: six colourways jump in turn with squash and stretch, anticipation and a small rebound, and stand still under `prefers-reduced-motion: reduce`. It plays on `/brand`, at the foot of every page under the footer, and on the 404 page; nowhere above the fold of a content page.
 
 **Key Characteristics:**
 
@@ -123,7 +123,7 @@ It rejects, by name: AI product templates (purple/blue gradients, glowing grids,
 - Five ink steps carry all depth; nothing floats.
 - Qinglv appears only on `before`, `after`, `intercept` and the active hook path.
 - Code is the main visual. Annotations sit beside the line they explain, like side inscriptions (边款) on a seal.
-- Motion happens once, on first paint, and never under `prefers-reduced-motion: reduce`.
+- Motion happens once, on first paint, and never under `prefers-reduced-motion: reduce`. The header stomp plays on every visit. The logo hop is the only loop, and only at the end of a page or on 404.
 
 ## 2. Colors: The Grinding Palette
 
@@ -135,7 +135,7 @@ Five ink tones, three paper tones, one hook mineral, the cinnabar of the seal, a
 
 ### The seal
 
-- **Cinnabar 朱砂** (`cinnabar`): the 极 seal and the favicon, nothing else. A 白文 seal: a cinnabar block with the glyph cut out in near-white paper (`#f4f0e7`, 4.6:1 on cinnabar). The same impression works on both grounds (3.4:1 against thick ink, 4.8:1 against rice paper), so there is one `seal.svg`.
+- **Cinnabar 朱砂** (`cinnabar`): the 极 seal, the favicon and the two chips the seal sheds in the header stomp, nothing else. A 白文 seal: a cinnabar block with the glyph cut out in near-white paper (`#f4f0e7`, 4.6:1 on cinnabar). The same impression works on both grounds (3.4:1 against thick ink, 4.8:1 against rice paper), so there is one `seal.svg`.
 
 ### Secondary: syntax pigments
 
@@ -159,7 +159,7 @@ Used only by the Shiki theme, inside scorched-ink code wells. All read at 8:1 or
 
 ### Light theme: ink on paper
 
-The page follows the system colour scheme and offers a sun/moon toggle beside the seal; a manual choice is stored in `localStorage` (`ji-theme`). An inline script in `__root.tsx` sets `data-theme` on `<html>` before first paint; without JavaScript the page stays on ink. The token names are roles, not lightness: `ink-*` stay surfaces and rules, `paper-*` stay text, and `:root[data-theme='light']` in `src/styles.css` swaps their values (ground `oklch(0.972 0.008 85)`, warm rice paper; text `oklch(0.21 0.004 260)`, a near-neutral ink). Wells stay darker than the ground, so the Ink Order Rule holds. Qinglv and the syntax pigments are re-cut darker for paper (4.8:1 or better on the well). Marks made for one ground use `.dark-only` / `.light-only` (the sun and moon of the toggle), and the footer rubbing is pulled in ink (`.rubbing`). The cinnabar seal needs no swap.
+The page follows the system colour scheme and offers a sun/moon toggle in the site header; a manual choice is stored in `localStorage` (`ji-theme`). An inline script in `__root.tsx` sets `data-theme` on `<html>` before first paint; without JavaScript the page stays on ink. The token names are roles, not lightness: `ink-*` stay surfaces and rules, `paper-*` stay text, and `:root[data-theme='light']` in `src/styles.css` swaps their values (ground `oklch(0.972 0.008 85)`, warm rice paper; text `oklch(0.21 0.004 260)`, a near-neutral ink). Wells stay darker than the ground, so the Ink Order Rule holds. Qinglv and the syntax pigments are re-cut darker for paper (4.8:1 or better on the well). Marks made for one ground use `.dark-only` / `.light-only` (the sun and moon of the toggle; the header JI, paper white on ink and charcoal on paper), and the footer rubbing is pulled in ink (`.rubbing`). The cinnabar seal needs no swap.
 
 ### Named Rules
 
@@ -221,8 +221,15 @@ Firm and quiet. There is one filled button per screen.
 
 ### Site header
 
-- The same row on every page: the 40px seal (a link home) on the left; on the right a **Docs** tab, a **GitHub** link with the up-right arrow, and the theme toggle.
+- The same row on every page: the 40px JI mark (a link home) on the left; on the right a **Docs** tab, a **GitHub** link with the up-right arrow, and the theme toggle. The space above it is `--header-pt` (`clamp(3.5rem, 6vw, 4.5rem)`), sized so the stomp never leaves the page.
 - The Docs tab is a tab, not a button: aged-paper label at rest, paper label with a 2px paper underline on any `/docs` page. Never qinglv (The One Pigment Rule).
+
+### Header stomp
+
+- Every time the header appears (a page load, or a client-side navigation between home and docs) it opens on the 极 seal. After a 0.6s beat a JI fades in from the right, takes two hops and a leap onto the seal, lands, looks down at it, then stomps: light, light, a held beat, a lean back, and a slam. Each stomp squashes the seal a step flatter (1, 0.7, 0.42, then flat) and the JI rides its top down on the same curve. On the slam the seal spits two cinnabar chips, a ring runs out on the ground, the flat seal slides away and the JI drops into its place (`src/components/header-mark.tsx`, `.stomp-*` in `src/styles.css`, 4s).
+- Squash and stretch as in the logo hop: a crouch before every take-off, stretch only while fast, a squash on every landing, a short overshoot at rest. Rhythm over speed: the third stomp is preceded by a pause and a deeper crouch so it lands as the punchline.
+- Every jump above the seal is capped by the header's headroom (`--room`), so nothing leaves the top of the page; on phones the JI starts closer (`--start`) to stay clear of the nav.
+- The rest state, which is also what reduced motion shows, is the JI alone.
 
 ### Docs pages
 
@@ -253,7 +260,7 @@ Firm and quiet. There is one filled button per screen.
 
 ### Hero
 
-- **One subject:** the first screen leads with real code, never with a brand image. The 40px 极 seal sits at the top left of the site header, with no wordmark beside it; there is exactly one mark per screen.
+- **One subject:** the first screen leads with real code, never with a brand image. The 40px JI mark sits at the top left of the site header, with no wordmark beside it (it gets there on every visit by stomping the 极 seal flat); there is exactly one mark per screen above the footer.
 - **Layout:** headline (`clamp(2.25rem, 3.6vw, 3.5rem)`, 800, three lines on desktop), lead, CTAs and status line on the left; a code print titled with its file name (`block-shell.ts`) on the right, top-aligned with the headline. Side by side from 1280px; stacked below. Hero code lines stay at 60 characters or fewer so the well never scrolls on desktop.
 - **Motion:** text rises in a 70ms stagger, then the code well soaks in from the top (mask reveal, 1.1s, ease-out-expo, 0.55s delay).
 - **Rhythm:** the hero is content-height, not full-viewport, so the next section's heading shows at the bottom of a 900px-tall screen.
@@ -261,6 +268,12 @@ Firm and quiet. There is one filled button per screen.
 ### Footer rubbing
 
 - The paper-white rubbing appears once, whole and uncropped, at the head of the footer's first column (144px tall), lazy-loaded. Never crop the mark, and never show it on the same screen as the seal.
+
+### Logo hop
+
+- Below the footer grid, the colourways hop in a centred row (`<LogoHop lazy />`), the page's sign-off after the colophon. On the 404 page it sits under the back link, left-aligned and smaller (`--logo-h` 3rem to 4.5rem), as the page's only flourish beside the seal.
+- On the site (`ground="theme"`) charcoal and paper white share the last place: charcoal shows on paper, paper white on ink (`.light-only` / `.dark-only`). The `/brand` page is always paper, so it shows charcoal (`ground="paper"`).
+- Thumbnails are the `<id>-288.webp` files, not the full logos. Shadows and the landing ring follow the theme (`.logo-hop--theme`).
 
 ## 6. Do's and Don'ts
 

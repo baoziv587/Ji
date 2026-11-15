@@ -60,6 +60,8 @@ export interface Colorway {
   readonly name: string
   readonly svg: string
   readonly webp: string
+  /** A 234 × 288 WebP for small, moving uses such as the logo hop. */
+  readonly thumbnail: string
   readonly width: number
   readonly height: number
   /** CSS background showing the ink: a flat color or the qinglv gradient. */
@@ -67,7 +69,11 @@ export interface Colorway {
   readonly inkLabel: string
 }
 
-const logoFiles = (id: string) => ({ svg: `/logos/${id}.svg`, webp: `/logos/${id}.webp` })
+const logoFiles = (id: string) => ({
+  svg: `/logos/${id}.svg`,
+  webp: `/logos/${id}.webp`,
+  thumbnail: `/logos/${id}-288.webp`,
+})
 const records = new Map(
   z
     .array(LogoRecord)

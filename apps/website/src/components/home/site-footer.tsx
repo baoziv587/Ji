@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import { LogoHop } from '~/components/logo-hop'
 import { docs, links, packages } from '~/content/home'
 import { rubbing } from '~/lib/catalog'
 import { gutter } from '~/lib/layout'
@@ -68,6 +69,7 @@ export function SiteFooter() {
           </ul>
         </div>
       </div>
+      <LogoHop lazy className={cn(gutter, 'pb-14')} />
     </footer>
   )
 }
