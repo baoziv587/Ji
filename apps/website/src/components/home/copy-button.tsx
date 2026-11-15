@@ -25,7 +25,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
 
   return (
     <div className={cn('flex items-center gap-3', className)}>
-      <span role="status" className="text-sm text-paper-dim">
+      <span role="status" className="text-[0.8125rem] text-paper-dim">
         {messages[status]}
       </span>
       <button

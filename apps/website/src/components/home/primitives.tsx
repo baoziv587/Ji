@@ -17,7 +17,7 @@ export function Heading({ id, title, children }: { id: string; title: string; ch
     <header className="mb-12 max-w-[42rem] md:mb-16">
       <h2
         id={id}
-        className="text-[clamp(1.875rem,3.4vw,2.75rem)] font-bold leading-[1.08] tracking-[-0.025em] text-balance"
+        className="text-[clamp(1.75rem,2.6vw,2.25rem)] font-bold leading-[1.1] tracking-[-0.025em] text-balance"
       >
         {title}
       </h2>

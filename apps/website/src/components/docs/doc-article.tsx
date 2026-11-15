@@ -37,7 +37,7 @@ export function DocArticle({ doc }: { doc: Doc }) {
   return (
     <div className="grid min-w-0 gap-12 xl:grid-cols-[minmax(0,1fr)_13rem] xl:gap-16">
       <article className="min-w-0 max-w-[48rem]">
-        <h1 className="text-[clamp(2.25rem,3.6vw,3rem)] font-extrabold leading-[1.05] tracking-[-0.035em] text-balance">
+        <h1 className="text-[clamp(2.25rem,3.6vw,3rem)] font-bold leading-[1.05] tracking-[-0.035em] text-balance">
           {doc.title}
         </h1>
         <div
@@ -52,7 +52,7 @@ export function DocArticle({ doc }: { doc: Doc }) {
           <nav aria-label="Previous and next" className="mt-16 grid gap-4 border-t border-ink-3 pt-8 sm:grid-cols-2">
             {previous && (
               <DocPageLink slug={previous.slug} className="group grid gap-1">
-                <span className="flex items-center gap-1.5 text-sm text-paper-faint">
+                <span className="flex items-center gap-1.5 text-[0.8125rem] text-paper-faint">
                   <ArrowLeft aria-hidden className="size-3.5" /> Previous
                 </span>
                 <span className="font-semibold text-paper underline decoration-transparent underline-offset-[0.3em] transition-colors group-hover:decoration-paper">
@@ -62,7 +62,7 @@ export function DocArticle({ doc }: { doc: Doc }) {
             )}
             {next && (
               <DocPageLink slug={next.slug} className="group grid gap-1 sm:col-start-2 sm:text-right">
-                <span className="flex items-center gap-1.5 text-sm text-paper-faint sm:justify-end">
+                <span className="flex items-center gap-1.5 text-[0.8125rem] text-paper-faint sm:justify-end">
                   Next <ArrowRight aria-hidden className="size-3.5" />
                 </span>
                 <span className="font-semibold text-paper underline decoration-transparent underline-offset-[0.3em] transition-colors group-hover:decoration-paper">
@@ -76,8 +76,8 @@ export function DocArticle({ doc }: { doc: Doc }) {
 
       {outline.length > 0 && (
         <nav aria-label="On this page" className="hidden xl:sticky xl:top-8 xl:block xl:self-start">
-          <p className="mb-3 text-sm font-semibold text-paper">On this page</p>
-          <ul className="grid gap-1.5 text-sm">
+          <p className="mb-3 text-[0.9375rem] font-semibold text-paper">On this page</p>
+          <ul className="grid gap-1.5 text-[0.9375rem]">
             {outline.map(heading => (
               <li key={heading.id} className={heading.depth === 3 ? 'pl-3' : undefined}>
                 <a href={`#${heading.id}`} className="text-paper-dim transition-colors hover:text-paper">

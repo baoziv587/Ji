@@ -12,7 +12,8 @@ const linkClass =
 export function SiteFooter() {
   return (
     <footer className="border-t border-ink-3 bg-ink-0">
-      <div className={cn(gutter, 'grid gap-12 py-16 md:grid-cols-[1.2fr_1.6fr_1fr] md:gap-10')}>
+      {/* The page's two lines: Packages starts on the half line (the hero code), Docs on the notes line (code notes). */}
+      <div className={cn(gutter, 'grid gap-12 py-16 text-[0.9375rem] md:grid-cols-2 md:gap-16')}>
         <div>
           <img
             src={rubbing.webp}
@@ -22,47 +23,49 @@ export function SiteFooter() {
             loading="lazy"
             className="rubbing mb-6 h-36 w-auto"
           />
-          <p className="max-w-[18rem] text-sm leading-relaxed text-paper-dim">
+          <p className="max-w-[20rem] leading-relaxed text-paper-dim">
             <span className="font-semibold text-paper">JI</span> <span lang="zh-CN">极</span>
             <br />
             A small, extensible TypeScript runtime for LLM agents.
           </p>
-          <a href={links.repo} className={cn(linkClass, 'mt-4 inline-flex items-center gap-1 text-sm')}>
+          <a href={links.repo} className={cn(linkClass, 'mt-4 inline-flex items-center gap-1')}>
             GitHub
             <ArrowUpRight aria-hidden className="size-3.5 text-paper-faint" />
           </a>
         </div>
 
-        <div>
-          <h2 className="mb-4 text-sm font-semibold text-paper">Packages</h2>
-          <ul className="grid gap-3 text-sm">
-            {packages.map(pkg => (
-              <li key={pkg.name}>
-                <a href={pkg.href} className={cn(linkClass, 'font-mono text-paper')}>
-                  {pkg.name}
-                </a>
-                <p className="text-paper-faint">{pkg.role}</p>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <div className="grid content-start gap-12 sm:grid-cols-2 sm:gap-10 md:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_16rem]">
+          <div>
+            <h2 className="mb-4 font-semibold text-paper">Packages</h2>
+            <ul className="grid gap-3">
+              {packages.map(pkg => (
+                <li key={pkg.name}>
+                  <a href={pkg.href} className={cn(linkClass, 'font-mono text-[0.875rem] text-paper')}>
+                    {pkg.name}
+                  </a>
+                  <p className="text-paper-faint">{pkg.role}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
 
-        <div className="text-sm">
-          <h2 className="mb-4 font-semibold text-paper">Docs</h2>
-          <ul className="grid gap-2">
-            {docs.map(doc => (
-              <li key={doc.slug}>
-                <Link to="/docs/$slug" params={{ slug: doc.slug }} className={linkClass}>
-                  {doc.label}
-                </Link>
+          <div>
+            <h2 className="mb-4 font-semibold text-paper">Docs</h2>
+            <ul className="grid gap-2">
+              {docs.map(doc => (
+                <li key={doc.slug}>
+                  <Link to="/docs/$slug" params={{ slug: doc.slug }} className={linkClass}>
+                    {doc.label}
+                  </Link>
+                </li>
+              ))}
+              <li>
+                <a href={links.examples} className={linkClass}>
+                  Runnable examples
+                </a>
               </li>
-            ))}
-            <li>
-              <a href={links.examples} className={linkClass}>
-                Runnable examples
-              </a>
-            </li>
-          </ul>
+            </ul>
+          </div>
         </div>
       </div>
       <LogoHop lazy className={cn(gutter, 'pb-14')} />

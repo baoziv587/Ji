@@ -34,9 +34,7 @@ function Home() {
         <div id="hooks" className="scroll-mt-4 border-y border-ink-3 bg-ink-2">
           <Section aria-labelledby="hooks-title">
             <Heading id="hooks-title" title="One hook model, three ways to intervene.">
-              <p className="text-[clamp(1.25rem,2vw,1.5rem)] leading-snug text-paper">
-                The hook chooses where; the helper chooses how.
-              </p>
+              <p className="text-xl leading-snug text-paper">The hook chooses where; the helper chooses how.</p>
             </Heading>
             <HookModel />
             <p className="mt-12 max-w-[44rem] text-pretty text-paper-dim">
@@ -98,7 +96,7 @@ function Home() {
           <Heading id="capabilities" title="More, ready to compose." />
           <dl className="border-t border-ink-3">
             {capabilities.map(row => (
-              <div key={row.area} className="grid gap-2 border-b border-ink-3 py-5 md:grid-cols-[16rem_1fr] md:gap-8">
+              <div key={row.area} className="grid gap-2 border-b border-ink-3 py-5 md:grid-cols-2 md:gap-16">
                 <dt className="font-semibold">{row.area}</dt>
                 <dd className="flex flex-wrap gap-x-6 gap-y-2">
                   {row.items.map(item => (
@@ -113,8 +111,8 @@ function Home() {
         </Section>
 
         <div className="border-t border-ink-3 bg-ink-2">
-          <Section aria-labelledby="try" className="grid gap-16 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] lg:gap-20">
-            <div>
+          <Section aria-labelledby="try" className="grid gap-16 lg:grid-cols-[minmax(0,1fr)_16rem] lg:gap-x-10">
+            <div className="max-w-[42rem]">
               <Heading id="try" title="Run it offline.">
                 <p>
                   Needs Node 24 or later and pnpm. The demo talks to a scripted calculator, so no API key is needed.
@@ -125,7 +123,7 @@ function Home() {
                 label="Quick start commands"
                 toolbar={
                   <>
-                    <span className="text-sm text-paper-faint">Terminal</span>
+                    <span className="py-2 font-mono text-[0.8125rem] text-paper-faint">Terminal</span>
                     <CopyButton text={quickstart} />
                   </>
                 }
@@ -135,7 +133,7 @@ function Home() {
               </p>
             </div>
 
-            <div className="lg:border-l lg:border-ink-3 lg:pl-10 lg:pt-2">
+            <div>
               <h2 className="text-xl font-bold">A coding agent in 2,000 lines.</h2>
               <p className="mt-4 text-pretty text-paper-dim">
                 A tiny terminal coding agent built on JI. Small enough to read in an evening, useful enough to keep.

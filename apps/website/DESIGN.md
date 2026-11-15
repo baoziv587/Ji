@@ -19,15 +19,15 @@ colors:
 typography:
   display:
     fontFamily: 'Schibsted Grotesk Variable, system-ui, sans-serif'
-    fontSize: 'clamp(2.625rem, 6.4vw, 5.5rem)'
-    fontWeight: 800
-    lineHeight: 0.98
-    letterSpacing: '-0.04em'
+    fontSize: 'clamp(2.25rem, 3.6vw, 3.5rem)'
+    fontWeight: 700
+    lineHeight: 1.02
+    letterSpacing: '-0.035em'
   headline:
     fontFamily: 'Schibsted Grotesk Variable, system-ui, sans-serif'
-    fontSize: 'clamp(1.875rem, 3.4vw, 2.75rem)'
+    fontSize: 'clamp(1.75rem, 2.6vw, 2.25rem)'
     fontWeight: 700
-    lineHeight: 1.08
+    lineHeight: 1.1
     letterSpacing: '-0.025em'
   title:
     fontFamily: 'Schibsted Grotesk Variable, system-ui, sans-serif'
@@ -36,7 +36,7 @@ typography:
     lineHeight: 1.4
   lead:
     fontFamily: 'Schibsted Grotesk Variable, system-ui, sans-serif'
-    fontSize: '1.125rem'
+    fontSize: '1.25rem'
     fontWeight: 400
     lineHeight: 1.75
   body:
@@ -46,9 +46,14 @@ typography:
     lineHeight: 1.75
   label:
     fontFamily: 'Schibsted Grotesk Variable, system-ui, sans-serif'
-    fontSize: '0.875rem'
+    fontSize: '0.9375rem'
     fontWeight: 400
     lineHeight: 1.6
+  meta:
+    fontFamily: 'Schibsted Grotesk Variable, system-ui, sans-serif'
+    fontSize: '0.8125rem'
+    fontWeight: 400
+    lineHeight: 1.5
   code:
     fontFamily: 'Commit Mono, ui-monospace, monospace'
     fontSize: '0.875rem'
@@ -181,17 +186,22 @@ The page follows the system colour scheme and offers a sun/moon toggle in the si
 
 ### Hierarchy
 
-- **Display** (800, `clamp(2.625rem, 6.4vw, 5.5rem)`, 0.98, −0.04em): the hero sentence only. Balanced wrapping.
-- **Headline** (700, `clamp(1.875rem, 3.4vw, 2.75rem)`, 1.08, −0.025em): one per section, written as a full sentence ending in a period ("Run it offline."). Max 42rem wide.
+- **Display** (700, `clamp(2.25rem, 3.6vw, 3.5rem)`, 1.02, −0.035em): the hero sentence, and the 404 and docs titles (capped at 3rem). Balanced wrapping.
+- **Headline** (700, `clamp(1.75rem, 2.6vw, 2.25rem)`, 1.1, −0.025em): one per section, written as a full sentence ending in a period ("Run it offline."). Max 42rem wide. At least 1.4× smaller than Display, so the two never read as neighbours.
 - **Title** (700, 1.25rem): sub-columns inside a section, e.g. the coding-agent aside.
-- **Lead** (400, 1.125rem, 1.75): the hero subtitle, in aged paper, max 34rem.
+- **Lead** (400, 1.25rem, 1.625): the hero subtitle and section subtitles, in aged paper, max 34rem. A clear step above body.
 - **Body** (400, 1.0625rem, 1.75): all prose. Keep paragraphs under 42rem (~70ch).
-- **Label** (400–600, 0.875rem): tab effects, footer lists, captions, the copy status message. Never uppercase, never letter-spaced.
-- **Code** (Commit Mono 400, 0.875rem on a 1.7rem line): blocks, inline code (at 0.875em), package names, hook tab names, diagram labels.
+- **Secondary** (400–600, 0.9375rem): navigation, the footer, "On this page", side notes, docs tables, hook tab names. Never uppercase, never letter-spaced.
+- **Meta** (400, 0.8125rem): the hero status line, code-well labels ("Terminal", file names), hook tab effects, previous/next labels, the copy status message.
+- **Code** (Commit Mono 400, 0.875rem on a 1.7rem line): blocks, inline code (at 0.875em), package names, diagram labels. Line numbers are 0.6875rem, the smallest size on the page.
+
+One weight carries every heading (700); the body is 400 and labels go no higher than 600. Outside code the scale is Display, Headline, Lead and Title (both 1.25rem), Body, Secondary and Meta, each a clear step from the next; do not add a size in between.
 
 ### Named Rules
 
 **The Sentence Heading Rule.** Headings are sentences in sentence case, with a period. No eyebrows, no kicker labels, no section numbers above them.
+
+**The Two Lines Rule.** Right of the left edge, things start on one of two vertical lines: the **half line** (a two-column grid with a 4rem gap; 752px at 1440) and the **notes line** (a `minmax(0,1fr) 16rem` grid with a 2.5rem gap; 1056px at 1440). The hero code, the compose column, the capability descriptions and the footer's Packages sit on the half line; code notes, the "Run it offline" aside and the footer's Docs sit on the notes line. A new column snaps to one of them, never to a third.
 
 **The Fixed Line Rule.** Code line height is the token `--code-lh` (1.7rem) and block padding is `--code-pad` (1.5rem). Annotation positions are computed from both, so never change one without checking that notes still line up.
 
@@ -234,12 +244,12 @@ Firm and quiet. There is one filled button per screen.
 ### Docs pages
 
 - Three columns on wide screens: the doc list (12rem, sticky), the article (max 48rem), and "On this page" (13rem, sticky, from 1280px). Below 1024px the doc list becomes a wrapped row above the article, under a hairline.
-- The article follows the home type scale: a display-weight title, `h2` as a headline with a light-ink rule above it, body in aged paper with paper for links and strong text, and qinglv for inline code. Code blocks are the same scorched-ink wells as the code prints, without side notes. Tables are ruled with light-ink hairlines only.
+- The article follows the home type scale: a display-weight title, `h2` as a headline with a light-ink rule above it, body in aged paper with paper for links and strong text, and qinglv for inline code. Code blocks are the same scorched-ink wells as the code prints, without side notes. Tables are ruled with light-ink hairlines only. From 768px, tables of three columns or fewer use a fixed layout at full width, so tables of the same shape share column lines down the page; wider tables keep auto layout and scroll inside themselves.
 - Previous and next sit under the article, divided by a hairline; links that leave the site carry the up-right arrow.
 
 ### Hook tabs (signature)
 
-- A three-column rail with a 1px light-ink bottom border. Each tab stacks the hook name in code type over its effect in label type.
+- A three-column rail of equal thirds with a 1px light-ink bottom border and a 1rem gutter (1.5rem from 768px). It is a self-contained control, so it keeps equal thirds instead of snapping to the two lines. Each tab stacks the hook name in code type (secondary size) over its effect in meta type.
 - **Selected:** a 2px qinglv underline and qinglv name. **Rest:** paper name, transparent underline; hover shows a clear-ink underline.
 - ARIA tablist with arrow, Home and End keys. Without JS, every panel shows and the rail hides.
 
@@ -261,7 +271,7 @@ Firm and quiet. There is one filled button per screen.
 ### Hero
 
 - **One subject:** the first screen leads with real code, never with a brand image. The 40px JI mark sits at the top left of the site header, with no wordmark beside it (it gets there on every visit by stomping the 极 seal flat); there is exactly one mark per screen above the footer.
-- **Layout:** headline (`clamp(2.25rem, 3.6vw, 3.5rem)`, 800, three lines on desktop), lead, CTAs and status line on the left; a code print titled with its file name (`block-shell.ts`) on the right, top-aligned with the headline. Side by side from 1280px; stacked below. Hero code lines stay at 60 characters or fewer so the well never scrolls on desktop.
+- **Layout:** headline (Display, three lines on desktop), lead, CTAs and status line on the left; a code print titled with its file name (`block-shell.ts`) on the right, top-aligned with the headline. Side by side from 1280px; stacked below. Hero code lines stay at 60 characters or fewer so the well never scrolls on desktop.
 - **Motion:** text rises in a 70ms stagger, then the code well soaks in from the top (mask reveal, 1.1s, ease-out-expo, 0.55s delay).
 - **Rhythm:** the hero is content-height, not full-viewport, so the next section's heading shows at the bottom of a 900px-tall screen.
 
@@ -269,6 +279,7 @@ Firm and quiet. There is one filled button per screen.
 
 - The paper-white rubbing appears once, whole and uncropped, at the head of the footer's first column (144px tall), lazy-loaded. Never crop the mark, and never show it on the same screen as the seal.
 - Under it sit the name, the one-line description and the **GitHub** link with the up-right arrow (as in the header): the mark, what it is and where it lives read as one block. The other columns are Packages and Docs only.
+- **Grid:** the footer is two halves. Packages starts on the half line; from 1280px Docs starts on the notes line beside it, below that it stacks under Packages. All footer text is secondary size.
 
 ### Logo hop
 
@@ -300,5 +311,6 @@ Firm and quiet. There is one filled button per screen.
 - **Don't** use shadows, glows, blur or glassmorphism. If it looks lit, it is wrong.
 - **Don't** put scorched ink against scorched ink; a code well inside a scorched band disappears.
 - **Don't** use qinglv for links, buttons, headings or decoration.
-- **Don't** use `border-left` or `border-right` wider than 1px as a coloured accent; the only vertical rule is the 1px light-ink column divider.
+- **Don't** use `border-left` or `border-right` wider than 1px as a coloured accent; the only vertical rule is the 1px light-ink blockquote rule in the docs. Columns are separated by space, not rules.
+- **Don't** invent radii: 2px for small things (buttons, chips, focus targets), 4px for code wells, 3px for the seal and diagram boxes, and nothing rounder.
 - **Don't** add em dashes to copy; use commas, colons or periods.

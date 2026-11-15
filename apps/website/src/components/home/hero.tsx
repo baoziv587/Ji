@@ -18,13 +18,13 @@ export function Hero() {
         <div className="max-w-[40rem]">
           <h1
             id="hero-title"
-            className="rise text-[clamp(2.25rem,3.6vw,3.5rem)] font-extrabold leading-[1.02] tracking-[-0.035em] text-balance"
+            className="rise text-[clamp(2.25rem,3.6vw,3.5rem)] font-bold leading-[1.02] tracking-[-0.035em] text-balance"
             style={step(1)}
           >
             A small, extensible TypeScript runtime for LLM agents.
           </h1>
 
-          <p className="rise mt-6 max-w-[34rem] text-lg text-pretty text-paper-dim" style={step(2)}>
+          <p className="rise mt-6 max-w-[34rem] text-xl leading-relaxed text-pretty text-paper-dim" style={step(2)}>
             <span lang="zh-CN" className="text-paper">
               极
             </span>
@@ -50,7 +50,7 @@ export function Hero() {
             </a>
           </div>
 
-          <p className="rise mt-10 text-sm text-paper-faint" style={step(4)}>
+          <p className="rise mt-10 text-[0.8125rem] text-paper-faint" style={step(4)}>
             In development. APIs may change; packages are not on npm yet.
           </p>
         </div>

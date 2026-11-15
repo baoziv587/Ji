@@ -13,7 +13,7 @@ const tab =
 export function SiteHeader({ className }: { className?: string }) {
   return (
     <header className={cn(gutter, 'flex items-center justify-between gap-6 pt-(--header-pt)', className)}>
-      <Link to="/" aria-label="JI home" className="rounded-[3px]">
+      <Link to="/" aria-label="JI home" className="rounded-sm">
         <HeaderMark />
       </Link>
       <nav aria-label="Site" className="flex items-center gap-6">

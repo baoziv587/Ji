@@ -45,7 +45,7 @@ export function HookModel() {
         role="tablist"
         aria-label="Hook helpers"
         data-hook-tabs
-        className="mt-10 grid grid-cols-3 border-b border-ink-3 md:mt-12"
+        className="mt-10 grid grid-cols-3 gap-x-4 border-b border-ink-3 md:mt-12 md:gap-x-6"
       >
         {hooks.map((hook, index) => {
           const selected = hook.id === active
@@ -68,8 +68,10 @@ export function HookModel() {
                 selected ? 'border-qinglv' : 'border-transparent hover:border-ink-4',
               )}
             >
-              <span className={cn('font-mono text-base', selected ? 'text-qinglv' : 'text-paper')}>{hook.id}</span>
-              <span className="text-sm text-paper-faint">{hook.effect}</span>
+              <span className={cn('font-mono text-[0.9375rem]', selected ? 'text-qinglv' : 'text-paper')}>
+                {hook.id}
+              </span>
+              <span className="text-[0.8125rem] text-paper-faint">{hook.effect}</span>
             </button>
           )
         })}

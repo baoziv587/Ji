@@ -343,6 +343,21 @@
 .doc hr {
   border-color: var(--ink-3);
 }
+/*
+ * Tables of up to three columns get fixed, equal columns, so tables of the same shape share
+ * their column lines down the page (the four "Which hook?" tables line up). Wider tables keep
+ * content-sized columns and scroll; so do all tables on narrow screens.
+ */
+@media (min-width: 48rem) {
+  .doc table:not(:has(th:nth-child(4))) {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+  }
+  .doc table:not(:has(th:nth-child(4))) :is(th, td) {
+    overflow-wrap: anywhere;
+  }
+}
 
 /*
  * The logo hop on /brand (src/components/logo-hop.tsx). One 2.8s round per mark:
