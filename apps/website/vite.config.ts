@@ -6,6 +6,9 @@ import { defineConfig } from 'vite'
 import { links } from './src/content/home.ts'
 import { docs, listDocs, pathOfDoc } from './vite-plugins/docs.ts'
 import { highlight } from './vite-plugins/highlight.ts'
+// Parses the logo manifests on import, so a stale or hand-edited manifest stops the build here.
+// Pages cannot do it: only the lazily loaded /brand chunk imports the catalog.
+import './src/lib/catalog.ts'
 
 const docsOptions = {
   dir: fileURLToPath(new URL('../../docs', import.meta.url)),

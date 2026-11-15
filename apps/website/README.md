@@ -51,7 +51,7 @@ docker run --rm -p 8080:80 ji-website        # http://localhost:8080
 
 `public/` 原样复制到站点根路径：`public/logos/indigo.webp` 对应 `/logos/indigo.webp`。这里只放网站实际用到的成品：
 
-- `logos/`：七种配色的 SVG 与无损 WebP（`/brand` 的下载文件），每种配色一张 234×288 的 `<id>-288.webp` 缩略图（页脚拓片和 `/brand` 顶部的跳跃动画用），以及三份清单。
+- `logos/`：七种配色的 SVG 与无损 WebP（`/brand` 的下载文件），每种配色一张 234×288 的 `<id>-288.webp` 缩略图（页脚拓片和跳跃动画用），纸白和暖黑另有 65×80 的 `<id>-80.webp`（页头 40px 标志用），以及三份清单。清单由 `src/lib/catalog.ts` 用 zod 校验，`vite.config.ts` 导入它，所以清单有错时构建直接失败；页面上的标志路径来自不依赖 zod 的 `src/lib/marks.ts`，zod 只会进入 `/brand` 的代码块。
 - `qinglv-silk/`：青绿绢本的 SVG、1024px WebP 和绢纹底图，以及清单。
 - `seal.svg`：「极」字朱砂印章（白文），深浅两种主题共用一张，同时用作 favicon，也是页头开场动画里被 JI 踩扁的那枚印章（`src/components/header-mark.tsx`，每次进入页面都会播放）。
 

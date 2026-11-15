@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { colorways } from '~/lib/catalog'
+import { markIds, thumbnailOf } from '~/lib/marks'
 import { cn } from '~/lib/utils'
 
 /**
@@ -21,15 +21,14 @@ const moves = [
  * site the two share the last place and the theme shows one (see .dark-only/.light-only).
  * The brand page is always paper, so it shows charcoal only.
  */
-const inked = colorways.filter(colorway => colorway.id !== 'paper')
-const paperMark = colorways.find(colorway => colorway.id === 'paper')!
-const swapAt = inked.findIndex(colorway => colorway.id === 'charcoal')
+const inked = markIds.filter(id => id !== 'paper')
+const swapAt = inked.indexOf('charcoal')
 
 function marksFor(ground: 'paper' | 'theme') {
-  const row = inked.map((colorway, i) => ({ colorway, i, className: '' }))
+  const row = inked.map((id, i) => ({ id, i, className: '' }))
   if (ground === 'paper') return row
   row[swapAt]!.className = 'light-only'
-  return [...row, { colorway: paperMark, i: swapAt, className: 'dark-only' }]
+  return [...row, { id: 'paper', i: swapAt, className: 'dark-only' }]
 }
 
 /**
@@ -53,17 +52,17 @@ export function LogoHop({
       role="img"
       aria-label="JI 标志的六种配色依次跳起、落地"
     >
-      {marksFor(ground).map(({ colorway, i, className: shown }) => {
+      {marksFor(ground).map(({ id, i, className: shown }) => {
         const move = moves[i % moves.length]!
         const style = { '--i': i, '--air': move.air, '--tilt': move.tilt, '--turn': move.turn } as CSSProperties
         return (
-          <div key={colorway.id} className={cn('logo-hop-cell', shown)} style={style}>
+          <div key={id} className={cn('logo-hop-cell', shown)} style={style}>
             <span className="logo-hop-shadow" aria-hidden />
             <span className="logo-hop-ring" aria-hidden />
             <div className="logo-hop-body">
               <img
                 className="logo-hop-squash"
-                src={colorway.thumbnail}
+                src={thumbnailOf(id)}
                 width={234}
                 height={288}
                 alt=""

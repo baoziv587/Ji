@@ -1,8 +1,9 @@
 import { Link } from '@tanstack/react-router'
+import { ArrowUpRight } from 'lucide-react'
 import { LogoHop } from '~/components/logo-hop'
 import { docs, links, packages } from '~/content/home'
-import { rubbing } from '~/lib/catalog'
 import { gutter } from '~/lib/layout'
+import { rubbing } from '~/lib/marks'
 import { cn } from '~/lib/utils'
 
 const linkClass =
@@ -26,6 +27,10 @@ export function SiteFooter() {
             <br />
             A small, extensible TypeScript runtime for LLM agents.
           </p>
+          <a href={links.repo} className={cn(linkClass, 'mt-4 inline-flex items-center gap-1 text-sm')}>
+            GitHub
+            <ArrowUpRight aria-hidden className="size-3.5 text-paper-faint" />
+          </a>
         </div>
 
         <div>
@@ -42,28 +47,19 @@ export function SiteFooter() {
           </ul>
         </div>
 
-        <div className="grid content-start gap-8 text-sm">
-          <div>
-            <h2 className="mb-4 font-semibold text-paper">Docs</h2>
-            <ul className="grid gap-2">
-              {docs.map(doc => (
-                <li key={doc.slug}>
-                  <Link to="/docs/$slug" params={{ slug: doc.slug }} className={linkClass}>
-                    {doc.label}
-                  </Link>
-                </li>
-              ))}
-              <li>
-                <a href={links.examples} className={linkClass}>
-                  Runnable examples
-                </a>
-              </li>
-            </ul>
-          </div>
+        <div className="text-sm">
+          <h2 className="mb-4 font-semibold text-paper">Docs</h2>
           <ul className="grid gap-2">
+            {docs.map(doc => (
+              <li key={doc.slug}>
+                <Link to="/docs/$slug" params={{ slug: doc.slug }} className={linkClass}>
+                  {doc.label}
+                </Link>
+              </li>
+            ))}
             <li>
-              <a href={links.repo} className={linkClass}>
-                GitHub
+              <a href={links.examples} className={linkClass}>
+                Runnable examples
               </a>
             </li>
           </ul>

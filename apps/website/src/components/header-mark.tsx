@@ -1,8 +1,5 @@
 import { Seal } from '~/components/seal'
-import { colorways } from '~/lib/catalog'
-
-const paperMark = colorways.find(colorway => colorway.id === 'paper')!
-const charcoalMark = colorways.find(colorway => colorway.id === 'charcoal')!
+import { headerMarkOf } from '~/lib/marks'
 
 /**
  * The header mark. Every time the header mounts, a JI hops in from the right, lands on the 极
@@ -22,8 +19,8 @@ export function HeaderMark() {
       <span className="stomp-x">
         <span className="stomp-y">
           <span className="stomp-body">
-            <img className="dark-only" src={paperMark.thumbnail} width={234} height={288} alt="" />
-            <img className="light-only" src={charcoalMark.thumbnail} width={234} height={288} alt="" />
+            <img className="dark-only" src={headerMarkOf('paper')} width={65} height={80} alt="" />
+            <img className="light-only" src={headerMarkOf('charcoal')} width={65} height={80} alt="" />
           </span>
         </span>
       </span>

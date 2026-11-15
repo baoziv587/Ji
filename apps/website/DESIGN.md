@@ -268,6 +268,7 @@ Firm and quiet. There is one filled button per screen.
 ### Footer rubbing
 
 - The paper-white rubbing appears once, whole and uncropped, at the head of the footer's first column (144px tall), lazy-loaded. Never crop the mark, and never show it on the same screen as the seal.
+- Under it sit the name, the one-line description and the **GitHub** link with the up-right arrow (as in the header): the mark, what it is and where it lives read as one block. The other columns are Packages and Docs only.
 
 ### Logo hop
 

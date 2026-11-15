@@ -4,6 +4,7 @@ import paperRecord from '../../public/logos/paper.json'
 import qinglvRecord from '../../public/logos/qinglv.json'
 import silkManifest from '../../public/qinglv-silk/manifest.json'
 import { logos, paper, qinglv } from '../logos.ts'
+import { thumbnailOf } from './marks.ts'
 
 // The manifests come from the ji.dev asset pipeline; parsing them here makes a stale or
 // hand-edited manifest fail the build instead of shipping a broken page.
@@ -72,7 +73,7 @@ export interface Colorway {
 const logoFiles = (id: string) => ({
   svg: `/logos/${id}.svg`,
   webp: `/logos/${id}.webp`,
-  thumbnail: `/logos/${id}-288.webp`,
+  thumbnail: thumbnailOf(id),
 })
 const records = new Map(
   z
@@ -113,13 +114,6 @@ export const colorways: readonly Colorway[] = [
     inkLabel: `${paperData.fill}，用于墨底`,
   },
 ]
-
-/** The paper-white logo the home page shows as a rubbing on ink, sized for the footer. */
-export const rubbing = {
-  webp: `/logos/${paperData.thumbnail.file}`,
-  width: paperData.thumbnail.width,
-  height: paperData.thumbnail.height,
-}
 
 const silkData = SilkRecord.parse(silkManifest)
 
