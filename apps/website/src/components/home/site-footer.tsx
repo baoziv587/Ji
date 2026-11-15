@@ -16,9 +16,9 @@ export function SiteFooter() {
             src={rubbing.webp}
             width={rubbing.width}
             height={rubbing.height}
-            alt="JI, the etched logo pulled as a paper-white rubbing"
+            alt="JI, the etched logo pulled as a rubbing"
             loading="lazy"
-            className="mb-6 h-36 w-auto"
+            className="rubbing mb-6 h-36 w-auto"
           />
           <p className="max-w-[18rem] text-sm leading-relaxed text-paper-dim">
             <span className="font-semibold text-paper">JI</span> <span lang="zh-CN">极</span>

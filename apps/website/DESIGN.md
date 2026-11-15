@@ -2,19 +2,19 @@
 name: JI
 description: A small, extensible TypeScript runtime for LLM agents, presented as ink ground on an ink stone.
 colors:
-  scorched-ink: 'oklch(0.155 0.012 58)'
-  thick-ink: 'oklch(0.19 0.014 58)'
-  heavy-ink: 'oklch(0.225 0.015 60)'
-  light-ink: 'oklch(0.31 0.014 64)'
-  clear-ink: 'oklch(0.42 0.013 70)'
-  rubbing-paper: 'oklch(0.925 0.018 82)'
-  aged-paper: 'oklch(0.76 0.016 78)'
-  ash-paper: 'oklch(0.64 0.014 75)'
-  qinglv-mineral: 'oklch(0.78 0.095 172)'
-  ochre: 'oklch(0.74 0.085 58)'
-  gamboge: 'oklch(0.84 0.1 90)'
-  azurite: 'oklch(0.76 0.075 248)'
-  rouge: 'oklch(0.72 0.1 12)'
+  scorched-ink: 'oklch(0.18 0.003 260)'
+  thick-ink: 'oklch(0.215 0.003 260)'
+  heavy-ink: 'oklch(0.25 0.004 260)'
+  light-ink: 'oklch(0.33 0.004 260)'
+  clear-ink: 'oklch(0.44 0.005 260)'
+  rubbing-paper: 'oklch(0.935 0.004 85)'
+  aged-paper: 'oklch(0.77 0.004 85)'
+  ash-paper: 'oklch(0.66 0.004 85)'
+  qinglv-mineral: 'oklch(0.8 0.1 168)'
+  ochre: 'oklch(0.75 0.09 58)'
+  gamboge: 'oklch(0.84 0.095 90)'
+  azurite: 'oklch(0.77 0.08 245)'
+  rouge: 'oklch(0.73 0.1 14)'
 typography:
   display:
     fontFamily: 'Schibsted Grotesk Variable, system-ui, sans-serif'
@@ -126,11 +126,11 @@ It rejects, by name: AI product templates (purple/blue gradients, glowing grids,
 
 ## 2. Colors: The Grinding Palette
 
-Five ink tones, three paper tones, one hook mineral, and four syntax pigments that live only in code. Every neutral is tinted warm (hue 58–82); nothing is pure black or pure white.
+Five ink tones, three paper tones, one hook mineral, and four syntax pigments that live only in code. The ink is a natural dark: near-neutral gray (hue 260, chroma 0.005 or less), soft rather than black, never `#000`. The paper is a near-neutral white (hue 85, chroma 0.004). Qinglv, at chroma 0.1, is the only saturated hue outside code. Nothing is pure black or pure white.
 
 ### Primary
 
-- **Qinglv Mineral 石青绿** (`qinglv-mineral`): the only hue outside code. Hook helpers (bold, in code) in highlighted code, the selected hook tab underline and label, the active path and frame in the hook diagram, and the focus ring. Contrast 9.6:1 on thick ink.
+- **Qinglv Mineral 石青绿** (`qinglv-mineral`): the only hue outside code. Hook helpers (bold, in code) in highlighted code, the selected hook tab underline and label, the active path and frame in the hook diagram, and the focus ring. Contrast 9.8:1 on thick ink.
 
 ### Secondary: syntax pigments
 
@@ -148,9 +148,13 @@ Used only by the Shiki theme, inside scorched-ink code wells. All read at 8:1 or
 - **Heavy Ink 重墨** (`heavy-ink`): raised bands that need to be told apart from the ground: the hook-model band and the "Run it offline" band. Also the icon-button hover fill.
 - **Light Ink 淡墨** (`light-ink`): every hairline. Section borders, row dividers in the capability list, the tab rail, code-block rings (at 60%).
 - **Clear Ink 清墨** (`clear-ink`): the faintest structure. Link underlines at rest, dashed preset frames, inactive diagram strokes, hover borders on tabs.
-- **Rubbing Paper 拓纸** (`rubbing-paper`): headings, names in code, primary text, the footer rubbing, the primary button. 14.8:1 on thick ink.
-- **Aged Paper 旧纸** (`aged-paper`): supporting copy under headings, note text, keywords and punctuation in code. 8.6:1.
-- **Ash Paper 灰纸** (`ash-paper`): the quietest readable text. Comments in code, note numerals, captions, status lines, link arrows. 5.5:1, so it still passes AA for body text.
+- **Rubbing Paper 拓纸** (`rubbing-paper`): headings, names in code, primary text, the footer rubbing, the primary button. 14.5:1 on thick ink.
+- **Aged Paper 旧纸** (`aged-paper`): supporting copy under headings, note text, keywords and punctuation in code. 8.5:1.
+- **Ash Paper 灰纸** (`ash-paper`): the quietest readable text. Comments in code, note numerals, captions, status lines, link arrows. 5.6:1, so it still passes AA for body text.
+
+### Light theme: ink on paper
+
+The page follows the system colour scheme and offers a sun/moon toggle beside the seal; a manual choice is stored in `localStorage` (`ji-theme`). An inline script in `__root.tsx` sets `data-theme` on `<html>` before first paint; without JavaScript the page stays on ink. The token names are roles, not lightness: `ink-*` stay surfaces and rules, `paper-*` stay text, and `:root[data-theme='light']` in `src/styles.css` swaps their values (ground `oklch(0.972 0.008 85)`, warm rice paper; text `oklch(0.21 0.004 260)`, a near-neutral ink). Wells stay darker than the ground, so the Ink Order Rule holds. Qinglv and the syntax pigments are re-cut darker for paper (5:1 or better on the well). Assets made for one ground use `.dark-only` / `.light-only`: the seal swaps to `seal-ink.svg`, and the footer rubbing is pulled in ink (`.rubbing`).
 
 ### Named Rules
 
@@ -249,7 +253,7 @@ Firm and quiet. There is one filled button per screen.
 - **Do** keep syntax pigments inside code wells, with names in paper and punctuation in aged paper.
 - **Do** let code carry the page: real snippets from the repository, highlighted at build time, with side notes aligned to lines.
 - **Do** write headings as full sentences in sentence case ending with a period.
-- **Do** meet WCAG 2.2 AA: ash paper (5.5:1) is the lightest allowed text tone; every interactive element shows the 2px qinglv focus outline.
+- **Do** meet WCAG 2.2 AA: ash paper (5.6:1 dark, 5.8:1 light) is the lightest allowed text tone; every interactive element shows the 2px qinglv focus outline.
 - **Do** run all motion only under `prefers-reduced-motion: no-preference`, animate only opacity, transform and mask, and use ease-out-expo (`cubic-bezier(0.16, 1, 0.3, 1)`).
 - **Do** pair qinglv with a label or position every time; colour never carries meaning alone.
 - **Do** show the JI rubbing whole; it reads as a mark only when both letters are visible.
