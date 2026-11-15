@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
+import { Link } from '@tanstack/react-router'
 import { ArrowUpRight } from 'lucide-react'
 import { gutter } from '~/lib/layout'
 import { cn } from '~/lib/utils'
@@ -33,15 +34,21 @@ export function C({ children }: { children: ReactNode }) {
   )
 }
 
+const textLink =
+  'text-paper underline decoration-ink-4 decoration-1 underline-offset-[0.3em] transition-[text-decoration-color] hover:decoration-paper'
+
+/** A link into the docs pages; no arrow, since it stays on the site. */
+export function DocLink({ slug, hash, children }: { slug: string; hash?: string; children: ReactNode }) {
+  return (
+    <Link to="/docs/$slug" params={{ slug }} {...(hash ? { hash } : {})} className={textLink}>
+      {children}
+    </Link>
+  )
+}
+
 export function ExternalLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
   return (
-    <a
-      href={href}
-      className={cn(
-        'text-paper underline decoration-ink-4 decoration-1 underline-offset-[0.3em] transition-[text-decoration-color] hover:decoration-paper',
-        className,
-      )}
-    >
+    <a href={href} className={cn(textLink, className)}>
       {children}
       <ArrowUpRight aria-hidden className="ml-1 inline size-[0.9em] align-[-0.1em] text-paper-faint" />
     </a>

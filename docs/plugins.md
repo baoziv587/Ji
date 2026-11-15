@@ -135,6 +135,20 @@ run                observe                                    every event of the
 
 `input` and `request` run inside `decide`: a `decide` that returns `rewriteHistory(...)` or `stop(state)` without calling `next` skips them, and a rewrite goes straight to `record`. The tools do not: when `decide`'s `next` returns, the model has answered but no tool has run yet.
 
+Every hook in a step reads the same `ctx.state`: the state committed before the step began. The agent is **idle** when the history is empty, or the last message is an assistant message with no tool calls. An interrupted step is never recorded, so state only advances on completed steps.
+
+### Turns
+
+Every completed step produces exactly one `Turn`, and `record`, `state.reduce` and `Run.turns` all see the same sequence:
+
+| `turn.kind` | Produced by                                                               | Effect on history         |
+| ----------- | ------------------------------------------------------------------------- | ------------------------- |
+| `model`     | A model reply plus its tool results. The final answer has `results: []`.  | Appends message + results |
+| `input`     | External messages inserted at a boundary (user, steer, follow-up, plugin) | Appends messages          |
+| `rewrite`   | `rewriteHistory(messages)` returned from a `decide` middleware            | Replaces history          |
+
+The final answer is recorded before the run ends, so it also goes through `record`. The final idle check produces no Turn.
+
 <br>
 
 ## Hooks
@@ -460,6 +474,7 @@ They catch common mistakes; they do not prove a plugin pure. Two `Date.now()` ca
 4. From `decide`, return `rewriteHistory(messages)` to replace history, or `stop(state)` to end the run with the last assistant message.
 5. Never change state in place: return new values.
 6. Plugins don't import each other. They share what every plugin can read: `Turn`s, the messages, and event names with their shapes.
+7. Keep plugin data in `state`. It lives at `state.plugins[name]` in `AgentState`, so it is saved and restored with the messages.
 
 ## Tools
 

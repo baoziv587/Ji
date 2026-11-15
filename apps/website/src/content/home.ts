@@ -4,8 +4,6 @@ const tree = (path: string) => `${repo}/tree/main/${path}`
 
 export const links = {
   repo,
-  plugins: blob('docs/plugins.md'),
-  ordering: `${blob('docs/plugins.md')}#ordering`,
   compaction: blob('apps/examples/src/plugins/compaction.ts'),
   throttle: blob('plugins/throttle-updates/src/index.ts'),
   codingAgent: tree('apps/coding-agent'),
@@ -130,19 +128,9 @@ export const packages: readonly { name: string; role: string; href: string }[] =
   },
 ]
 
-export const docs: readonly { label: string; href: string }[] = [
-  {
-    label: 'Sessions & Runs',
-    href: blob('docs/sessions-and-runs.md'),
-  },
-  { label: 'Writing Plugins', href: links.plugins },
-  {
-    label: 'Concepts',
-    href: blob('docs/concepts.md'),
-  },
-  {
-    label: 'Kernel API',
-    href: blob('docs/kernel.md'),
-  },
-  { label: 'Runnable examples', href: links.examples },
+/** Footer shortcuts into the docs pages, which the site renders from docs/*.md. */
+export const docs: readonly { label: string; slug: string }[] = [
+  { label: 'Sessions & Runs', slug: 'sessions-and-runs' },
+  { label: 'Concepts', slug: 'concepts' },
+  { label: 'Writing Plugins', slug: 'plugins' },
 ]

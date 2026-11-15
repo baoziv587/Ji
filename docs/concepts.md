@@ -2,100 +2,84 @@
 
 **English** · [简体中文](zh-CN/concepts.md) · [Documentation index](README.md)
 
-This page covers the model behind JI. If you only want to use it, read the [README](../README.md) and [Sessions & Runs](sessions-and-runs.md) first.
+How JI works, in plain terms. You don't need this to send your first message. It helps when you want to know why a run behaves the way it does, or before you write a plugin.
 
 <br>
 
 ## Four objects
 
-| Object  | Responsibility                                           | Entry point            |
-| ------- | -------------------------------------------------------- | ---------------------- |
-| Agent   | Reusable model, tools and plugin configuration           | `createAgent(...)`     |
-| Session | One conversation’s state and pending messages            | `createSession(agent)` |
-| Run     | Execution until the agent is idle, with output and usage | `chat.send(...)`       |
-| Plugin  | Change behavior or observe events at fixed points        | `definePlugin(...)`    |
+| Object  | What it is                                                                     | Created with           |
+| ------- | ------------------------------------------------------------------------------ | ---------------------- |
+| Agent   | The setup: which model, which tools, which plugins. Make it once, reuse it.    | `createAgent(...)`     |
+| Session | One conversation. It keeps the history and any messages waiting to be sent.    | `createSession(agent)` |
+| Run     | The work done for one message, until the agent has answered. You read it live. | `chat.send(...)`       |
+| Plugin  | Your own code, called at fixed points while the agent works.                   | `definePlugin(...)`    |
+
+```ts
+const agent = createAgent({ model, tools: [calculator] }) // Agent
+const chat = createSession(agent) // Session
+const r = chat.send('What is 17 × 23?') // Run
+console.log(await r.result)
+```
 
 <br>
 
 ## Follow one message
 
-Suppose the user asks the agent to calculate `17 × 23`:
+An agent works in **steps**. Here is what happens to the message above:
 
-1. **Insert input:** record the user’s message in history.
-2. **Decide → act → record:** the model chooses a calculator, the tool returns `391`, and the model message and tool result are recorded together.
-3. **Answer → record:** the model gives its final answer. With no tool calls, it goes straight to recording.
-4. **Finish:** the agent is idle with no deliverable messages, so the Run completes.
+1. **Your message is added** to the history.
+2. **The model asks for a tool.** It wants the calculator. JI runs it, the tool returns `391`, and both the request and the result are added to the history.
+3. **The model answers.** It reads `391` and replies without asking for a tool, so the answer is added to the history.
+4. **The run ends.** The model has answered and no message is waiting, so there is nothing left to do.
 
-A run contains several steps. Each step that commits state produces one `Turn`; the final idle check and interrupted steps do not produce a committed Turn. Plugins can change individual parts, such as adding retrieved context before `request` or shortening a result after `toolCall`.
+Each step does one of two things, then saves what happened:
 
-<br>
-
-## What happens in one step
-
-A **step boundary** is the moment between two steps when no model output is streaming and no tool is running. At each boundary:
-
-```
-decide ───┬─ ① input    messages to insert here?  yes → record them, step ends
-          │             none and agent idle?       → run finishes
-          └─ ② request  call the model, stream deltas (request hooks may change what it sends; history unchanged)
-toolCalls ─ tool calls of this turn, run in parallel → toolCall (per call)
-record ──── append the turn to history → each plugin's state.reduce
+```text
+messages waiting?   yes → add them to the history
+                    no  → ask the model, then run the tools it asked for
+save the step to the history, then start the next step
+stop once the model answers without asking for a tool
 ```
 
-`decide` chooses what this step does; `toolCalls` executes the model’s tool calls; `record` commits the completed Turn. Replies without tool calls skip `toolCalls`. When `decide` returns, tools have not run yet. Every hook in a step reads the same `ctx.state`: the state committed before that step.
-
-The agent is **idle** when the history is empty, or the last message is an assistant message with no tool calls.
-
-Every committed step produces exactly one **Turn**, and `record`, `state.reduce` and `Run.turns` all see the same sequence:
-
-| `turn.kind` | Produced by                                                               | Effect on history         |
-| ----------- | ------------------------------------------------------------------------- | ------------------------- |
-| `model`     | A model reply plus its tool results. The final answer has `results: []`.  | Appends message + results |
-| `input`     | External messages inserted at a boundary (user, steer, follow-up, plugin) | Appends messages          |
-| `rewrite`   | `rewriteHistory(messages)` returned from a `decide` middleware            | Replaces history          |
-
-The final answer is recorded before the run ends, so it also goes through `record`.
+A run can take one step or many. The model decides which tools to call and when it is done. `maxSteps` caps the number of steps, so a run can never loop forever ([Limits](sessions-and-runs.md#limits)).
 
 <br>
 
-## One step, three functions
+## Talking to a busy agent
 
-The kernel describes any agent as three functions:
+You can send another message while a run is still working. It joins the same run instead of starting a new one. You choose when it is delivered: after the answer, after the current step, or right away, cancelling the step in progress ([Interjecting](sessions-and-runs.md#interjecting-while-the-agent-works)).
 
-```
-π  policy  : S → D* · (A + R)   decide: stream deltas D, then return A or R
-ε  env     : A → D* · O         act:    stream deltas D while performing the side effect, then return O
-δ  update  : S × A × O → S      record: compute the next state (sync, pure)
-```
-
-Everything with side effects is a stream of the same `D`; everything pure is a plain function. `unfold` repeats _decide → act → record_ until the policy returns a result. The output is a lazy stream of events. `extend` wraps any of the three functions in middleware, and that is the only way to extend an agent.
+A cancelled step is thrown away. Nothing from it reaches the history, so the conversation never holds half a step.
 
 <br>
 
-## Three layers
+## Where plugins fit
 
-| Layer                 | Responsibility                                                                     | Types                                                                                                                  |
-| --------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `@ji.dev/kernel`      | The `(π, ε, δ)` algebra, `unfold`, `extend`. Knows nothing about LLMs or IO.       | Generic `S, A, O, R, D`                                                                                                |
-| `@ji.dev/llm` agent   | Implements `(π, ε, δ)` with pi-ai. Compiles plugins into kernel middleware.        | `S = AgentState`, `O = ToolResultMessage[]`, `D` = every event: model output, tool start / update / end, plugin events |
-| `@ji.dev/llm` session | Drives `unfold`, queues external messages, splits a run into segments on interrupt | `Session`, `Run`                                                                                                       |
+A plugin attaches to named points in the loop, called **hooks**. A few examples:
 
-<br>
+| You want to…                      | Hook       | When it runs                  |
+| --------------------------------- | ---------- | ----------------------------- |
+| Add retrieved documents to a call | `request`  | Before each call to the model |
+| Shorten a long tool result        | `toolCall` | Around each tool call         |
+| Summarize a history that got long | `decide`   | At the start of each step     |
+| Log or trace everything           | `observe`  | For every event, read-only    |
 
-## Invariants
-
-The design relies on these rules. Use them when writing plugins; development checks catch some violations.
-
-1. **`record` and `state.reduce` are synchronous and pure.** They must not read clocks or make requests. The same recorded turns can reconstruct the same state; new model calls may still return different answers. Development checks freeze committed state and run each `state.reduce` twice to catch the common mistakes ([details](plugins.md#development-checks)).
-2. **Do IO in `decide`, `input`, `request`, `toolCalls` or `toolCall`, with `ctx.signal`.** For example, compaction writes its summary in `decide` with `ctx.complete`, then hands the replacement to `record` via `rewriteHistory`.
-3. **Expected tool failures are results; retryable ones are exceptions.** Return `toolError(call, reason)` for a refusal; throw for a failure a retry may fix, so outer `toolCall` middleware can see it. Anything still thrown is converted to an error result for the model.
-4. **Cancellation and events flow through `yield*`.** In stream middleware (`decide`, `request`, `toolCalls`, `toolCall`), write `return yield* next(...)`, or use `before` / `after` / `intercept` / `mapEvents`, so aborts reach the HTTP request and the tools, inner events reach the run, and the return value isn't lost.
-5. **An interrupted step is never recorded.** State only advances on completed steps.
-6. **Plugin state lives in `AgentState`.** Stored as `state.plugins[name]`, it is saved and restored along with the messages.
+[Writing Plugins](plugins.md) lists every hook and where it sits in a step.
 
 <br>
 
-## Next
+## What gets saved
 
-- [Writing Plugins](plugins.md): every hook mapped onto the steps above
-- [Kernel API](kernel.md): using the algebra directly
+A session's state is plain JSON: the messages, plus whatever each plugin keeps. Save it with `JSON.stringify(chat.state)` and pass it back to `createSession` to continue later ([Save and restore](sessions-and-runs.md#save-and-restore)).
+
+The state only changes when a step completes. If a run fails or is cancelled, you still have the state from the last finished step, and you can continue from there.
+
+<br>
+
+## Going deeper
+
+None of this is needed to build with JI. If you are curious how the loop is put together:
+
+- [The agent loop](plugins.md#the-agent-loop): each step hook by hook, and the kinds of turns it records
+- [Kernel API](kernel.md): the three functions every agent is built from, and the layers on top of them

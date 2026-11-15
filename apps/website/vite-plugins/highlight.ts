@@ -83,7 +83,31 @@ function shown(source: string): string {
   return (at === -1 ? source : source.slice(at + MARKER.length)).trimEnd()
 }
 
+const HIGHLIGHT_LANGS = ['ts', 'bash'] as const
+
 let highlighter: ReturnType<typeof createHighlighter> | undefined
+
+/** One Shiki instance for snippets and docs, so both share the ink theme. */
+export async function codeHighlighter() {
+  highlighter ??= createHighlighter({
+    themes: [inkTheme],
+    langs: [...HIGHLIGHT_LANGS],
+  })
+  const instance = await highlighter
+  const supported = new Set<string>(HIGHLIGHT_LANGS)
+  return (code: string, lang: string) =>
+    instance.codeToHtml(code, {
+      lang: supported.has(lang) ? lang : 'text',
+      theme: 'ink',
+      transformers: [
+        {
+          span(node, _line, _col, _lineElement, token) {
+            if (HOOK_HELPERS.has(token.content.trim())) this.addClassToHast(node, 'hook')
+          },
+        },
+      ],
+    })
+}
 
 /**
  * `import html from './snippet.ts?highlight'` returns the file as highlighted
@@ -100,22 +124,8 @@ export function highlight(): Plugin {
       if (!lang) throw new Error(`No highlight language for ${file}`)
 
       this.addWatchFile(file)
-      highlighter ??= createHighlighter({
-        themes: [inkTheme],
-        langs: Object.values(LANGUAGES),
-      })
-      const code = shown(await readFile(file, 'utf8'))
-      const html = (await highlighter).codeToHtml(code, {
-        lang,
-        theme: 'ink',
-        transformers: [
-          {
-            span(node, _line, _col, _lineElement, token) {
-              if (HOOK_HELPERS.has(token.content.trim())) this.addClassToHast(node, 'hook')
-            },
-          },
-        ],
-      })
+      const toHtml = await codeHighlighter()
+      const html = toHtml(shown(await readFile(file, 'utf8')), lang)
       return `export default ${JSON.stringify(html)}`
     },
   }

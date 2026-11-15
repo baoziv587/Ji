@@ -4,8 +4,9 @@ import { CopyButton } from '~/components/home/copy-button'
 import { Hero } from '~/components/home/hero'
 import { HookModel } from '~/components/home/hook-model'
 import { Onion } from '~/components/home/onion'
-import { C, ExternalLink, Heading, Section } from '~/components/home/primitives'
+import { C, DocLink, ExternalLink, Heading, Section } from '~/components/home/primitives'
 import { SiteFooter } from '~/components/home/site-footer'
+import { SiteHeader } from '~/components/site-header'
 import { agentNotes, capabilities, compactionNotes, links, progressNotes } from '~/content/home'
 import agentHtml from '~/snippets/agent.ts?highlight'
 import compactionHtml from '~/snippets/compaction.ts?highlight'
@@ -21,6 +22,7 @@ export const Route = createFileRoute('/')({
 function Home() {
   return (
     <>
+      <SiteHeader />
       <main>
         <Hero />
 
@@ -52,7 +54,9 @@ function Home() {
               outside in: inputs flow forward, results return in reverse.
             </p>
             <p className="mt-4">
-              <ExternalLink href={links.ordering}>Composition order</ExternalLink>
+              <DocLink slug="plugins" hash="ordering">
+                Composition order
+              </DocLink>
             </p>
           </Heading>
           <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">

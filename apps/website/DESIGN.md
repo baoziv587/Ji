@@ -212,6 +212,17 @@ Firm and quiet. There is one filled button per screen.
 - **Inline / external:** rubbing paper, 1px underline in clear ink offset 0.3em, underline brightens to paper on hover. External links end in a small up-right arrow in ash paper that stays inline with the last word.
 - **Footer:** aged paper with no visible underline at rest; paper text and an ash underline on hover.
 
+### Site header
+
+- The same row on every page: the 40px seal (a link home) on the left; on the right a **Docs** tab, a **GitHub** link with the up-right arrow, and the theme toggle.
+- The Docs tab is a tab, not a button: aged-paper label at rest, paper label with a 2px paper underline on any `/docs` page. Never qinglv (The One Pigment Rule).
+
+### Docs pages
+
+- Three columns on wide screens: the doc list (12rem, sticky), the article (max 48rem), and "On this page" (13rem, sticky, from 1280px). Below 1024px the doc list becomes a wrapped row above the article, under a hairline.
+- The article follows the home type scale: a display-weight title, `h2` as a headline with a light-ink rule above it, body in aged paper with paper for links, strong text and inline code. Code blocks are the same scorched-ink wells as the code prints, without side notes. Tables are ruled with light-ink hairlines only.
+- Previous and next sit under the article, divided by a hairline; links that leave the site carry the up-right arrow.
+
 ### Hook tabs (signature)
 
 - A three-column rail with a 1px light-ink bottom border. Each tab stacks the hook name in code type over its effect in label type.
@@ -235,7 +246,7 @@ Firm and quiet. There is one filled button per screen.
 
 ### Hero
 
-- **One subject:** the first screen leads with real code, never with a brand image. The 40px 极 seal sits alone at the top, with no wordmark beside it; there is exactly one mark per screen.
+- **One subject:** the first screen leads with real code, never with a brand image. The 40px 极 seal sits at the top left of the site header, with no wordmark beside it; there is exactly one mark per screen.
 - **Layout:** headline (`clamp(2.25rem, 3.6vw, 3.5rem)`, 800, three lines on desktop), lead, CTAs and status line on the left; a code print titled with its file name (`block-shell.ts`) on the right, top-aligned with the headline. Side by side from 1280px; stacked below. Hero code lines stay at 60 characters or fewer so the well never scrolls on desktop.
 - **Motion:** text rises in a 70ms stagger, then the code well soaks in from the top (mask reveal, 1.1s, ease-out-expo, 0.55s delay).
 - **Rhythm:** the hero is content-height, not full-viewport, so the next section's heading shows at the bottom of a 900px-tall screen.

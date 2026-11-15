@@ -1,6 +1,6 @@
 # ji.dev 网站
 
-JI 的产品页（`/`）和品牌资源页（`/brand`）。用 TanStack Start 构建时预渲染成纯静态 HTML，产物可以放到任意静态托管，**不需要运行 Node 服务**。
+JI 的产品页（`/`）、文档（`/docs`）和品牌资源页（`/brand`）。用 TanStack Start 在构建时把每个页面预渲染成纯静态 HTML，产物可以放到任意静态托管，**不需要运行 Node 服务**。
 
 ```bash
 pnpm website                                  # 开发：https://ji.localhost（经 portless 代理）
@@ -10,8 +10,32 @@ pnpm --filter @ji.dev/website typecheck       # 页面代码 + 页面上展示�
 ```
 
 - 本地域名由 [portless](https://portless.sh/) 提供，名称写在 `portless.json`。首次运行会生成并信任本地 CA、监听 443 端口，需要 sudo。
-- 部署：构建命令 `pnpm --filter @ji.dev/website build`，发布目录 `apps/website/dist/client`。
-- 预渲染只爬取页面路由，跳过带扩展名的下载链接，避免覆盖 `public/` 里原样复制的文件。
+- 部署：构建命令 `pnpm --filter @ji.dev/website build`，发布目录 `apps/website/dist/client`。`dist/server` 只在构建时用来预渲染，不需要部署。
+- 预渲染只爬取页面路由，跳过带扩展名的下载链接（避免覆盖 `public/` 里原样复制的文件）和 `#锚点` 链接。每篇文档和 `/404` 也在 `vite.config.ts` 里显式列出，没有页面链接到它们也会生成。
+
+## Docker
+
+镜像是纯静态站点：Node 只在构建阶段用，最终镜像是 nginx 托管 `dist/client`。文档来自仓库根目录的 `docs/`，所以要在**仓库根目录**构建：
+
+```bash
+docker build -f apps/website/Dockerfile -t ji-website .
+docker run --rm -p 8080:80 ji-website        # http://localhost:8080
+```
+
+- `Dockerfile.dockerignore` 用白名单，只把 workspace 的 `package.json`、`docs/` 和 `apps/website` 放进构建上下文（`apps/replay` 里有几 GB 未提交的数据）。
+- `nginx.conf`：每个页面都是文件（`/docs/plugins` → `docs/plugins/index.html`），没有 SPA 回退；不存在的路径返回 `404.html` 和 404 状态码。`/assets/` 带哈希，长期缓存。
+
+## 文档
+
+`/docs` 由仓库的 `docs/*.md` 在构建时生成（`vite-plugins/docs.ts`），浏览器端不解析 Markdown：
+
+- `README.md` 是 `/docs`，其他文件是 `/docs/<文件名>`。侧边栏顺序写在 `vite.config.ts` 的 `order` 里，没列出的文件按字母排在后面。
+- 标题 id 用 GitHub 的规则生成，所以 GitHub 上的锚点链接（如 `plugins.md#ordering`）在网站上同样有效。
+- 文档之间的链接改成站内链接（`/docs/plugins#ordering`），其他相对链接指向 GitHub 上的文件。
+- 每篇开头的语言切换行和 `<br>` 间隔是给 GitHub 页面用的，网站上会去掉。
+- 代码块和首页共用 Shiki 墨色主题；`before` / `after` / `intercept` 同样标成青绿。
+- 中文文档（`docs/zh-CN/`）暂未上站，链接指向 GitHub。
+- `exclude` 里的文件（目前是 `kernel.md`）只留在 GitHub，网站只放入门到插件这几页，站内指向它们的链接自动变成 GitHub 链接。
 
 ## 代码示例
 

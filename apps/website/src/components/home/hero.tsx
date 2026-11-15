@@ -1,8 +1,6 @@
 import type { CSSProperties } from 'react'
 import { ArrowDown, ArrowUpRight } from 'lucide-react'
 import { CodePrint } from '~/components/home/code-print'
-import { Seal } from '~/components/seal'
-import { ThemeToggle } from '~/components/theme-toggle'
 import { links } from '~/content/home'
 import { gutter } from '~/lib/layout'
 import { cn } from '~/lib/utils'
@@ -14,14 +12,9 @@ export function Hero() {
   return (
     <section
       aria-labelledby="hero-title"
-      className={cn(gutter, 'pb-[clamp(1rem,2vw,2rem)] pt-[clamp(2rem,5vw,3.5rem)]')}
+      className={cn(gutter, 'pb-[clamp(1rem,2vw,2rem)] pt-[clamp(3rem,7vw,5.5rem)]')}
     >
-      <div className="rise flex items-center justify-between" style={step(0)}>
-        <Seal size={40} alt="JI" />
-        <ThemeToggle className="-mr-2" />
-      </div>
-
-      <div className="mt-[clamp(3rem,7vw,5.5rem)] grid gap-12 xl:grid-cols-2 xl:gap-16">
+      <div className="grid gap-12 xl:grid-cols-2 xl:gap-16">
         <div className="max-w-[40rem]">
           <h1
             id="hero-title"

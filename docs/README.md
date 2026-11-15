@@ -23,9 +23,9 @@ New to JI? Run the offline demo in the [quick start](../README.md#quick-start), 
 
 ## A learning path
 
-[Sessions & Runs](sessions-and-runs.md) → [Writing Plugins](plugins.md) → [Concepts](concepts.md). Read the Kernel API when you need to customize the underlying loop.
+[Sessions & Runs](sessions-and-runs.md) → [Concepts](concepts.md) → [Writing Plugins](plugins.md). The [Kernel API](kernel.md) goes one level deeper, for when you want to build your own loop.
 
-Sessions covers usage, plugins covers extension, and concepts explains execution. Each page also works as a reference; you do not need to read them all in order.
+Sessions covers usage, concepts explains how a run works, and plugins covers extension. Each page also works as a reference; you do not need to read them all in order.
 
 <br>
 

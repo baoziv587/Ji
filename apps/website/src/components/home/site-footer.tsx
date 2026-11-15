@@ -46,12 +46,17 @@ export function SiteFooter() {
             <h2 className="mb-4 font-semibold text-paper">Docs</h2>
             <ul className="grid gap-2">
               {docs.map(doc => (
-                <li key={doc.href}>
-                  <a href={doc.href} className={linkClass}>
+                <li key={doc.slug}>
+                  <Link to="/docs/$slug" params={{ slug: doc.slug }} className={linkClass}>
                     {doc.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
+              <li>
+                <a href={links.examples} className={linkClass}>
+                  Runnable examples
+                </a>
+              </li>
             </ul>
           </div>
           <ul className="grid gap-2">

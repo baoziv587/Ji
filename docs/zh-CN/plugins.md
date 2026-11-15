@@ -135,6 +135,20 @@ run                observe                                 这次运行的每个
 
 `input`、`request` 都在 `decide` 里面：`decide` 不调用 `next`、直接返回 `rewriteHistory(...)` 或 `stop(state)` 时，它们都不会执行，改写历史直接进入 `record`。工具不在里面：`decide` 的 `next` 返回时，模型已经回答，但还没有任何工具执行。
 
+同一步里所有钩子读取的 `ctx.state` 都是这一步开始前已提交的状态。agent **空闲**是指：历史为空，或者最后一条是没有工具调用的助手消息。被中断的一步不会写入，状态只在一步完成后才前进。
+
+### Turn
+
+每个完成的步骤恰好产生一条 `Turn`，`record`、`state.reduce`、`Run.turns` 看到的是同一个序列：
+
+| `turn.kind` | 来源                                                   | 对历史的影响   |
+| ----------- | ------------------------------------------------------ | -------------- |
+| `model`     | 模型回复及其工具结果；最终回答的 `results: []`         | 追加消息和结果 |
+| `input`     | 在步边界插入的外部消息（用户、steer、follow-up、插件） | 追加消息       |
+| `rewrite`   | `decide` 中间件返回的 `rewriteHistory(messages)`       | 替换整个历史   |
+
+最终回答在运行结束前就已经写入，所以它同样经过 `record`。最后的空闲检查不产生 Turn。
+
 <br>
 
 ## 钩子
@@ -456,6 +470,7 @@ try {
 4. 在 `decide` 里返回 `rewriteHistory(messages)` 替换历史，返回 `stop(state)` 以最后一条助手消息结束运行。
 5. 不要原地修改状态，要返回新值。
 6. 插件之间不互相导入。它们共享的是每个插件都能读到的东西：`Turn`、消息，以及事件名和它的形状。
+7. 插件数据放在 `state` 里。它位于 `AgentState` 的 `state.plugins[name]`，跟消息一起保存和恢复。
 
 ## 工具
 

@@ -1,0 +1,14 @@
+# Allowlist: the build needs the workspace manifests, the docs and the site itself.
+# (apps/replay alone holds gigabytes of untracked data.)
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.base.json
+!packages/*/package.json
+!plugins/*/package.json
+!apps/*/package.json
+!docs
+!apps/website
+**/node_modules
+apps/website/dist
