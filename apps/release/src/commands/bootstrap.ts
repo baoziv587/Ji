@@ -1,11 +1,12 @@
 // `pnpm release bootstrap`, once per new package: npm only lets CI publish through trusted publishing (no token
 // anywhere) to a package that already exists, so this puts a 0.0.0 placeholder under each new name from this machine,
-// deprecates it to point at the real channel, and links the package to the release workflow. Publishing takes a name
-// for good, the one step here that cannot be undone, so it shows exactly what it will publish and asks once.
+// then links the package to the release workflow. Publishing takes a name for good, the one step here that cannot be
+// undone, so it shows exactly what it will publish and asks once.
 //
-// npm accepts a new package at once but serves it only minutes later, and refuses to deprecate or link it until then.
-// So each step looks at what npm holds now rather than at what an earlier run did: run again, it does only what is
-// left, and waits for packages it has just published before going on.
+// Every write to npm takes two-factor authentication, confirmed in the browser, and npm will not even say whether a
+// package is linked without it. So what gets linked follows a rule instead of a lookup: the packages this run
+// publishes; with none to publish, every package; or the packages named. A failed run prints the command that finishes
+// the rest, with their names.
 
 import type { Package } from '@manypkg/get-packages'
 import type { Workspace } from '../workspace.ts'
@@ -24,25 +25,23 @@ import { header } from './status.ts'
 /** The workflow npm lets publish, by its file name under .github/workflows. */
 const WORKFLOW = 'release.yml'
 
+/** npm accepts a new package at once and serves it minutes later; it links only what it serves. */
+const SERVE_TIMEOUT_MS = 15 * 60_000
+const POLL_MS = 15_000
+
 export interface BootstrapFlags {
   dryRun: boolean
+  /** Packages to link, already on npm or not; empty for the rule above. */
+  only: string[]
 }
 
-/** What npm serves for a package: nothing yet, its placeholder still to deprecate, or nothing left to do. */
-type RegistryState = 'missing' | 'placeholder' | 'ready'
-
-async function registryState(name: string, cwd: string): Promise<RegistryState> {
-  const out = await capture('npm', ['view', `${name}@0.0.0`, 'version', 'deprecated', '--json'], { cwd })
+async function isOnNpm(name: string, cwd: string): Promise<boolean> {
+  const out = await capture('npm', ['view', name, 'name'], { cwd })
   if (out.code === 0) {
-    const view = JSON.parse(out.stdout || 'null') as string | { deprecated?: string } | null
-    return typeof view === 'object' && view?.deprecated !== undefined ? 'ready' : 'placeholder'
-  }
-  // The package is there, released without a placeholder
-  if (/No match found for version/.test(out.stderr)) {
-    return 'ready'
+    return true
   }
   if (/E404|404 Not Found/.test(out.stderr)) {
-    return 'missing'
+    return false
   }
   throw new ReleaseError(
     `Could not ask npm about ${name}.`,
@@ -50,27 +49,20 @@ async function registryState(name: string, cwd: string): Promise<RegistryState> 
   )
 }
 
-/** Minutes npm took to serve a new package, at most, when this was written; past them, a run later picks up. */
-const SERVE_TIMEOUT_MS = 15 * 60_000
-const POLL_MS = 15_000
-
-/** Waits until npm serves each of `names`; returns the states, `missing` for those it still does not serve. */
-async function waitServed(names: string[], cwd: string): Promise<Map<string, RegistryState>> {
-  const states = new Map<string, RegistryState>(names.map(name => [name, 'missing']))
+/** Waits until npm serves each of `names`; returns those it still does not when time runs out. */
+async function waitServed(names: string[], cwd: string): Promise<string[]> {
   const deadline = Date.now() + SERVE_TIMEOUT_MS
-  print('', dim(`Waiting for npm to serve the new packages; this usually takes a few minutes.`))
-  let served = 0
+  print('', dim('Waiting for npm to serve the new packages; this usually takes a few minutes.'))
+  let pending = names
   for (;;) {
-    const pending = [...states].filter(([, state]) => state === 'missing').map(([name]) => name)
-    const now = await mapLimit(pending, 6, name => registryState(name, cwd))
-    pending.forEach((name, index) => states.set(name, now[index]!))
-    const count = [...states.values()].filter(state => state !== 'missing').length
-    if (count !== served) {
-      served = count
-      print(dim(`  ${served} of ${names.length} served`))
+    const served = await mapLimit(pending, 6, name => isOnNpm(name, cwd))
+    const still = pending.filter((_, index) => !served[index])
+    if (still.length !== pending.length) {
+      print(dim(`  ${names.length - still.length} of ${names.length} served`))
     }
-    if (served === names.length || Date.now() > deadline) {
-      return states
+    pending = still
+    if (pending.length === 0 || Date.now() > deadline) {
+      return pending
     }
     await sleep(POLL_MS)
   }
@@ -102,58 +94,58 @@ async function publishPlaceholder(pkg: Package, ws: Workspace, repo: string): Pr
   }
 }
 
-async function deprecate(name: string, ws: Workspace): Promise<boolean> {
-  print('', strong(`${name}@0.0.0  deprecate`))
-  return (await attach('npm', ['deprecate', `${name}@0.0.0`, placeholderNote(name, ws)], { cwd: ws.root })) === 0
-}
-
-/**
- * Whether the package already trusts the workflow; undefined when npm will not say without two-factor authentication,
- * which it asks for in a terminal only (and this reads npm's answer, so runs it without one).
- */
-async function isLinked(name: string, repo: string, cwd: string): Promise<boolean | undefined> {
-  const out = await capture('npm', ['trust', 'list', name, '--json'], { cwd })
-  if (out.code !== 0) {
-    return /EOTP|one-time password/.test(out.stderr + out.stdout) ? undefined : false
-  }
-  return out.stdout.includes(WORKFLOW) && out.stdout.toLowerCase().includes(repo.toLowerCase())
-}
-
 async function link(name: string, repo: string, cwd: string): Promise<boolean> {
   print('', strong(`${name}  trust ${repo} ${WORKFLOW}`))
   const args = ['trust', 'github', name, '--repository', repo, '--file', WORKFLOW, '--allow-publish', '--yes']
   return (await attach('npm', args, { cwd })) === 0
 }
 
+/** The packages named, by full name or by the part after the scope; an unknown name stops the run. */
+function named(packages: Package[], only: string[]): Package[] {
+  const byName = (wanted: string): Package | undefined =>
+    packages.find(pkg => pkg.packageJson.name === wanted || pkg.packageJson.name.endsWith(`/${wanted}`))
+  const unknown = only.filter(wanted => byName(wanted) === undefined)
+  if (unknown.length > 0) {
+    throw new ReleaseError(
+      `No published package named ${unknown.join(', ')}.`,
+      `One of: ${packages.map(pkg => pkg.packageJson.name).join(', ')}`,
+      2,
+    )
+  }
+  return [...new Set(only.map(wanted => byName(wanted)!))]
+}
+
+function confirmations(count: number): string {
+  return count === 1 ? 'one confirmation' : `${count} confirmations`
+}
+
 export async function bootstrap(ws: Workspace, flags: BootstrapFlags): Promise<void> {
-  const packages = published(ws)
-  const names = packages.map(pkg => pkg.packageJson.name)
+  const all = published(ws)
+  const scope = flags.only.length > 0 ? named(all, flags.only) : all
   const repo = githubRepo(ws)
   print(header(ws, await currentBranch(ws), 'Ji release bootstrap'), '')
 
-  const states = new Map(
-    (await mapLimit(names, 6, name => registryState(name, ws.root))).map((state, index) => [names[index]!, state]),
-  )
-  const missing = packages.filter(pkg => states.get(pkg.packageJson.name) === 'missing')
+  const onNpm = await mapLimit(scope, 6, pkg => isOnNpm(pkg.packageJson.name, ws.root))
+  const missing = scope.filter((_, index) => !onNpm[index])
+  // The rule in the header: the packages named, else what this run publishes, else every package
+  const toLink = flags.only.length > 0 || missing.length === 0 ? scope : missing
 
-  if (missing.length === 0) {
-    print(`All ${packages.length} packages are on npm.`)
-  } else {
+  if (missing.length > 0) {
     print(
-      `${missing.length} of ${packages.length} packages are not on npm yet:`,
+      `${missing.length} of ${scope.length} packages are not on npm yet:`,
       ...columns(missing.map(pkg => [pkg.packageJson.name, dim(placeholderNote(pkg.packageJson.name, ws))])),
       dim('Published in the last few minutes? npm may not serve them yet: wait, then run this again.'),
-    )
-  }
-  if (flags.dryRun) {
-    const toDeprecate = names.filter(name => states.get(name) === 'placeholder')
-    print(
-      `${toDeprecate.length} placeholders to deprecate.`,
-      `Then each package on npm is linked to ${repo} ${WORKFLOW}, unless it is already.`,
       '',
-      dim('Dry run: nothing written to npm. Whether a package is linked takes two-factor authentication to read,'),
-      dim('so the real run checks it, asking in the browser.'),
     )
+  } else {
+    print(`${scope.length === all.length ? 'All' : 'The'} ${scope.length} packages are on npm.`)
+  }
+  print(
+    `${toLink.length} to link to ${repo} ${WORKFLOW}. npm asks you to confirm each publish and each link in the ` +
+      `browser: ${confirmations(missing.length + toLink.length)} in all.`,
+  )
+  if (flags.dryRun) {
+    print('', dim('Dry run: nothing written to npm.'))
     return
   }
   if (!isInteractive()) {
@@ -166,7 +158,8 @@ export async function bootstrap(ws: Workspace, flags: BootstrapFlags): Promise<v
   }
   const user = whoami.stdout.trim()
 
-  const failed = new Set<string>()
+  const failed: string[] = []
+  let unserved: string[] = []
   if (missing.length > 0) {
     const go = await confirm({
       message: `Publish ${missing.length} placeholder packages as ${user}? Their names become yours on npm for good.`,
@@ -181,44 +174,38 @@ export async function bootstrap(ws: Workspace, flags: BootstrapFlags): Promise<v
       if (await publishPlaceholder(pkg, ws, repo)) {
         fresh.push(pkg.packageJson.name)
       } else {
-        failed.add(pkg.packageJson.name)
+        failed.push(pkg.packageJson.name)
       }
     }
-    for (const [name, state] of await waitServed(fresh, ws.root)) {
-      states.set(name, state)
-    }
+    unserved = await waitServed(fresh, ws.root)
   }
 
-  // Deprecating and linking change no code and repeat harmlessly, so they go ahead without asking
-  for (const name of names.filter(name => states.get(name) === 'placeholder')) {
-    if (!(await deprecate(name, ws))) {
-      failed.add(name)
+  // Linking changes no package and repeats harmlessly, so it goes ahead without asking
+  for (const pkg of toLink) {
+    const name = pkg.packageJson.name
+    if (failed.includes(name) || unserved.includes(name)) {
+      continue
     }
-  }
-  // npm may answer "linked?" only after two-factor authentication: then link, and let npm ask for it in the terminal
-  const present = names.filter(name => states.get(name) !== 'missing')
-  const linked = await mapLimit(present, 6, name => isLinked(name, repo, ws.root))
-  for (const name of present.filter((_, index) => linked[index] !== true)) {
     if (!(await link(name, repo, ws.root))) {
-      failed.add(name)
+      failed.push(name)
     }
   }
 
-  const unserved = names.filter(name => states.get(name) === 'missing' && !failed.has(name))
   print('')
-  if (failed.size > 0 || unserved.length > 0) {
-    if (failed.size > 0) {
-      print(blocking(`✖ Not done: ${[...failed].join(', ')}`))
+  const left = [...failed, ...unserved]
+  if (left.length > 0) {
+    if (failed.length > 0) {
+      print(blocking(`✖ Not done: ${failed.join(', ')}`))
     }
     if (unserved.length > 0) {
-      print(notice(`npm does not serve ${unserved.length} of them yet: ${unserved.join(', ')}`))
+      print(notice(`npm does not serve ${unserved.join(', ')} yet; give it a few more minutes.`))
     }
-    print(dim(`Run ${command('pnpm release bootstrap')} again to finish them; it does only what is left.`))
+    print(dim(`Finish them with ${command(`pnpm release bootstrap ${left.join(' ')}`)}`))
     process.exitCode = 1
     return
   }
   print(
-    done(`✔ ${packages.length} packages on npm, each publishable by ${repo} ${WORKFLOW} only.`),
+    done(`✔ ${toLink.length} packages linked: ${repo} ${WORKFLOW} can publish them, and nothing else can.`),
     'Next: merge a Version Packages PR to publish the first real versions.',
   )
 }

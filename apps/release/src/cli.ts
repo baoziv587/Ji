@@ -30,7 +30,7 @@ const USAGE = `pnpm release [command]
   version       Apply the changesets (CI runs this)
 
 add takes the flags of changeset add: --patch/--minor/--major <pkg,...>, -m <summary>, --empty.
-bootstrap takes --dry-run.`
+bootstrap takes --dry-run, and package names (llm, plugin-shell) to link only those.`
 
 const { positionals, values } = parseArgs({
   allowPositionals: true,
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     case 'pre':
       return pre(ws, rest[0])
     case 'bootstrap':
-      return bootstrap(ws, { dryRun: values['dry-run'] })
+      return bootstrap(ws, { dryRun: values['dry-run'], only: rest })
     case 'version':
       return version(ws)
     default:

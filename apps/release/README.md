@@ -34,17 +34,19 @@ pnpm release version      apply the changesets (CI runs this)
 ## Prerelease
 
 `.changeset/pre.json` says whether a prerelease is on. In one, versions end in `-alpha.N` and publish to the `alpha`
-dist-tag, so `npm i @ji.dev/llm` keeps the stable version (or, before the first stable one, the placeholder, which is
-deprecated and points to `@alpha`). Move to beta with `pnpm release pre beta`; finish with `pnpm release pre exit`,
+dist-tag, so `npm i @ji.dev/llm` keeps the stable version (or, before the first stable one, the placeholder, whose
+description points to `@alpha`). Move to beta with `pnpm release pre beta`; finish with `pnpm release pre exit`,
 after which the next Version Packages PR makes the stable versions on `latest`.
 
 ## Setup, once
 
 1. **A license.** `pnpm release check` fails until every package has one: add a `LICENSE` and a `"license"` field.
 2. **Package names on npm.** Trusted publishing can only be set up for a package that exists. Logged in to npm
-   (`npm login`), run `pnpm release bootstrap`: it lists the names not on npm, asks once, publishes a deprecated
-   0.0.0 placeholder for each, and links every package to `baoziv587/Ji` `release.yml`. `--dry-run` only lists.
-   Run it again whenever a new package is added.
+   (`npm login`), run `pnpm release bootstrap`: it publishes a 0.0.0 placeholder for each name not on npm (asking
+   once), then links those packages to `baoziv587/Ji` `release.yml`. With every name already on npm, it links all of
+   them; `pnpm release bootstrap llm tui` links only those. npm asks for two-factor authentication in the browser for
+   each publish and each link, and will not say without it whether a package is linked, so a run that stops halfway
+   prints the command that finishes the rest. `--dry-run` says what it would do. Run it again when adding a package.
 3. **GitHub.** In Settings → Actions → General, allow GitHub Actions to create and approve pull requests. Install the
    [Changesets bot](https://github.com/apps/changeset-bot) for a comment on pull requests without a changeset (it
    never blocks a merge).
