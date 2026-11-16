@@ -2,12 +2,21 @@
   "name": "@ji.dev/tui",
   "type": "module",
   "version": "0.0.0",
-  "private": true,
   "description": "Terminal UI pieces for a full-screen chat: the screen and its bars, streaming Markdown, code and diffs in color, an input line, text cut by display width",
-  "exports": {
-    ".": "./src/index.ts"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoziv587/Ji.git",
+    "directory": "packages/tui"
   },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown -c ../../tsdown.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,5 +25,11 @@
     "fast-wrap-ansi": "^0.2.2",
     "marked": "^18.0.14",
     "shiki": "^4.5.0"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }

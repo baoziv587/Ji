@@ -2,10 +2,14 @@
   "$schema": "./node_modules/knip/schema.json",
   "workspaces": {
     ".": {
-      "entry": [".agents/skills/*/scripts/*.{js,mjs,ts}"]
+      "entry": [".agents/skills/*/scripts/*.{js,mjs,ts}"],
+      "ignoreDependencies": ["@changesets/cli"]
     },
     "apps/website": {
       "ignoreDependencies": ["eslint-plugin-react-hooks", "sirv-cli"]
+    },
+    "apps/release": {
+      "ignoreDependencies": ["@arethetypeswrong/cli"]
     }
   },
   "ignore": ["eval/**", "apps/desktop/{build,.mygo,resources/agent-server}/**"],

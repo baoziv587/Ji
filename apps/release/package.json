@@ -1,0 +1,29 @@
+{
+  "name": "@ji.dev/release",
+  "type": "module",
+  "version": "0.0.0",
+  "private": true,
+  "description": "pnpm release: write changesets, see what the next release holds, check packages before they reach npm",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@changesets/assemble-release-plan": "^7.0.0",
+    "@changesets/config": "^4.0.1",
+    "@changesets/git": "^4.0.1",
+    "@changesets/pre": "^3.0.0",
+    "@changesets/read": "^1.0.1",
+    "@changesets/types": "^7.0.0",
+    "@changesets/write": "^1.0.1",
+    "@clack/prompts": "^1.8.1",
+    "@manypkg/get-packages": "^3.1.0",
+    "publint": "^0.3.25",
+    "semver": "^7.8.6",
+    "write-file-atomic": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/semver": "^7.8.0",
+    "@types/write-file-atomic": "^4.0.3"
+  }
+}

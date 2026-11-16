@@ -1,0 +1,39 @@
+# Lint, types, tests and the release check (pnpm release check: every package built, packed, installed fresh and
+# imported, as npm users will get it) on every pull request and on main. GitHub-hosted runners: the repository is
+# public, and the shared my-gha runners take private repositories only, since their pods run a privileged Docker
+# anyone could reach through a pull request.
+#
+# The desktop app's Go lint (pnpm lint:go) needs its macOS toolchain and runs locally, not here.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # Corepack picks the pnpm version from package.json's packageManager.
+      - name: Enable pnpm
+        run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec eslint .
+      - run: pnpm run typecheck
+      - run: pnpm run test
+      - run: pnpm release check

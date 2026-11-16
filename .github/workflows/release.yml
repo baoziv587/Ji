@@ -1,0 +1,151 @@
+# Releases from main through Changesets (https://changesets.dev/guide/automating), on every push:
+# - changesets pending: opens or updates the "Version Packages" PR, with the new versions, the changelogs and the
+#   desktop app's version (pnpm release version). Merging that PR is the decision to release; nothing asks again.
+# - that PR merged: checks and packs the packages, publishes the new versions to npm, and pushes a tag per package
+#   (private ones, the desktop app and the site, get their tag too).
+#
+# npm trusted publishing lets this workflow, and only it, publish: `pnpm release bootstrap` links each package to
+# release.yml, so no npm token exists anywhere. npm accepts GitHub-hosted runners only, hence no my-gha here. Only the
+# publish job may ask for an id-token, and it builds nothing: what it publishes was packed by the job before.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  select-mode:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.mode.outputs.publish-plan-artifact-id }}
+      latest: ${{ steps.head.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Enable pnpm
+        run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: mode
+        uses: changesets/action/select-mode@v2
+
+      # A re-run of an old run would write the Version Packages PR back to an older state; version only the commit
+      # main points at now.
+      - name: Check main head
+        id: head
+        run: |
+          head=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.sha" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/main")
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Not versioning: $GITHUB_SHA is not main's head ($head)"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  version:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version' && needs.select-mode.outputs.latest == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Enable pnpm
+        run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # A PR opened with the workflow's own token starts no workflows, so CI would skip the Version Packages PR. A
+      # GitHub App's token starts them: set vars.RELEASE_APP_CLIENT_ID and secrets.RELEASE_APP_PRIVATE_KEY. Without
+      # them the PR still opens, and the pack job checks the packages before they are published.
+      - name: App token
+        id: app-token
+        if: vars.RELEASE_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - uses: changesets/action/version@v2
+        with:
+          script: pnpm release version
+          github-token: ${{ steps.app-token.outputs.token || github.token }}
+        env:
+          # @changesets/changelog-github reads it to link each entry to its PR and author
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+
+  pack:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Enable pnpm
+        run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile
+      # Builds every package, then checks the tarballs the way CI checks a pull request; the build stays for packing.
+      - run: pnpm release check
+      - id: pack
+        uses: changesets/action/pack@v2
+        with:
+          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # the tags
+      id-token: write # npm trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Enable pnpm
+        run: corepack enable pnpm
+      # Trusted publishing needs npm 11.5.1 or later, newer than some Node 24 releases ship.
+      - run: npm install --global npm@^11.5.1
+      # The Changesets CLI only: no install scripts run where an id-token can be asked for.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: changesets/action/publish@v2
+        with:
+          pack-dir-artifact-id: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          # 17 packages release independently; their CHANGELOG.md files and the tags are the record
+          create-github-releases: false

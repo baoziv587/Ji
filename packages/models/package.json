@@ -2,16 +2,31 @@
   "name": "@ji.dev/models",
   "type": "module",
   "version": "0.0.0",
-  "private": true,
   "description": "pi-ai 的模型目录：唯一的注册表、按 provider/id 查模型、凭证放在哪",
-  "exports": {
-    ".": "./src/index.ts"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoziv587/Ji.git",
+    "directory": "packages/models"
   },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown -c ../../tsdown.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^1.0.4",
-    "@ji.dev/utils": "workspace:*"
+    "@earendil-works/pi-ai": "~1.0.4",
+    "@ji.dev/utils": "workspace:^"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }

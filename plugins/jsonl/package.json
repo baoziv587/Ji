@@ -2,19 +2,34 @@
   "name": "@ji.dev/plugin-jsonl",
   "type": "module",
   "version": "0.0.0",
-  "private": true,
   "description": "One JSON line per run event, for replay and debugging",
-  "exports": {
-    ".": "./src/index.ts"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoziv587/Ji.git",
+    "directory": "plugins/jsonl"
   },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown -c ../../tsdown.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@ji.dev/llm": "workspace:*"
+    "@ji.dev/llm": "workspace:^"
   },
   "devDependencies": {
     "@ji.dev/llm": "workspace:*",
     "@ji.dev/testing": "workspace:*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }

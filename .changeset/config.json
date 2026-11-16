@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@4.0.1/schema.json",
+  "changelog": ["@changesets/changelog-github", { "repo": "baoziv587/Ji" }],
+  "commit": false,
+  "fixed": [],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "changedFilePatterns": ["src/**", "package.json"],
+  "privatePackages": { "version": true, "tag": true },
+  "updateInternalDependencies": "patch",
+  "ignore": ["@ji.dev/examples", "@ji.dev/release", "@ji.dev/replay"],
+  "bumpVersionsWithWorkspaceProtocolOnly": true
+}

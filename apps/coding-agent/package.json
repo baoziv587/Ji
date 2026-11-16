@@ -2,12 +2,23 @@
   "name": "@ji.dev/coding-agent",
   "type": "module",
   "version": "0.0.0",
-  "private": true,
   "description": "A full-screen coding agent on @ji.dev/llm: DeepSeek, file, shell and search tools with approval, and steering while a reply runs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoziv587/Ji.git",
+    "directory": "apps/coding-agent"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
   "bin": {
     "ji": "./src/cli.ts"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown",
     "start": "node src/main.ts",
     "headless": "node src/headless.ts",
     "serve": "node src/server.ts",
@@ -16,21 +27,29 @@
   "dependencies": {
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
-    "@ji.dev/llm": "workspace:*",
-    "@ji.dev/plugin-auth": "workspace:*",
-    "@ji.dev/plugin-choices": "workspace:*",
-    "@ji.dev/plugin-compaction": "workspace:*",
-    "@ji.dev/plugin-files": "workspace:*",
-    "@ji.dev/plugin-jsonl": "workspace:*",
-    "@ji.dev/plugin-shell": "workspace:*",
-    "@ji.dev/plugin-skills": "workspace:*",
-    "@ji.dev/plugin-truncate-tool-results": "workspace:*",
-    "@ji.dev/tui": "workspace:*",
-    "@ji.dev/utils": "workspace:*",
+    "@ji.dev/llm": "workspace:^",
+    "@ji.dev/plugin-auth": "workspace:^",
+    "@ji.dev/plugin-choices": "workspace:^",
+    "@ji.dev/plugin-compaction": "workspace:^",
+    "@ji.dev/plugin-files": "workspace:^",
+    "@ji.dev/plugin-jsonl": "workspace:^",
+    "@ji.dev/plugin-shell": "workspace:^",
+    "@ji.dev/plugin-skills": "workspace:^",
+    "@ji.dev/plugin-truncate-tool-results": "workspace:^",
+    "@ji.dev/tui": "workspace:^",
+    "@ji.dev/utils": "workspace:^",
     "write-file-atomic": "^8.0.0"
   },
   "devDependencies": {
     "@ji.dev/testing": "workspace:*",
     "@types/write-file-atomic": "^4.0.3"
+  },
+  "publishConfig": {
+    "exports": {
+      "./package.json": "./package.json"
+    },
+    "bin": {
+      "ji": "./dist/cli.mjs"
+    }
   }
 }

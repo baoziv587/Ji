@@ -2,15 +2,33 @@
   "name": "@ji.dev/kernel",
   "type": "module",
   "version": "0.0.0",
-  "private": true,
   "description": "代数内核：policy / env / update 与 unfold",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoziv587/Ji.git",
+    "directory": "packages/kernel"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./advanced": "./src/advanced.ts",
     "./reduce": "./src/reduce.ts",
-    "./testing": "./src/testing.ts"
+    "./testing": "./src/testing.ts",
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown -c ../../tsdown.config.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./advanced": "./dist/advanced.mjs",
+      "./reduce": "./dist/reduce.mjs",
+      "./testing": "./dist/testing.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }

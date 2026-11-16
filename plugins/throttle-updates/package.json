@@ -2,20 +2,35 @@
   "name": "@ji.dev/plugin-throttle-updates",
   "type": "module",
   "version": "0.0.0",
-  "private": true,
   "description": "Caps how often a tool call's tool_update events come through",
-  "exports": {
-    ".": "./src/index.ts"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoziv587/Ji.git",
+    "directory": "plugins/throttle-updates"
   },
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown -c ../../tsdown.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@ji.dev/llm": "workspace:*"
+    "@ji.dev/llm": "workspace:^"
   },
   "devDependencies": {
     "@ji.dev/kernel": "workspace:*",
     "@ji.dev/llm": "workspace:*",
     "@ji.dev/testing": "workspace:*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }

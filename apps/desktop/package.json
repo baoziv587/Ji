@@ -1,0 +1,6 @@
+{
+  "name": "@ji.dev/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Ji Agent, the desktop app (Go). Not on npm: this file only gives Changesets a version to bump, which `pnpm release sync` copies into mygo.json"
+}

@@ -6,3 +6,4 @@ rfcs
 .replay
 ./assets
 .codex/hooks.json
+dist

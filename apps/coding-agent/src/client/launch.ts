@@ -7,7 +7,7 @@ import type { Readable } from 'node:stream'
 import { spawn } from 'node:child_process'
 import { closeSync, mkdirSync, openSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, extname, join } from 'node:path'
 import process from 'node:process'
 import { createInterface } from 'node:readline'
 import { serviceAt, SHARED_HOST, SHARED_PORT } from '../server/shared.ts'
@@ -15,7 +15,8 @@ import { codeVersion } from '../server/version.ts'
 
 const SHARED = `http://${SHARED_HOST}:${SHARED_PORT}`
 
-const SERVER = join(import.meta.dirname, '..', 'server.ts')
+/** server.ts next to the client's folder, or server.mjs where the package is built (its layout kept). */
+const SERVER = join(import.meta.dirname, '..', `server${extname(import.meta.filename)}`)
 
 const LOG = join(homedir(), '.ji', 'server.log')
 

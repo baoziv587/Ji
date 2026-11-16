@@ -2,19 +2,28 @@
   "name": "@ji.dev/plugin-choices",
   "type": "module",
   "version": "0.0.0",
-  "private": true,
   "description": "Puts questions with fixed options to a person: from the model, a tool, or before a tool call runs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baoziv587/Ji.git",
+    "directory": "plugins/choices"
+  },
   "exports": {
     ".": "./src/index.ts",
-    "./terminal": "./src/terminal.ts"
+    "./terminal": "./src/terminal.ts",
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "tsdown -c ../../tsdown.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "@clack/core": "^1.5.1",
     "@clack/prompts": "^1.8.1",
-    "@ji.dev/llm": "workspace:*",
+    "@ji.dev/llm": "workspace:^",
     "fast-wrap-ansi": "^0.2.2"
   },
   "peerDependenciesMeta": {
@@ -34,5 +43,12 @@
     "@ji.dev/llm": "workspace:*",
     "@ji.dev/testing": "workspace:*",
     "fast-wrap-ansi": "^0.2.2"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./terminal": "./dist/terminal.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }
