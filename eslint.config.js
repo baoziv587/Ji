@@ -1,3 +1,4 @@
+import process from 'node:process'
 import antfu from '@antfu/eslint-config'
 import { createSlopConfig } from 'eslint-plugin-slop'
 
@@ -35,6 +36,9 @@ export default antfu(
   },
   ...createSlopConfig({
     cwd: import.meta.dirname,
+    // Locally only the lines changed in the last commits are held to these rules. CI checks every line, the same
+    // whatever the clone's depth: a shallow one has no HEAD~5 to compare with, and a full one would hide old lines.
+    inspection: process.env.CI === undefined ? undefined : 'full',
   }),
   {
     // CLIs and examples print straight to the terminal

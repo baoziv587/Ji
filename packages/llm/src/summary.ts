@@ -4,7 +4,7 @@ import type { AgentState, RunSummary, Turn, TurnTiming, UsageTotals } from './ty
 import { combine, count, filterInput, sum } from '@ji.dev/kernel/reduce'
 import { isAssistant } from './message.ts'
 
-// Declared first: the reducers below read them at module initialization.
+/** Usage before any message. Declared first, with NO_TOOLS: the reducers below read both at module initialization. */
 export const NO_USAGE: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 }
 const NO_TOOLS: RunSummary['tools'] = {}
 
