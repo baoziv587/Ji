@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "The SKILL.md folders of a directory as /name commands: the history keeps the call, the model gets the instructions",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

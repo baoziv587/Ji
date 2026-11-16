@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "Terminal UI pieces for a full-screen chat: the screen and its bars, streaming Markdown, code and diffs in color, an input line, text cut by display width",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

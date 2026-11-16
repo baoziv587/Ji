@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "OpenTelemetry traces and metrics from a run's events (RFC-0005 §4.4)",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

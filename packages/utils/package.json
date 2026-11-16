@@ -2,7 +2,8 @@
   "name": "@ji.dev/utils",
   "type": "module",
   "version": "0.0.0",
-  "description": "零依赖的通用工具：纯数据、类型守卫、字符串匹配、运行时环境",
+  "description": "Zero-dependency utilities: plain data, type guards, string matching, runtime environment",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

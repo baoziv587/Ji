@@ -11,6 +11,7 @@ export interface Problem {
 
 export interface PackedManifest {
   name?: string
+  description?: string
   license?: string
   repository?: string | { url?: string; directory?: string }
   exports?: unknown
@@ -107,8 +108,20 @@ export function checkPacked(manifest: PackedManifest, files: readonly string[], 
     })
   }
 
+  // The manifest is what npm shows the world; Chinese belongs in the docs only
+  const chinese = JSON.stringify(manifest).match(/[\p{Script=Han}，。：；（）、]+/u)
+  if (chinese !== null) {
+    problems.push({ message: `package.json has Chinese ("${chinese[0]}")`, fix: 'Write it in English.' })
+  }
+
   if (manifest.license === undefined || manifest.license === '') {
     problems.push({ message: 'no license', fix: 'Add a LICENSE file and a "license" field before the first release.' })
+  } else if (!files.some(file => /^licen[cs]e(?:\.\w+)?$/i.test(file))) {
+    // npm ships the LICENSE in the package's own directory only, never the repository's
+    problems.push({
+      message: 'ships no LICENSE file',
+      fix: `Copy the repository's LICENSE into ${expected.directory}.`,
+    })
   }
 
   return problems

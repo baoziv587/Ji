@@ -2,7 +2,8 @@
   "name": "@ji.dev/testing",
   "type": "module",
   "version": "0.0.0",
-  "description": "测试和离线示例用的脚本化模型：pi-ai 的 faux provider 收在一个小接口后面",
+  "description": "Scripted models for tests and offline examples: pi-ai's faux provider behind a small interface",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

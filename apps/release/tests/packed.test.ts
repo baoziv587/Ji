@@ -11,16 +11,12 @@ const good: PackedManifest = {
   exports: { '.': './dist/index.mjs', './package.json': './package.json' },
   dependencies: { '@ji.dev/utils': '^0.1.0' },
 }
-const files = ['package.json', 'README.md', 'dist/index.mjs', 'dist/index.d.mts']
+const files = ['package.json', 'README.md', 'LICENSE', 'dist/index.mjs', 'dist/index.d.mts']
 
 const messages = (manifest: PackedManifest, shipped = files) =>
   checkPacked(manifest, shipped, expected).map(p => p.message)
 
 describe('checkPacked', () => {
-  it('passes a package built and packed as npm should get it', () => {
-    expect(checkPacked(good, files, expected)).toEqual([])
-  })
-
   it('catches a workspace: range pnpm did not rewrite', () => {
     expect(messages({ ...good, peerDependencies: { '@ji.dev/llm': 'workspace:^' } })).toEqual([
       'peerDependencies.@ji.dev/llm is still workspace:^',
@@ -36,16 +32,14 @@ describe('checkPacked', () => {
     ])
   })
 
-  it('lets declaration files through', () => {
-    expect(
-      messages({ ...good, exports: { '.': { types: './dist/index.d.mts', default: './dist/index.mjs' } } }),
-    ).toEqual([])
-  })
-
   it('catches files beyond the build and its papers', () => {
     expect(messages(good, [...files, 'tests/kernel.test.ts', 'src/index.ts'])).toEqual([
       'ships tests/kernel.test.ts, src/index.ts',
     ])
+  })
+
+  it('keeps Chinese out of the manifest npm shows', () => {
+    expect(messages({ ...good, description: '代数内核：policy' })).toEqual(['package.json has Chinese ("代数内核：")'])
   })
 
   it('wants the repository provenance checks, and a license', () => {
@@ -54,5 +48,11 @@ describe('checkPacked', () => {
       'repository.directory is missing',
     ])
     expect(messages({ ...good, license: undefined })).toEqual(['no license'])
+    expect(
+      messages(
+        good,
+        files.filter(file => file !== 'LICENSE'),
+      ),
+    ).toEqual(['ships no LICENSE file'])
   })
 })

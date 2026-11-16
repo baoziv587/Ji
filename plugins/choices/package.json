@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "Puts questions with fixed options to a person: from the model, a tool, or before a tool call runs",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

@@ -2,7 +2,8 @@
   "name": "@ji.dev/models",
   "type": "module",
   "version": "0.0.0",
-  "description": "pi-ai 的模型目录：唯一的注册表、按 provider/id 查模型、凭证放在哪",
+  "description": "The pi-ai model catalog: the one registry, models by provider/id, and where credentials live",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

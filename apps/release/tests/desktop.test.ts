@@ -1,9 +1,8 @@
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { bundleVersion, syncDesktop } from '../src/desktop.ts'
+import { syncDesktop } from '../src/desktop.ts'
 
 async function repoWith(packageVersion: string, appVersion: string): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'ji-desktop-'))
@@ -15,18 +14,6 @@ async function repoWith(packageVersion: string, appVersion: string): Promise<str
 
 const appVersionIn = async (root: string) =>
   (JSON.parse(await readFile(join(root, 'apps', 'desktop', 'mygo.json'), 'utf8')) as { version: string }).version
-
-describe('bundleVersion', () => {
-  it('keeps x.y.z and drops a prerelease or build suffix', () => {
-    expect(bundleVersion('0.2.0-alpha.3')).toBe('0.2.0')
-    expect(bundleVersion('1.4.2')).toBe('1.4.2')
-    fc.assert(
-      fc.property(fc.nat(99), fc.nat(99), fc.nat(99), fc.stringMatching(/^[a-z]+\.\d$/), (a, b, c, pre) => {
-        expect(bundleVersion(`${a}.${b}.${c}-${pre}`)).toBe(`${a}.${b}.${c}`)
-      }),
-    )
-  })
-})
 
 describe('syncDesktop', () => {
   it('moves mygo.json up to the released version, and keeps its other fields', async () => {

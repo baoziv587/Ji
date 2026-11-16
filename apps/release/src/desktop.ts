@@ -10,7 +10,7 @@ import writeFileAtomic from 'write-file-atomic'
 const DESKTOP = join('apps', 'desktop')
 
 /** The version a macOS bundle can carry for `version`. */
-export function bundleVersion(version: string): string {
+function bundleVersion(version: string): string {
   const parsed = semver.parse(version)
   if (parsed === null) {
     throw new Error(`not a version: ${version}`)

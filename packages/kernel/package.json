@@ -2,7 +2,8 @@
   "name": "@ji.dev/kernel",
   "type": "module",
   "version": "0.0.0",
-  "description": "代数内核：policy / env / update 与 unfold",
+  "description": "Algebraic kernel: policy, env, update and unfold",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

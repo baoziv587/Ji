@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "Cuts oversized tool results down to their head and tail before the model sees them",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "Read and edit tools with strict matching, version checks and atomic writes (rfcs/tools/edit-tool-algebra.md)",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

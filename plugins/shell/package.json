@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "bash and grep tools as bounded folds over a process stream (rfcs/tools/bash-grep-algebra.md)",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

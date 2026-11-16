@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "One JSON line per run event, for replay and debugging",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

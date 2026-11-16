@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "Caps how often a tool call's tool_update events come through",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

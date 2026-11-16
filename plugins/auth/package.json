@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.0.0",
   "description": "Credentials kept in a file, one per provider, and logging in to a provider from there: in the browser, or with a key typed in",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",

@@ -2,7 +2,8 @@
   "name": "@ji.dev/llm",
   "type": "module",
   "version": "0.0.0",
-  "description": "用 pi-ai 实例化内核的 LLM agent",
+  "description": "An LLM agent: the kernel instantiated with pi-ai",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/baoziv587/Ji.git",
