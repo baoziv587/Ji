@@ -1,5 +1,5 @@
-# Lint, types, tests and the release check (pnpm release check: every package built, packed, installed fresh and
-# imported, as npm users will get it) on every pull request and on main. GitHub-hosted runners: the repository is
+# Lint, types and tests on every pull request and on main, and the release check (pnpm release check: every package
+# built, packed, installed fresh and imported, as npm users will get it) when the change can reach a package. GitHub-hosted runners: the repository is
 # public, and the shared my-gha runners take private repositories only, since their pods run a privileged Docker
 # anyone could reach through a pull request.
 #
@@ -36,4 +36,28 @@ jobs:
       - run: pnpm exec eslint .
       - run: pnpm run typecheck
       - run: pnpm run test
-      - run: pnpm release check
+
+      # The release check takes minutes, and a change to the site or the desktop app's code reaches no package. It
+      # compares the trees of the base and this commit, so needs the base only, not the history between.
+      - name: Does the change reach a package?
+        id: reach
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # The published packages and their builds, the check itself, the changesets it reads, the dependencies
+          REACHES: ^(packages|plugins|apps/coding-agent|apps/release|\.changeset)/|^(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsdown\.config\.ts|tsconfig[^/]*\.json|\.github/workflows/ci\.yml)$
+        run: |
+          # No base to compare with (a branch's first push): check
+          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ] \
+            || ! git fetch --quiet --no-tags --depth=1 origin "$BASE"; then
+            echo "packages=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE" HEAD)
+          if grep -qE "$REACHES" <<< "$changed"; then
+            echo "packages=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "packages=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release check skipped: no package, build or dependency changed"
+          fi
+      - if: steps.reach.outputs.packages == 'true'
+        run: pnpm release check
