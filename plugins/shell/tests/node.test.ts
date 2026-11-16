@@ -103,8 +103,9 @@ describe('quoteArgv (L10)', () => {
     )
     fc.assert(
       fc.property(fc.array(word, { minLength: 1, maxLength: 6 }), argv => {
-        // Act: printf ends each word with a NUL, which no word can hold
-        const out = execFileSync('/bin/sh', ['-c', `exec printf '%s\\0' ${quoteArgv(argv)}`], { encoding: 'utf8' })
+        // Act: printf ends each word with a NUL, which no word can hold. The `--` before the format keeps a `--` word:
+        // the uutils printf on Ubuntu 26.04 takes the first `--` anywhere as the end of its options
+        const out = execFileSync('/bin/sh', ['-c', `exec printf -- '%s\\0' ${quoteArgv(argv)}`], { encoding: 'utf8' })
 
         // Assert
         expect(out.split('\0').slice(0, -1)).toEqual(argv)
