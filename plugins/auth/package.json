@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-auth",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Credentials kept in a file, one per provider, and logging in to a provider from there: in the browser, or with a key typed in",
   "license": "MIT",
   "repository": {

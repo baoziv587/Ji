@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/kernel",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Algebraic kernel: policy, env, update and unfold",
   "license": "MIT",
   "repository": {

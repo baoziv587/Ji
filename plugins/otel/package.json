@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-otel",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "OpenTelemetry traces and metrics from a run's events (RFC-0005 §4.4)",
   "license": "MIT",
   "repository": {

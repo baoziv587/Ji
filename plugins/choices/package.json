@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-choices",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Puts questions with fixed options to a person: from the model, a tool, or before a tool call runs",
   "license": "MIT",
   "repository": {

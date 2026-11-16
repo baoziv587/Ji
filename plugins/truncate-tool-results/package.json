@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-truncate-tool-results",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Cuts oversized tool results down to their head and tail before the model sees them",
   "license": "MIT",
   "repository": {
