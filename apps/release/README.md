@@ -25,11 +25,12 @@ pnpm release version      apply the changesets (CI runs this)
 
 ## A release
 
-1. On every push to main, [release.yml](../../.github/workflows/release.yml) opens or updates the **Version Packages**
-   PR: new versions, changelogs, and the desktop app's version in `apps/desktop/mygo.json`.
+1. When a push to main changes a changeset or a `package.json`, [release.yml](../../.github/workflows/release.yml)
+   opens or updates the one **Version Packages** PR: new versions, changelogs, and the desktop app's version in
+   `apps/desktop/mygo.json`. Other pushes (the site, the desktop app's code) leave it alone.
 2. Merging that PR is the release. CI runs `pnpm release check`, packs the packages, publishes them, and pushes a tag
-   per package (`@ji.dev/llm@0.1.0`). If publishing stops halfway, re-run the job: it publishes only the versions npm
-   does not have yet.
+   per package (`@ji.dev/llm@0.1.0`). If publishing stops halfway, run the Release workflow again from the Actions tab
+   (main only): it publishes only the versions npm does not have yet.
 
 ## Prerelease
 
