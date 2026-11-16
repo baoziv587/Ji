@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/testing",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Scripted models for tests and offline examples: pi-ai's faux provider behind a small interface",
   "license": "MIT",
   "repository": {

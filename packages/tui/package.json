@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/tui",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Terminal UI pieces for a full-screen chat: the screen and its bars, streaming Markdown, code and diffs in color, an input line, text cut by display width",
   "license": "MIT",
   "repository": {

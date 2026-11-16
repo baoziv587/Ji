@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-shell",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "bash and grep tools as bounded folds over a process stream (rfcs/tools/bash-grep-algebra.md)",
   "license": "MIT",
   "repository": {

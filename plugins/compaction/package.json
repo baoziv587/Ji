@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-compaction",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Summarizes the older part of a long conversation so the history fits the model's context",
   "license": "MIT",
   "repository": {

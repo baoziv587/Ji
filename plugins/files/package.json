@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-files",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Read and edit tools with strict matching, version checks and atomic writes (rfcs/tools/edit-tool-algebra.md)",
   "license": "MIT",
   "repository": {

@@ -1,7 +1,7 @@
 {
   "name": "@ji.dev/plugin-throttle-updates",
   "type": "module",
-  "version": "0.0.0",
+  "version": "0.1.0-alpha.0",
   "description": "Caps how often a tool call's tool_update events come through",
   "license": "MIT",
   "repository": {
