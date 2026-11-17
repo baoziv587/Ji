@@ -69,7 +69,7 @@ export function Hero() {
           </p>
         </div>
 
-        <HeroCode className="soak" />
+        <HeroCode />
       </div>
     </section>
   )
