@@ -7,13 +7,12 @@ import { Onion } from '~/components/home/onion'
 import { C, DocLink, ExternalLink, Heading, Section } from '~/components/home/primitives'
 import { SiteFooter } from '~/components/home/site-footer'
 import { SiteHeader } from '~/components/site-header'
-import { agentNotes, capabilities, compactionNotes, links, progressNotes } from '~/content/home'
-import agentHtml from '~/snippets/agent.ts?highlight'
+import { capabilities, compactionNotes, links, subagentNotes } from '~/content/home'
 import compactionHtml from '~/snippets/compaction.ts?highlight'
 import composeHtml from '~/snippets/compose.ts?highlight'
-import progressHtml from '~/snippets/progress.ts?highlight'
 import quickstartHtml from '~/snippets/quickstart.sh?highlight'
 import quickstart from '~/snippets/quickstart.sh?raw'
+import subagentHtml from '~/snippets/subagent.ts?highlight'
 
 export const Route = createFileRoute('/')({
   component: Home,
@@ -25,11 +24,6 @@ function Home() {
       <SiteHeader />
       <main>
         <Hero />
-
-        <Section aria-labelledby="agent">
-          <Heading id="agent" title="Create an agent, open a session, stream a run." />
-          <CodePrint html={agentHtml} label="Creating an agent" notes={agentNotes} />
-        </Section>
 
         <div id="hooks" className="scroll-mt-4 border-y border-ink-3 bg-ink-2">
           <Section aria-labelledby="hooks-title">
@@ -44,6 +38,21 @@ function Home() {
             </p>
           </Section>
         </div>
+
+        <Section aria-labelledby="subagents">
+          <Heading id="subagents" title="Subagents report as they work.">
+            <p>
+              A subagent is a tool that runs another agent. Whatever the tool yields arrives in the lead’s run as a{' '}
+              <C>tool_update</C>, so your UI shows each step while the subagent works; what it returns is the result. No
+              callback, no separate event channel.
+            </p>
+          </Heading>
+          <CodePrint html={subagentHtml} label="A subagent that reports its steps" notes={subagentNotes} />
+          <p className="mt-8 max-w-[44rem] text-paper-dim">
+            Any tool reports the same way: <C>yield</C> progress, <C>return</C> the result. Compose result trimming,
+            call interception and <ExternalLink href={links.throttle}>progress throttling</ExternalLink> around it.
+          </p>
+        </Section>
 
         <Section aria-labelledby="compose">
           <Heading id="compose" title="Write plugins on their own. Compose them as lists.">
@@ -75,20 +84,6 @@ function Home() {
             <ExternalLink href={links.compaction}>
               Full implementation, with token estimation and transcript helpers
             </ExternalLink>
-          </p>
-        </Section>
-
-        <Section aria-labelledby="progress" className="pt-0">
-          <Heading id="progress" title="Progress before the tool finishes.">
-            <p>
-              Write the tool as an async generator: <C>yield</C> reports progress, <C>return</C> delivers the result. No
-              callback, no separate event channel.
-            </p>
-          </Heading>
-          <CodePrint html={progressHtml} label="A tool that reports progress" notes={progressNotes} />
-          <p className="mt-8 max-w-[44rem] text-paper-dim">
-            Compose result trimming, call interception and{' '}
-            <ExternalLink href={links.throttle}>progress throttling</ExternalLink> around the same tool.
           </p>
         </Section>
 

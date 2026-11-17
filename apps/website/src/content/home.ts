@@ -16,13 +16,6 @@ export interface Note {
   readonly text: string
 }
 
-export const agentNotes: readonly Note[] = [
-  { line: 3, text: 'Plugins are plain values. Lists nest, so presets are just arrays.' },
-  { line: 5, text: 'send returns a run immediately.' },
-  { line: 7, text: 'Stream text as it arrives…' },
-  { line: 9, text: '…and await the summary when the run settles.' },
-]
-
 export type HookId = 'before' | 'after' | 'intercept'
 
 export const hooks: readonly { id: HookId; effect: string; detail: string }[] = [
@@ -50,11 +43,12 @@ export const compactionNotes: readonly Note[] = [
   { line: 14, text: 'rewriteHistory replaces the transcript; record commits it.' },
 ]
 
-export const progressNotes: readonly Note[] = [
-  { line: 5, text: 'The tool is an async generator.' },
-  { line: 11, text: 'yield reports progress while the tool works.' },
-  { line: 14, text: 'return delivers the final result.' },
-  { line: 19, text: 'Progress arrives in the run as tool_update events.' },
+export const subagentNotes: readonly Note[] = [
+  { line: 3, text: 'The subagent is an ordinary agent, with its own model, tools and plugins.' },
+  { line: 11, text: 'Pass the signal on: cancel the lead and the subagent stops too.' },
+  { line: 14, text: "Each yield reaches the lead's run as a tool_update." },
+  { line: 16, text: "The subagent's answer is the result the lead model reads." },
+  { line: 23, text: "Your UI shows the subagent's steps live, keyed by the call." },
 ]
 
 export const capabilities: readonly { area: string; items: readonly { label: string; href: string }[] }[] = [

@@ -12,7 +12,7 @@ TypeScript developers who build or tinker with LLM agents and have felt the weig
 
 ji.dev is the home of JI (极, jí, "the utmost"): a small, extensible TypeScript runtime for LLM agents. The core stays as small as it can be; plugins take it as far as needed. One hook model (`before`, `after`, `intercept`) covers everything from small transforms to full middleware, and plugins compose as nested lists.
 
-The site succeeds when a visitor leaves understanding the hook model well enough to imagine writing their own plugin. GitHub is the destination for the source; packages are not on npm yet, so the site never pretends they are.
+The site succeeds when a visitor leaves understanding the hook model well enough to imagine writing their own plugin. The first screen is for people who would use JI: what they can build, how little code it takes, and how to install it. The packages are on npm as an alpha (`@alpha`); the site says so plainly and never implies a stable release.
 
 ## Brand Personality
 

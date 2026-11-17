@@ -10,7 +10,14 @@ const messages: Record<Status, string> = {
   failed: 'Copy blocked. Select the commands instead.',
 }
 
-export function CopyButton({ text, className }: { text: string; className?: string }) {
+interface CopyButtonProps {
+  text: string
+  /** What the button copies, as a screen reader announces it. */
+  label?: string
+  className?: string
+}
+
+export function CopyButton({ text, label = 'Copy commands', className }: CopyButtonProps) {
   const [status, setStatus] = useState<Status>('idle')
 
   async function copy() {
@@ -31,7 +38,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
       <button
         type="button"
         onClick={copy}
-        aria-label="Copy commands"
+        aria-label={label}
         className="grid size-10 place-items-center rounded-sm text-paper-dim transition-colors hover:bg-ink-2 hover:text-paper"
       >
         {status === 'copied' ? <Check aria-hidden className="size-4" /> : <Copy aria-hidden className="size-4" />}

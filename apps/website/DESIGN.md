@@ -270,10 +270,12 @@ Firm and quiet. There is one filled button per screen.
 
 ### Hero
 
-- **One subject:** the first screen leads with real code, never with a brand image. The 40px JI mark sits at the top left of the site header, with no wordmark beside it (it gets there on every visit by stomping the 极 seal flat); there is exactly one mark per screen above the footer.
-- **Layout:** headline (Display, three lines on desktop), lead, CTAs and status line on the left; a code print titled with its file name (`block-shell.ts`) on the right, top-aligned with the headline. Side by side from 1280px; stacked below. Hero code lines stay at 60 characters or fewer so the well never scrolls on desktop.
-- **Motion:** text rises in a 70ms stagger, then the code well soaks in from the top (mask reveal, 1.1s, ease-out-expo, 0.55s delay).
-- **Rhythm:** the hero is content-height, not full-viewport, so the next section's heading shows at the bottom of a 900px-tall screen.
+- **One subject:** the first screen leads with real code a user would write, never with a brand image or a plugin internals tour. The 40px JI mark sits at the top left of the site header, with no wordmark beside it (it gets there on every visit by stomping the 极 seal flat); there is exactly one mark per screen above the footer.
+- **Copy:** the headline says what a user gets ("Write an agent in ten lines. Grow it with plugins."), the lead says what they care about (any provider, streaming, subagents that report each step, plugins when needed). The 极 gloss lives in the footer, not here.
+- **Layout:** headline (Display, three lines on desktop), lead, CTAs (**Get started** to `/docs`, Source on GitHub), the install command in a small well with a copy button, and the status line on the left. On the right, a rail of three example tabs (Chat, Subagent, Guardrail) over one code print titled with the example's file name, top-aligned with the headline. Side by side from 1280px; stacked below. Hero code lines stay at 60 characters or fewer so the well never scrolls on desktop, and the Chat example stays at ten lines, as the headline promises.
+- **Example tabs:** the selected tab is paper with a 2px paper underline, like the Docs tab, never qinglv: they are examples, not hooks. The panels share one grid cell, so the well keeps the height of the longest and nothing below moves on a switch; the new panel fades in over 150ms. Without JavaScript every panel shows and the rail hides. The Guardrail panel links down to the hook model.
+- **Motion:** text rises in a 70ms stagger, then the code soaks in from the top (mask reveal, 1.1s, ease-out-expo, 0.55s delay).
+- **Rhythm:** the hero is content-height, not full-viewport, so the hook-model band shows at the bottom of a 900px-tall screen.
 
 ### Footer rubbing
 

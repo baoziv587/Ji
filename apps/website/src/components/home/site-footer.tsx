@@ -28,6 +28,11 @@ export function SiteFooter() {
             <br />
             A small, extensible TypeScript runtime for LLM agents.
           </p>
+          <p className="mt-3 max-w-[20rem] leading-relaxed text-paper-faint">
+            <span lang="zh-CN">极</span>
+            {' (jí) means the utmost, as in '}
+            <span lang="zh-CN">极简</span>: minimal to the extreme.
+          </p>
           <a href={links.repo} className={cn(linkClass, 'mt-4 inline-flex items-center gap-1')}>
             GitHub
             <ArrowUpRight aria-hidden className="size-3.5 text-paper-faint" />
