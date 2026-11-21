@@ -62,7 +62,7 @@ export interface CommandOptions {
 }
 
 /** Where the history is compacted now, in tokens, and how to move it: `set` takes what /autocompact does, and throws. */
-export interface Autocompact {
+interface Autocompact {
   limit: () => number
   set: (text: string) => void
 }
