@@ -112,6 +112,14 @@ export class Conversation {
     }
 
     this.fastMode &&= supportsFastMode(agent.model)
+    this.reconfigure(agent)
+  }
+
+  /**
+   * Same conversation, the same model started again with other options: where it compacts, say. Switched like think,
+   * so in a reply in progress too; fast mode stays as it is.
+   */
+  reconfigure(agent: Agent): void {
     this.current = this.fastMode ? agent.with({ onPayload: requestFastTier }) : agent
     this.session.use(this.current)
   }

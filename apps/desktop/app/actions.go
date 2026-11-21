@@ -257,7 +257,7 @@ func (a *App) send(view *sessionView) {
 }
 
 // command runs the command the line names: the service runs it, but /exit
-// quits the app here.
+// quits the app here, and /autocompact with a value goes over its own call.
 func (a *App) command(view *sessionView, line string) {
 	view.draft = ""
 	if a.quits(line) {
@@ -268,6 +268,10 @@ func (a *App) command(view *sessionView, line string) {
 		a.start(view, line)
 		return
 	}
+	if at := autocompactArg(line); at != "" {
+		a.autocompact(view, line, at)
+		return
+	}
 
 	a.call(func(ctx context.Context) error {
 		_, err := a.agent.Command(ctx, view.id, line)
@@ -276,6 +280,33 @@ func (a *App) command(view *sessionView, line string) {
 		}
 		return err
 	})
+}
+
+// autocompact moves where the session compacts; the line comes back to the
+// box when the service refuses what it sets.
+func (a *App) autocompact(view *sessionView, line, at string) {
+	a.call(func(ctx context.Context) error {
+		s, err := a.agent.Autocompact(ctx, view.id, at)
+		a.update(func() {
+			if err != nil {
+				view.restore(line)
+				return
+			}
+			view.t.State = s
+		})
+		return err
+	})
+}
+
+// autocompactArg is what an `/autocompact <tokens|default>` line sets; ""
+// for any other line, and for /autocompact alone, which the service answers
+// with where it compacts now.
+func autocompactArg(line string) string {
+	fields := strings.Fields(line)
+	if len(fields) < 2 || fields[0] != "/autocompact" {
+		return ""
+	}
+	return strings.Join(fields[1:], " ")
 }
 
 // quits is whether the command line is /exit, which quits the app here.

@@ -228,3 +228,25 @@ func TestStatusAndUsageLinesAsTheTerminal(t *testing.T) {
 		}
 	}
 }
+
+func TestAutocompactGoesOverItsOwnCall(t *testing.T) {
+	a, f := testApp()
+	tt := ui.NewTester(a.View, 1100, 700)
+	if err := tt.Click("Message"); err != nil {
+		t.Fatal(err)
+	}
+
+	tt.Type("/autocompact 400k")
+	tt.Key(0, ui.KeyEscape)
+	tt.Key(0, ui.KeyEnter)
+	tt.Type("/autocompact")
+	tt.Key(0, ui.KeyEscape)
+	tt.Key(0, ui.KeyEnter)
+
+	if !reflect.DeepEqual(f.compacts, []string{"a 400k"}) {
+		t.Errorf("compacts %q, want the value over its own call", f.compacts)
+	}
+	if got := f.commands["a"]; !reflect.DeepEqual(got, []string{"/autocompact"}) {
+		t.Errorf("ran %q, want /autocompact alone as a command, to say where it compacts", got)
+	}
+}

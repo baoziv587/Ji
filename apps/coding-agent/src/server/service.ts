@@ -10,6 +10,7 @@
 //   setMode     ask, auto or yolo: the one way out of yolo
 //   think       the thinking level of the next model call
 //   useModel    the model of the next reply, 'provider/id'
+//   autocompact where the history is compacted: '400k', or 'default'
 //
 // Every event has a sequence number; the log keeps them all, those read back from the session's history first, so a
 // client that connects late or comes back after a drop reads what it missed.
@@ -26,6 +27,7 @@ import type { History } from './history.ts'
 import { choices } from '@ji.dev/plugin-choices'
 import { errorMessage } from '@ji.dev/utils'
 import { contextLimitOf, startAgent, startOn, toolNamesOf } from '../agent/agent.ts'
+import { formatTokens, parseCompactAt } from '../agent/autocompact.ts'
 import { createCommands, runCommand } from '../agent/commands.ts'
 import { Conversation } from '../agent/conversation.ts'
 import { messageWith } from '../agent/messages.ts'
@@ -75,6 +77,8 @@ export class AgentService {
   private readonly commands: () => Command[]
   /** How the last reply ended; none before the first. */
   private outcome: Outcome | undefined
+  /** What /autocompact set; none for the model's default. */
+  private compactAt: number | undefined
   private reply: Promise<void> = Promise.resolve()
 
   constructor(options: AgentServiceOptions) {
@@ -118,6 +122,10 @@ export class AgentService {
       help: sections => this.log.push({ type: 'help', sections }),
       extra: () => this.features.flatMap(f => f.commands ?? []),
       startOn: spec => this.startOn(spec),
+      autocompact: {
+        limit: () => this.limit(),
+        set: text => this.autocompact(text),
+      },
     })
 
     // The client knows the session, a new one or one read back from its log, from its first events on
@@ -142,7 +150,8 @@ export class AgentService {
       asking: this.questions.ids(),
       outcome: this.outcome,
       commands: this.commands().map(viewOfCommand),
-      usage: this.meter.reading(contextLimitOf(model)),
+      usage: this.meter.reading(this.limit()),
+      compactAt: this.limit(),
     }
   }
 
@@ -238,6 +247,29 @@ export class AgentService {
     this.emitState()
   }
 
+  /**
+   * Where the history is compacted from the next step on, in a reply in progress too: '400k', '400000', or 'default'
+   * for the model's own. Throws on anything else.
+   */
+  autocompact(text: string): void {
+    const compactAt = parseCompactAt(text)
+    this.compactAt = compactAt
+    this.conversation.reconfigure(startAgent(this.startOptions()))
+
+    const limit = this.limit()
+    const at = formatTokens(limit)
+    if (compactAt === undefined) {
+      this.say.success(`Compacts at ${at} tokens, the model's default`)
+    } else if (limit < compactAt) {
+      this.say.warn(
+        `Compacts at ${at} tokens: the model's context window, short of the ${formatTokens(compactAt)} asked for`,
+      )
+    } else {
+      this.say.success(`Compacts at ${at} tokens`)
+    }
+    this.emitState()
+  }
+
   /** Resolves once the reply in progress, if any, has ended. */
   settled(): Promise<void> {
     return this.reply
@@ -297,7 +329,17 @@ export class AgentService {
   }
 
   private startOn(spec: string): Agent {
-    return startOn(spec, { ...this.started, thinking: this.conversation.agent.thinking })
+    return startOn(spec, this.startOptions())
+  }
+
+  /** What the agent runs with now, its model, thinking and where it compacts, to start it again with. */
+  private startOptions(): StartOptions {
+    const { model, thinking } = this.conversation.agent
+    return { ...this.started, model, thinking, compactAt: this.compactAt }
+  }
+
+  private limit(): number {
+    return contextLimitOf(this.conversation.agent.model, this.compactAt)
   }
 
   private emitState(): void {

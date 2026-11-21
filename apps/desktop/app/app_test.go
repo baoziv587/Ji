@@ -47,6 +47,8 @@ type fakeAgent struct {
 	// levels, as "id level"
 	models  map[string][]string
 	thought []string
+	// Where each session was set to compact, as "id at"
+	compacts []string
 	// The providers as changed, testProviders until then; the keys stored,
 	// the endpoints kept and removed, and what the probe finds.
 	providers []agent.Provider
@@ -152,6 +154,10 @@ func (f *fakeAgent) SetModes(_ context.Context, mode string) error {
 }
 func (f *fakeAgent) Think(_ context.Context, id, level string) (agent.State, error) {
 	f.thought = append(f.thought, id+" "+level)
+	return agent.State{ID: id}, nil
+}
+func (f *fakeAgent) Autocompact(_ context.Context, id, at string) (agent.State, error) {
+	f.compacts = append(f.compacts, id+" "+at)
 	return agent.State{ID: id}, nil
 }
 func (f *fakeAgent) UseModel(_ context.Context, id, model string) (agent.State, error) {

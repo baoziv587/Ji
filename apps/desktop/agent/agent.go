@@ -47,6 +47,9 @@ type State struct {
 	Commands []Command `json:"commands"`
 	// What the session has spent so far, and how much the history holds.
 	Usage UsageReading `json:"usage"`
+	// Where the history is compacted, in tokens: the model's default, or
+	// what /autocompact set.
+	CompactAt int `json:"compactAt"`
 }
 
 // Command is one of the commands typed after a `/`, as in the terminal.
@@ -291,6 +294,10 @@ type Agent interface {
 	// UseModel switches a session to a model, "provider/id", for its next
 	// reply; refused while it replies.
 	UseModel(ctx context.Context, id, model string) (State, error)
+	// Autocompact moves where a session's history is compacted, from its
+	// next step on: tokens, as "400k" or "400000", or "default" for the
+	// model's own.
+	Autocompact(ctx context.Context, id, at string) (State, error)
 	// Providers is every provider of the catalog, the detected ones marked.
 	Providers(ctx context.Context) ([]Provider, error)
 	// Models is a provider's chat models.

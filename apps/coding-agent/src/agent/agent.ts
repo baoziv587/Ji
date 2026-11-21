@@ -42,14 +42,16 @@ export interface StartOptions {
   features: readonly Feature[]
   /** The plugin that asks: the ask_user tool and the approvals. */
   asking?: Plugin
+  /** Where the history is compacted, in tokens, set with /autocompact; without it, contextLimitOf's default. */
+  compactAt?: number
 }
 
 /**
  * The model and the level are checked here, so a typo stops the coding agent before the first prompt:
  * UnknownModelError and UnsupportedThinkingError list the choices.
  */
-export function startAgent({ root, model, thinking, features, asking }: StartOptions): Agent {
-  const limit = contextLimitOf(typeof model === 'string' ? findModel(model) : model)
+export function startAgent({ root, model, thinking, features, asking, compactAt }: StartOptions): Agent {
+  const limit = contextLimitOf(typeof model === 'string' ? findModel(model) : model, compactAt)
 
   return createAgent({
     model,
@@ -78,10 +80,13 @@ function contextPlugins(limit: number): AnyPlugin[] {
 }
 
 /**
- * Where the history is compacted: at 80% of the model's context window, and never past MAX_HISTORY_TOKENS. The usage
- * line shows the history against it.
+ * Where the history is compacted: at `compactAt` when one is set, but never past the model's context window; otherwise
+ * at 80% of the window, and never past MAX_HISTORY_TOKENS. The usage line shows the history against it.
  */
-export function contextLimitOf(model: Pick<Model<Api>, 'contextWindow'>): number {
+export function contextLimitOf(model: Pick<Model<Api>, 'contextWindow'>, compactAt?: number): number {
+  if (compactAt !== undefined) {
+    return Math.min(compactAt, model.contextWindow)
+  }
   return Math.min(Math.floor(model.contextWindow * 0.8), MAX_HISTORY_TOKENS)
 }
 

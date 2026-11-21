@@ -51,6 +51,8 @@
 //   POST /api/sessions/:id/thinking   {level}
 //   POST /api/sessions/:id/model      {model}       'provider/id': the model of the next reply, and of the session
 //                                                   when it opens again; not while it replies
+//   POST /api/sessions/:id/autocompact {at}        where the history is compacted from the next step on: tokens, as
+//                                                   400000 or '400k', or 'default' for the model's own
 //
 // An error is {error: message} with a 4xx status.
 
@@ -237,6 +239,11 @@ async function route(
     case 'model':
       service.useModel(body.string('model'))
       return sendJson(res, 200, service.state())
+    case 'autocompact': {
+      const at = body.get('at')
+      service.autocompact(typeof at === 'number' ? String(at) : body.string('at'))
+      return sendJson(res, 200, service.state())
+    }
     default:
       throw noRoute()
   }

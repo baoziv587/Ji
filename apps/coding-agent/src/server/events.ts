@@ -68,6 +68,8 @@ export interface ServiceState {
   commands: CommandView[]
   /** What the session has spent so far, and how much the history holds. */
   usage: UsageReading
+  /** Where the history is compacted, in tokens: the model's default, or what /autocompact set. */
+  compactAt: number
 }
 
 /** What a client reads, in order of `seq`. */

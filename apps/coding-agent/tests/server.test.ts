@@ -670,11 +670,72 @@ describe('commands over HTTP', () => {
     // Assert
     expect(ran).toEqual({ result: 'ran' })
     const commands = first.type === 'state' ? first.state.commands : []
-    expect(commands.map(c => c.name)).toEqual(['/model', '/think', '/fast', '/compact', '/help', '/exit'])
+    expect(commands.map(c => c.name)).toEqual([
+      '/model',
+      '/think',
+      '/fast',
+      '/compact',
+      '/autocompact',
+      '/help',
+      '/exit',
+    ])
     expect(commands[1]).toMatchObject({ arg: '<off>', choices: ['off'] })
     expect(notice).toMatchObject({ level: 'info', text: expect.stringContaining('Fast mode is for openai') })
     expect(unknown).toMatchObject({ level: 'warn', text: 'No such command: /nope. /help lists them.' })
     expect(help.type === 'help' && help.sections.map(s => s.title)).toEqual(['Commands', 'Mode', 'Tools (5)'])
+  })
+
+  it('should move where a session compacts, over its own route and with /autocompact', async () => {
+    // Arrange
+    const { url } = await serve([])
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+    const first = await events.until(e => e.type === 'state')
+    const byDefault = first.type === 'state' ? first.state.compactAt : 0
+
+    // Act
+    const moved = (await post(url, `/api/sessions/${id}/autocompact`, { at: '20k' })) as ServiceState
+    const said = await events.until(e => e.type === 'notice')
+    await post(url, `/api/sessions/${id}/commands`, { line: '/autocompact' })
+    const told = await events.until(e => e.type === 'notice')
+    await post(url, `/api/sessions/${id}/commands`, { line: '/autocompact lots' })
+    const refused = await events.until(e => e.type === 'notice')
+    const bad = await fetch(`${url}/api/sessions/${id}/autocompact`, { method: 'POST', body: '{"at":"5k"}' })
+    const back = (await post(url, `/api/sessions/${id}/autocompact`, { at: 'default' })) as ServiceState
+    const asNumber = (await post(url, `/api/sessions/${id}/autocompact`, { at: 30_000 })) as ServiceState
+
+    // Assert
+    expect(moved).toMatchObject({ compactAt: 20_000 })
+    expect(said).toMatchObject({ level: 'success', text: 'Compacts at 20,000 tokens' })
+    expect(told).toMatchObject({ level: 'info', text: expect.stringContaining('Compacts at 20,000 tokens.') })
+    expect(refused).toMatchObject({ level: 'error', text: expect.stringContaining('is not a number of tokens') })
+    expect(bad.status).toBe(400)
+    expect(back.compactAt).toBe(byDefault)
+    expect(asNumber.compactAt).toBe(30_000)
+  })
+
+  it('should compact the history once it grows past where /autocompact set', async () => {
+    // Arrange
+    const { url } = await serve([
+      assistantMessage('first'),
+      assistantMessage('the summary'),
+      assistantMessage('second'),
+    ])
+    const { id } = await create(url)
+    const events = await subscribe(`${url}/api/sessions/${id}/events`)
+    await post(url, `/api/sessions/${id}/commands`, { line: '/autocompact 10k' })
+    await post(url, `/api/sessions/${id}/messages`, { text: 'hello' })
+    await events.until(e => e.type === 'reply_end')
+
+    // Act
+    await post(url, `/api/sessions/${id}/messages`, { text: 'word '.repeat(12_000) })
+    const compacted = await events.until(e => e.type === 'compacted')
+    await events.until(e => e.type === 'reply_end')
+
+    // Assert
+    expect(compacted).not.toHaveProperty('error')
+    expect(compacted.type === 'compacted' && compacted.before).toBeGreaterThan(10_000)
+    expect(texts(events.seen)).toContain('second')
   })
 
   it('should log in by asking the client for the key, and keep it where the terminal does', async () => {

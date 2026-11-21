@@ -203,6 +203,17 @@ func (c *Client) Think(ctx context.Context, id, level string) (State, error) {
 	)
 }
 
+func (c *Client) Autocompact(ctx context.Context, id, at string) (State, error) {
+	var s State
+	return s, c.do(
+		ctx,
+		http.MethodPost,
+		sessionPath(id, "autocompact"),
+		map[string]string{"at": at},
+		&s,
+	)
+}
+
 func (c *Client) UseModel(ctx context.Context, id, model string) (State, error) {
 	var s State
 	return s, c.do(

@@ -1,6 +1,6 @@
 // The coding agent's commands, run in a session of the service (server/service.ts) for whichever client it has: the
 // terminal lists them in its menu (ui/menu.ts), the desktop app in its own. /model switches the model, /think the thinking level, /fast the priority tier of OpenAI's models, /compact
-// summarizes the conversation so far, /help lists the commands, the keys by when they work, the mode and the tools,
+// summarizes the conversation so far, /autocompact sets where it is summarized by itself, /help lists the commands, the keys by when they work, the mode and the tools,
 // /exit quits; the features add theirs after them. What a command has to say goes through `say`: the log in the
 // terminal, events for the service's client.
 
@@ -8,6 +8,7 @@ import type { Agent } from '@ji.dev/llm'
 import type { Conversation } from './conversation.ts'
 import { COMPACT_COMMAND } from '@ji.dev/plugin-compaction'
 import { errorMessage } from '@ji.dev/utils'
+import { formatTokens } from './autocompact.ts'
 import { supportsFastMode } from './fast.ts'
 
 export interface Command {
@@ -56,11 +57,19 @@ export interface CommandOptions {
   extra?: () => Command[]
   /** The agent on another model, 'provider/id' (agent.ts' startOn); without it, no /model. */
   startOn?: (spec: string) => Agent
+  /** Where the history is compacted; without it, no /autocompact. */
+  autocompact?: Autocompact
+}
+
+/** Where the history is compacted now, in tokens, and how to move it: `set` takes what /autocompact does, and throws. */
+export interface Autocompact {
+  limit: () => number
+  set: (text: string) => void
 }
 
 /** The commands, built-in ones first; read every time, as the features' can change. */
 export function createCommands(options: CommandOptions): () => Command[] {
-  const { conversation, tools, mode, send, quit, say, help, extra = () => [], startOn } = options
+  const { conversation, tools, mode, send, quit, say, help, extra = () => [], startOn, autocompact } = options
   const levels = (): string[] => [...conversation.agent.model.thinkingLevels]
   const switching: Command[] =
     startOn === undefined
@@ -71,6 +80,17 @@ export function createCommands(options: CommandOptions): () => Command[] {
             arg: '<provider/id>',
             hint: 'switches the model',
             run: arg => switchModel(conversation, arg.trim(), startOn, say),
+          },
+        ]
+  const compacting: Command[] =
+    autocompact === undefined
+      ? []
+      : [
+          {
+            name: '/autocompact',
+            arg: '<tokens|default>',
+            hint: 'sets where the conversation is summarized by itself',
+            run: arg => moveCompaction(autocompact, arg.trim(), say),
           },
         ]
 
@@ -91,6 +111,7 @@ export function createCommands(options: CommandOptions): () => Command[] {
       run: arg => fast(conversation, arg, say),
     },
     { name: '/compact', hint: 'summarizes the conversation so far', run: () => compact(conversation, send, say) },
+    ...compacting,
     { name: '/help', hint: 'lists keys, commands and tools', run: () => help(helpOf(commands(), tools, mode())) },
     { name: '/exit', hint: 'quits', run: quit },
     ...extra(),
@@ -194,6 +215,22 @@ function compact(conversation: Conversation, send: (message: string) => void, sa
   }
 
   send(COMPACT_COMMAND)
+}
+
+/** The tokens given, or back to the default; without either, where it compacts now. */
+function moveCompaction(autocompact: Autocompact, arg: string, say: Say): void {
+  if (arg === '') {
+    say.info(
+      `Compacts at ${formatTokens(autocompact.limit())} tokens. Change it with /autocompact <tokens|default>, as /autocompact 400k.`,
+    )
+    return
+  }
+
+  try {
+    autocompact.set(arg)
+  } catch (error) {
+    say.error(errorMessage(error))
+  }
 }
 
 /** The commands without a group with their hints, the others by group; then the mode and the tools. */
