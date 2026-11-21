@@ -21,6 +21,11 @@ export const STOPPED_MESSAGE = 'stopped by user'
 /** The run rejects with this when the person stops a reply. */
 const STOPPED = new Error(STOPPED_MESSAGE)
 
+/** A reply runs until the agent finishes or the person stops it, as a task does: no limit on its steps. */
+function openSession(agent: Agent, resume: { id?: string; state?: AgentState } = {}): Session {
+  return createSession(agent, { ...resume, maxSteps: Number.POSITIVE_INFINITY })
+}
+
 export class Conversation {
   private current: Agent
   private session: Session
@@ -34,7 +39,7 @@ export class Conversation {
   /** `resume` picks up a conversation kept elsewhere: its id, and its history. */
   constructor(agent: Agent, resume: { id?: string; state?: AgentState } = {}) {
     this.current = agent
-    this.session = createSession(agent, resume)
+    this.session = openSession(agent, resume)
   }
 
   /** Stays the same when a reply that did not finish takes the conversation back. */
@@ -124,7 +129,7 @@ export class Conversation {
       await read(run)
       return undefined
     } catch (error) {
-      this.session = createSession(this.current, { id: this.session.id, state: this.before })
+      this.session = openSession(this.current, { id: this.session.id, state: this.before })
       const stopped = error instanceof RunError && error.kind === 'aborted' && error.cause === STOPPED
       return { stopped, error, sent: this.sent }
     } finally {
